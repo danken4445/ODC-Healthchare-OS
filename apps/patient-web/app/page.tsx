@@ -78,8 +78,8 @@ export default function Home() {
       <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required /></label>
       <button type="submit">Sign in and verify my records</button><button type="button" className="secondary" onClick={sendMagicLink}>Send magic link</button>
     </form> : <div className="session"><span>Signed in as {signedInAs}</span><span><button onClick={loadRegisteredRecords}>Refresh records</button> <button className="secondary" onClick={signOut}>Sign out</button></span></div>}</section>
-    <section><h2>Walk-in patient</h2><form onSubmit={useWalkIn} className="stack"><label>Walk-in ID<input name="walkInId" pattern="WK-\\d{4}-\\d{6}" placeholder="WK-2026-000001" required /></label><label>4-digit PIN<input name="pin" inputMode="numeric" pattern="\\d{4}" required /></label><button type="submit">Use walk-in credentials</button></form></section>
-    {signedInAs && <section><h2>Claim a walk-in record</h2><form onSubmit={claimWalkIn} className="stack"><label>Walk-in ID<input name="claimWalkInId" required /></label><label>PIN<input name="claimPin" inputMode="numeric" pattern="\\d{4}" required /></label><button type="submit">Claim existing record</button></form></section>}
+    <section><h2>Walk-in patient</h2><form onSubmit={useWalkIn} className="stack"><label>Walk-in ID<input name="walkInId" pattern="WK-\d{4}-\d{6}" placeholder="WK-2026-000001" required /></label><label>4-digit PIN<input name="pin" inputMode="numeric" pattern="\d{4}" required /></label><button type="submit">Use walk-in credentials</button></form></section>
+    {signedInAs && <section><h2>Claim a walk-in record</h2><form onSubmit={claimWalkIn} className="stack"><label>Walk-in ID<input name="claimWalkInId" required /></label><label>PIN<input name="claimPin" inputMode="numeric" pattern="\d{4}" required /></label><button type="submit">Claim existing record</button></form></section>}
     <p role="status">{status}</p>{records && <pre aria-label="RLS query results">{JSON.stringify(records, null, 2)}</pre>}
   </main>;
 }
