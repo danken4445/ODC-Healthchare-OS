@@ -57,12 +57,17 @@ Deno.serve(async (request) => {
   }
 
   let privateJwk: JWK;
+  let signingKey: Awaited<ReturnType<typeof importJWK>>;
   try {
     privateJwk = JSON.parse(privateJwkRaw) as JWK;
     if (privateJwk.kty !== "EC" || privateJwk.crv !== "P-256" || !privateJwk.kid)
       throw new Error("Expected a P-256 private JWK with a kid.");
+    signingKey = await importJWK(privateJwk, "ES256");
   } catch (error) {
-    console.error("Walk-in token signing key is invalid:", error);
+    console.error(
+      "Walk-in token signing key is invalid:",
+      error instanceof Error ? error.message : "unknown error",
+    );
     return response({ error: "Walk-in sign-in is unavailable." }, 503);
   }
 
@@ -83,22 +88,30 @@ Deno.serve(async (request) => {
   if (!patientId)
     return response({ error: "Invalid walk-in credentials." }, 401);
 
-  const now = Math.floor(Date.now() / 1000);
-  const signingKey = await importJWK(privateJwk, "ES256");
-  const accessToken = await new SignJWT({
-    role: "authenticated",
-    walk_in_access: true,
-    patient_id: patientId,
-    organization_id: body.organization_id,
-    walk_in_id: body.walk_in_id,
-  })
-    .setProtectedHeader({ alg: "ES256", kid: privateJwk.kid, typ: "JWT" })
-    .setIssuer(`${supabaseUrl}/auth/v1`)
-    .setAudience("authenticated")
-    .setSubject(patientId)
-    .setIssuedAt(now)
-    .setExpirationTime(now + tokenLifetimeSeconds)
-    .sign(signingKey);
+  let accessToken: string;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    accessToken = await new SignJWT({
+      role: "authenticated",
+      walk_in_access: true,
+      patient_id: patientId,
+      organization_id: body.organization_id,
+      walk_in_id: body.walk_in_id,
+    })
+      .setProtectedHeader({ alg: "ES256", kid: privateJwk.kid, typ: "JWT" })
+      .setIssuer(`${supabaseUrl}/auth/v1`)
+      .setAudience("authenticated")
+      .setSubject(patientId)
+      .setIssuedAt(now)
+      .setExpirationTime(now + tokenLifetimeSeconds)
+      .sign(signingKey);
+  } catch (error) {
+    console.error(
+      "Walk-in token signing failed:",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return response({ error: "Walk-in sign-in is unavailable." }, 503);
+  }
 
   return response(
     {
