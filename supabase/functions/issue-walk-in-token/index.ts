@@ -67,7 +67,12 @@ Deno.serve(async (request) => {
     p_pin: body.pin,
   });
 
-  if (error || !patientId)
+  if (error) {
+    // Never log the submitted PIN or return database details to the browser.
+    console.error("Walk-in verification RPC failed:", error.code, error.message);
+    return response({ error: "Walk-in verification is temporarily unavailable." }, 503);
+  }
+  if (!patientId)
     return response({ error: "Invalid walk-in credentials." }, 401);
 
   const now = Math.floor(Date.now() / 1000);
