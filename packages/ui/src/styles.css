@@ -1,0 +1,228 @@
+:root,
+[data-odyssey-theme="default"] {
+  --odyssey-background: #f6f8fc;
+  --odyssey-card: #ffffff;
+  --odyssey-foreground: #15203a;
+  --odyssey-muted: #edf5fc;
+  --odyssey-muted-foreground: #526176;
+  --odyssey-primary: #1769aa;
+  --odyssey-primary-foreground: #ffffff;
+  --odyssey-destructive: #b42318;
+  --odyssey-border: #bec7d5;
+  --odyssey-focus: #0b84d8;
+  --odyssey-radius: 0.5rem;
+}
+
+[data-odyssey-theme="ocean"] {
+  --odyssey-primary: #086f83;
+  --odyssey-muted: #e7f6f8;
+  --odyssey-focus: #087c93;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  color: var(--odyssey-foreground);
+  background: var(--odyssey-background);
+  font-family: Arial, sans-serif;
+}
+main {
+  max-width: 62rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  background: var(--odyssey-card);
+  border-radius: calc(var(--odyssey-radius) * 2);
+  box-shadow: 0 8px 30px #15203a14;
+}
+h1 {
+  margin-top: 0.15rem;
+}
+h2 {
+  margin-top: 2rem;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--odyssey-primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+}
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+.odyssey-field {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.odyssey-field__hint,
+.hint {
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.9rem;
+  font-weight: 400;
+  margin: 0;
+}
+.odyssey-input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.7rem;
+  color: inherit;
+  background: var(--odyssey-card);
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  font: inherit;
+}
+.odyssey-input:focus-visible,
+.odyssey-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--odyssey-focus) 35%, transparent);
+  outline-offset: 2px;
+}
+.odyssey-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--odyssey-radius);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.odyssey-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.odyssey-button--default {
+  color: var(--odyssey-primary-foreground);
+  background: var(--odyssey-primary);
+}
+.odyssey-button--secondary {
+  color: var(--odyssey-foreground);
+  background: var(--odyssey-muted);
+}
+.odyssey-button--outline {
+  color: var(--odyssey-foreground);
+  background: transparent;
+  border-color: var(--odyssey-border);
+}
+.odyssey-button--ghost {
+  color: var(--odyssey-primary);
+  background: transparent;
+}
+.odyssey-button--destructive {
+  color: #fff;
+  background: var(--odyssey-destructive);
+}
+.odyssey-button--sm {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+}
+.session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.8rem;
+  background: var(--odyssey-muted);
+  border-radius: var(--odyssey-radius);
+}
+.credential {
+  display: grid;
+  gap: 0.4rem;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border-left: 4px solid var(--odyssey-primary);
+  background: var(--odyssey-muted);
+}
+.credential code {
+  font-size: 1rem;
+}
+.odyssey-card {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+}
+.odyssey-table-scroll {
+  overflow-x: auto;
+}
+.odyssey-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.odyssey-table caption {
+  padding: 0 0 0.75rem;
+  text-align: left;
+  color: var(--odyssey-muted-foreground);
+}
+.odyssey-table th,
+.odyssey-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--odyssey-border);
+  text-align: left;
+  vertical-align: top;
+}
+.odyssey-table th {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.odyssey-table__empty {
+  color: var(--odyssey-muted-foreground);
+  text-align: center !important;
+}
+.odyssey-status-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.odyssey-status-badge--proposed,
+.odyssey-status-badge--pending {
+  color: #7a4d00;
+  background: #fff1cc;
+}
+.odyssey-status-badge--booked,
+.odyssey-status-badge--arrived {
+  color: #075985;
+  background: #e0f2fe;
+}
+.odyssey-status-badge--fulfilled {
+  color: #166534;
+  background: #dcfce7;
+}
+.odyssey-status-badge--cancelled,
+.odyssey-status-badge--noshow {
+  color: #991b1b;
+  background: #fee2e2;
+}
+pre {
+  overflow: auto;
+  padding: 1rem;
+  border-radius: var(--odyssey-radius);
+  color: #f4f8ff;
+  background: #15203a;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 42rem) {
+  main {
+    margin: 0;
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

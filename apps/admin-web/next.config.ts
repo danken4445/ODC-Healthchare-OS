@@ -1,2 +1,9 @@
-import type { NextConfig } from 'next';
-export default {} satisfies NextConfig;
+import type { NextConfig } from "next";
+const nextConfig: NextConfig = {
+  transpilePackages: [
+    "@odyssey/supabase-client",
+    "@odyssey/types",
+    "@odyssey/ui",
+  ],
+};
+export default nextConfig;

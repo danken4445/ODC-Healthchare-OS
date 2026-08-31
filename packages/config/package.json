@@ -1,1 +1,10 @@
-{ "name": "@odyssey/config", "version": "0.0.1", "private": true }
+{
+  "name": "@odyssey/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./eslint": "./eslint.config.mjs",
+    "./tailwind-preset": "./tailwind.preset.mjs",
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  }
+}

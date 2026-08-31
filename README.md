@@ -11,6 +11,15 @@ Foundation monorepo for the patient, provider, and admin applications.
 
 The homepage uses `public.hello_world` to verify the client can read and write to Supabase. This is an intentionally non-clinical smoke-test table; all clinical records will use FHIR-aligned resources and patient-scoped RLS.
 
+## Shared application packages
+
+- `@odyssey/types` contains the generated Supabase schema types and FHIR-shaped summaries such as `PatientSummary`; apps should use these summaries instead of raw table rows.
+- `@odyssey/supabase-client` owns public-key client configuration and typed data/auth helpers. Keep direct `.from().select()` calls inside this package.
+- `@odyssey/ui` provides the shared, accessible shadcn-style primitives, data table, appointment-status badge, and CSS-variable theme contract. Set `data-odyssey-theme` on the app HTML element to select a theme.
+- `@odyssey/config` provides the shared TypeScript baseline, ESLint configuration, and Tailwind-compatible token preset (`@odyssey/config/tailwind-preset`).
+
+After a schema migration, start the local Supabase stack (Docker Desktop is required) and run `pnpm db:types`. This regenerates `packages/types/src/database.ts`; do not hand-edit that generated file.
+
 ## Local auth and RLS verification
 
 After `pnpm.cmd supabase db reset`, local synthetic accounts are available for the Phase 2 check: `doctor@synthetic.odyssey.test`, `nurse@synthetic.odyssey.test`, `front-desk@synthetic.odyssey.test`, `admin@synthetic.odyssey.test`, `lab@synthetic.odyssey.test`, and `patient@synthetic.odyssey.test`. They share the deliberately public local-only password `LocalOnly-2026!`; it is never valid outside a reset local database. Run `supabase/validation/phase2_auth_rls.sql` as a database administrator to verify RLS directly.
