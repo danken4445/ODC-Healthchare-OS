@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
-import { SignJWT } from "npm:jose@5.9.6";
+import { importJWK, SignJWT, type JWK } from "npm:jose@5.9.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,10 +31,8 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  // SUPABASE_* names are reserved by hosted Supabase and cannot be added as
-  // project secrets. Store the project signing secret under this custom name.
-  const jwtSecret = Deno.env.get("PROJECT_JWT_SECRET");
-  if (!supabaseUrl || !serviceRoleKey || !jwtSecret) {
+  const privateJwkRaw = Deno.env.get("WALK_IN_JWT_PRIVATE_JWK");
+  if (!supabaseUrl || !serviceRoleKey || !privateJwkRaw) {
     console.error(
       "Walk-in token function is missing required server configuration.",
     );
@@ -58,6 +56,16 @@ Deno.serve(async (request) => {
     return response({ error: "Invalid walk-in credentials." }, 400);
   }
 
+  let privateJwk: JWK;
+  try {
+    privateJwk = JSON.parse(privateJwkRaw) as JWK;
+    if (privateJwk.kty !== "EC" || privateJwk.crv !== "P-256" || !privateJwk.kid)
+      throw new Error("Expected a P-256 private JWK with a kid.");
+  } catch (error) {
+    console.error("Walk-in token signing key is invalid:", error);
+    return response({ error: "Walk-in sign-in is unavailable." }, 503);
+  }
+
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -76,6 +84,7 @@ Deno.serve(async (request) => {
     return response({ error: "Invalid walk-in credentials." }, 401);
 
   const now = Math.floor(Date.now() / 1000);
+  const signingKey = await importJWK(privateJwk, "ES256");
   const accessToken = await new SignJWT({
     role: "authenticated",
     walk_in_access: true,
@@ -83,13 +92,13 @@ Deno.serve(async (request) => {
     organization_id: body.organization_id,
     walk_in_id: body.walk_in_id,
   })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setProtectedHeader({ alg: "ES256", kid: privateJwk.kid, typ: "JWT" })
     .setIssuer(`${supabaseUrl}/auth/v1`)
     .setAudience("authenticated")
     .setSubject(patientId)
     .setIssuedAt(now)
     .setExpirationTime(now + tokenLifetimeSeconds)
-    .sign(new TextEncoder().encode(jwtSecret));
+    .sign(signingKey);
 
   return response(
     {
