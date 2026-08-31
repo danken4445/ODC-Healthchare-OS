@@ -28,8 +28,9 @@ export default function Home() {
 
   async function createWalkIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setIssuedCredentials(null);
-    const fields = new FormData(event.currentTarget);
+    const fields = new FormData(form);
     const name = String(fields.get('name') ?? '').trim();
     if (!name) return setStatus('Enter the patient name.');
     const { data, error } = await createBrowserSupabaseClient().rpc('create_walk_in_patient', {
@@ -42,7 +43,7 @@ export default function Home() {
     if (error || !data?.[0]) return setStatus(`Walk-in creation failed: ${error?.message ?? 'No credentials returned.'}`);
     setIssuedCredentials({ walkInId: data[0].walk_in_id, pin: data[0].pin });
     setStatus('Walk-in created. Record these credentials now; the PIN is never stored in readable form.');
-    event.currentTarget.reset();
+    form.reset();
   }
 
   async function signOut() {
