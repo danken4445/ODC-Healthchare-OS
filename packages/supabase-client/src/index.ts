@@ -28,6 +28,8 @@ export function createBrowserSupabaseClient(): SupabaseClient<Database> {
 /**
  * Uses the short-lived JWT returned by the walk-in Edge Function without
  * creating a Supabase Auth session or persisting a token in browser storage.
+ * The accessToken option is required here: a global Authorization header alone
+ * can be replaced by Supabase's unauthenticated API-key fallback.
  */
 export function createWalkInSupabaseClient(
   accessToken: string,
@@ -35,7 +37,6 @@ export function createWalkInSupabaseClient(
   if (!accessToken) throw new Error("A walk-in access token is required.");
   const { url, anonKey } = publicSupabaseConfig();
   return createClient<Database>(url, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    accessToken: async () => accessToken,
   });
 }
