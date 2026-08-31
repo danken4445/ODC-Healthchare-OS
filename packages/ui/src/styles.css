@@ -54,6 +54,20 @@ h2 {
   display: grid;
   gap: 1rem;
 }
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+.inline-form {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  align-items: end;
+  gap: 1rem;
+}
+.narrow-form {
+  max-width: 32rem;
+}
 .odyssey-field {
   display: grid;
   gap: 0.35rem;
@@ -135,6 +149,30 @@ h2 {
   padding: 0.8rem;
   background: var(--odyssey-muted);
   border-radius: var(--odyssey-radius);
+}
+.session-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.live-indicator,
+.encounter-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.live-indicator[data-live="true"]::before {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: #16a34a;
+  content: "";
+}
+.encounter-status {
+  color: #166534;
 }
 .credential {
   display: grid;
@@ -219,6 +257,10 @@ pre {
 }
 
 @media (max-width: 42rem) {
+  .two-column,
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
   main {
     margin: 0;
     min-height: 100vh;

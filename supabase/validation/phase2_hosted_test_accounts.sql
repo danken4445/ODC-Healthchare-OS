@@ -55,4 +55,30 @@ where email = 'patient@synthetic.odyssey.test'
       and patient.auth_user_id = auth.users.id
   );
 
+-- Bookable staging-only availability for the Phase 4 vertical slice. Re-running
+-- the script only fills still-missing periods for the linked synthetic doctor.
+insert into public.appointment_slots (
+  organization_id,
+  practitioner_role_id,
+  status,
+  service_type,
+  start_at,
+  end_at
+)
+select
+  '10000000-0000-0000-0000-000000000001',
+  role.id,
+  'free',
+  'General consultation',
+  date_trunc('hour', now()) + make_interval(hours => period.number),
+  date_trunc('hour', now()) + make_interval(hours => period.number, mins => 30)
+from public.practitioner_roles role
+join public.practitioners practitioner on practitioner.id = role.practitioner_id
+cross join generate_series(1, 6) as period(number)
+where practitioner.auth_user_id = (
+  select id from auth.users where email = 'doctor@odc.com'
+)
+  and role.role_code = 'doctor'
+on conflict (practitioner_role_id, start_at) do nothing;
+
 commit;

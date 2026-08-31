@@ -11,6 +11,39 @@ Foundation monorepo for the patient, provider, and admin applications.
 
 The homepage uses `public.hello_world` to verify the client can read and write to Supabase. This is an intentionally non-clinical smoke-test table; all clinical records will use FHIR-aligned resources and patient-scoped RLS.
 
+## Phase 4 vertical slice
+
+The three homepages now form one scheduling flow:
+
+- Patient (`:3000`): register or sign in, view this clinic's free FHIR Slots, and book one.
+- Admin (`:3002`): view today's appointments and create a walk-in patient plus booking.
+- Provider (`:3001`): view the assigned doctor's queue, receive new bookings through Supabase Realtime, and mark one in progress to create its Encounter.
+
+Booking and encounter creation use the `book_appointment_slot` and
+`start_appointment_encounter` database functions. Do not replace them with
+direct table writes: they lock availability and enforce patient/provider scope.
+
+For a clean local verification, start Docker Desktop, run `pnpm supabase db reset`,
+point every `apps/*/.env.local` at the local Supabase URL and anon key shown by
+`pnpm supabase status`, then run:
+
+```powershell
+corepack pnpm exec playwright install chromium
+corepack pnpm test:e2e
+```
+
+The browser suite starts all three apps and covers registration, patient
+booking, front-desk walk-in booking, the provider's no-refresh Realtime update,
+and Encounter creation. Run `supabase/validation/phase4_vertical_slice.sql` as
+a database administrator for the matching direct RLS/RPC check.
+
+For staging, apply all migrations, deploy `get-walk-in-records`, create the
+synthetic users, and run `phase2_hosted_test_accounts.sql` to link their roles
+and create temporary synthetic slots. Set `E2E_PATIENT_*`, `E2E_PROVIDER_*`, and
+`E2E_FRONT_DESK_*` when the staging test credentials differ from the local
+defaults. The three apps' `NEXT_PUBLIC_SUPABASE_*` values must point to that same
+staging project.
+
 ## Shared application packages
 
 - `@odyssey/types` contains the generated Supabase schema types and FHIR-shaped summaries such as `PatientSummary`; apps should use these summaries instead of raw table rows.

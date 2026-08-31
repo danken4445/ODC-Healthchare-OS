@@ -8,5 +8,6 @@ dist/
 .env.*.local
 !.env.example
 coverage/
+test-results/
 supabase/.temp/
 *.tsbuildinfo

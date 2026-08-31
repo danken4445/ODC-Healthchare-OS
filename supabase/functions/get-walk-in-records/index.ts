@@ -71,18 +71,29 @@ Deno.serve(async (request) => {
       verificationError.code,
       verificationError.message,
     );
-    return response({ error: "Walk-in access is temporarily unavailable." }, 503);
+    return response(
+      { error: "Walk-in access is temporarily unavailable." },
+      503,
+    );
   }
   if (!patientId)
     return response({ error: "Invalid walk-in credentials." }, 401);
 
-  const [patient, encounters, observations] = await Promise.all([
+  const [patient, appointments, encounters, observations] = await Promise.all([
     admin
       .from("patients")
       .select("id, name, walk_in_id")
       .eq("id", patientId)
       .eq("organization_id", body.organization_id)
       .maybeSingle(),
+    admin
+      .from("appointments")
+      .select(
+        "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction",
+      )
+      .eq("patient_id", patientId)
+      .eq("organization_id", body.organization_id)
+      .order("start_at", { ascending: true }),
     admin
       .from("encounters")
       .select("id, status, period_start")
@@ -95,10 +106,20 @@ Deno.serve(async (request) => {
       .eq("organization_id", body.organization_id),
   ]);
 
-  const recordError = patient.error || encounters.error || observations.error;
+  const recordError =
+    patient.error ||
+    appointments.error ||
+    encounters.error ||
+    observations.error;
   if (recordError || !patient.data) {
-    console.error("Walk-in record query failed:", recordError?.code ?? "patient_missing");
-    return response({ error: "Walk-in access is temporarily unavailable." }, 503);
+    console.error(
+      "Walk-in record query failed:",
+      recordError?.code ?? "patient_missing",
+    );
+    return response(
+      { error: "Walk-in access is temporarily unavailable." },
+      503,
+    );
   }
 
   const { error: auditError } = await admin.from("audit_log").insert({
@@ -112,12 +133,16 @@ Deno.serve(async (request) => {
   });
   if (auditError) {
     console.error("Walk-in access audit failed:", auditError.code);
-    return response({ error: "Walk-in access is temporarily unavailable." }, 503);
+    return response(
+      { error: "Walk-in access is temporarily unavailable." },
+      503,
+    );
   }
 
   return response(
     {
       patients: [patient.data],
+      appointments: appointments.data ?? [],
       encounters: encounters.data ?? [],
       observations: observations.data ?? [],
     },

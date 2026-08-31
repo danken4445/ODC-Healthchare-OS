@@ -1,6 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   getHumanNameDisplay,
+  type AppointmentQueueItem,
+  type AppointmentSlotSummary,
   type AppointmentSummary,
   type Database,
   type DateRange,
@@ -9,6 +11,8 @@ import {
   type ObservationSummary,
   type OrganizationClinicalRecords,
   type PatientAccessRecords,
+  type PatientRegistrationInput,
+  type PatientRegistrationResult,
   type PatientSummary,
   type WalkInAccessInput,
   type WalkInAccessRecords,
@@ -35,6 +39,8 @@ const patientSummaryColumns =
   "id, organization_id, active, name, birth_date, gender, walk_in_id, created_at, updated_at";
 const appointmentSummaryColumns =
   "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction";
+const appointmentSlotSummaryColumns =
+  "id, organization_id, practitioner_role_id, status, service_type, start_at, end_at";
 const encounterSummaryColumns =
   "id, organization_id, patient_id, appointment_id, practitioner_role_id, status, class_code, service_type, period_start, period_end";
 const observationSummaryColumns =
@@ -228,6 +234,34 @@ export async function signInWithPassword(
   return success(data.user?.email ?? email);
 }
 
+export async function registerPatient(
+  client: SupabaseClient<Database>,
+  input: PatientRegistrationInput,
+  emailRedirectTo: string,
+): Promise<SupabaseResult<PatientRegistrationResult>> {
+  const displayName = input.displayName.trim();
+  if (displayName.length < 2 || displayName.length > 120)
+    return failure({ message: "Enter a name between 2 and 120 characters." });
+
+  const { data, error } = await client.auth.signUp({
+    email: input.email.trim(),
+    password: input.password,
+    options: {
+      emailRedirectTo,
+      data: {
+        display_name: displayName,
+        odyssey_patient_registration: true,
+        organization_id: input.organizationId,
+      },
+    },
+  });
+  if (error) return failure(error);
+  return success({
+    email: data.user?.email ?? input.email.trim(),
+    signedIn: data.session !== null,
+  });
+}
+
 export async function requestMagicLink(
   client: SupabaseClient<Database>,
   email: string,
@@ -277,7 +311,152 @@ export async function createWalkInPatient(
   const result = data?.[0];
   if (!result)
     return failure({ message: "No walk-in credentials were returned." });
-  return success({ walkInId: result.walk_in_id, pin: result.pin });
+  return success({
+    patientId: result.patient_id,
+    walkInId: result.walk_in_id,
+    pin: result.pin,
+  });
+}
+
+/** Lists bookable FHIR Slots at one clinic. RLS limits the clinic to the user. */
+export async function getAvailableAppointmentSlots(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  from: Date = new Date(),
+): Promise<SupabaseResult<AppointmentSlotSummary[]>> {
+  const { data, error } = await client
+    .from("appointment_slots")
+    .select(appointmentSlotSummaryColumns)
+    .eq("organization_id", organizationId)
+    .eq("status", "free")
+    .gte("start_at", from.toISOString())
+    .order("start_at", { ascending: true });
+  if (error) return failure(error);
+  return success((data ?? []) as unknown as AppointmentSlotSummary[]);
+}
+
+/** Atomically consumes a free slot. Staff may supply a patient; patients may not. */
+export async function bookAppointmentSlot(
+  client: SupabaseClient<Database>,
+  slotId: string,
+  patientId?: string,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("book_appointment_slot", {
+    p_slot_id: slotId,
+    ...(patientId ? { p_patient_id: patientId } : {}),
+  });
+  if (error) return failure(error);
+  return success(data);
+}
+
+export interface DayRange {
+  end: string;
+  start: string;
+}
+
+/** Browser-local calendar day expressed as the UTC range required by Postgres. */
+export function getLocalDayRange(date: Date = new Date()): DayRange {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+/** Appointment queue visible through actor-specific Appointment RLS. */
+export async function getDailyAppointmentQueue(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  range: DayRange = getLocalDayRange(),
+): Promise<SupabaseResult<AppointmentQueueItem[]>> {
+  const { data: appointments, error: appointmentError } = await client
+    .from("appointments")
+    .select(appointmentSummaryColumns)
+    .eq("organization_id", organizationId)
+    .gte("start_at", range.start)
+    .lt("start_at", range.end)
+    .in("status", ["booked", "arrived"])
+    .order("start_at", { ascending: true });
+  if (appointmentError) return failure(appointmentError);
+
+  const appointmentRows = (appointments ??
+    []) as unknown as AppointmentSummary[];
+  const patientIds = [...new Set(appointmentRows.map((row) => row.patient_id))];
+  if (!patientIds.length) return success([]);
+
+  const { data: patients, error: patientError } = await client
+    .from("patients")
+    .select("id, name")
+    .in("id", patientIds);
+  if (patientError) return failure(patientError);
+  const { data: encounters, error: encounterError } = await client
+    .from("encounters")
+    .select("appointment_id, status")
+    .in(
+      "appointment_id",
+      appointmentRows.map((appointment) => appointment.id),
+    );
+  if (encounterError) return failure(encounterError);
+  const names = new Map(
+    (patients ?? []).map((patient) => [
+      patient.id,
+      getHumanNameDisplay(patient.name),
+    ]),
+  );
+  const encounterStatuses = new Map(
+    (encounters ?? []).map((encounter) => [
+      encounter.appointment_id,
+      encounter.status,
+    ]),
+  );
+
+  return success(
+    appointmentRows.map((appointment) => ({
+      ...appointment,
+      encounterStatus: encounterStatuses.get(appointment.id) ?? null,
+      patientName: names.get(appointment.patient_id) ?? "Patient",
+    })),
+  );
+}
+
+export async function startAppointmentEncounter(
+  client: SupabaseClient<Database>,
+  appointmentId: string,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("start_appointment_encounter", {
+    p_appointment_id: appointmentId,
+  });
+  if (error) return failure(error);
+  return success(data);
+}
+
+export type RealtimeConnectionStatus =
+  "SUBSCRIBED" | "TIMED_OUT" | "CLOSED" | "CHANNEL_ERROR";
+
+/** Reusable live-queue pattern: RLS is evaluated for every Appointment event. */
+export function subscribeToAppointmentQueue(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  onChange: () => void,
+  onStatus?: (status: RealtimeConnectionStatus) => void,
+): () => void {
+  const channel = client
+    .channel(`appointment-queue:${organizationId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "appointments",
+        filter: `organization_id=eq.${organizationId}`,
+      },
+      onChange,
+    )
+    .subscribe((status) => onStatus?.(status));
+
+  return () => {
+    void client.removeChannel(channel);
+  };
 }
 
 /** Calls the PIN-protected Edge Function and validates its response shape. */
@@ -305,6 +484,7 @@ function isWalkInAccessRecords(value: unknown): value is WalkInAccessRecords {
   const response = value as Record<string, unknown>;
   return (
     Array.isArray(response.patients) &&
+    Array.isArray(response.appointments) &&
     Array.isArray(response.encounters) &&
     Array.isArray(response.observations)
   );

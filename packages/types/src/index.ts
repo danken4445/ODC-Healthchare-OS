@@ -9,6 +9,7 @@ export type DatabaseRow<TableName extends keyof Database["public"]["Tables"]> =
 
 export type PatientRow = DatabaseRow<"patients">;
 export type AppointmentRow = DatabaseRow<"appointments">;
+export type AppointmentSlotRow = DatabaseRow<"appointment_slots">;
 export type EncounterRow = DatabaseRow<"encounters">;
 export type ObservationRow = DatabaseRow<"observations">;
 export type MedicationRequestRow = DatabaseRow<"medication_requests">;
@@ -16,6 +17,7 @@ export type MedicationRequestRow = DatabaseRow<"medication_requests">;
 export type AppointmentStatus =
   Database["public"]["Enums"]["appointment_status"];
 export type EncounterStatus = Database["public"]["Enums"]["encounter_status"];
+export type SlotStatus = Database["public"]["Enums"]["slot_status"];
 export type ObservationStatus =
   Database["public"]["Enums"]["observation_status"];
 export type RequestStatus = Database["public"]["Enums"]["request_status"];
@@ -55,6 +57,23 @@ export type AppointmentSummary = Pick<
   | "description"
   | "patient_instruction"
 >;
+
+/** FHIR Slot fields exposed by the scheduling UI. */
+export type AppointmentSlotSummary = Pick<
+  AppointmentSlotRow,
+  | "id"
+  | "organization_id"
+  | "practitioner_role_id"
+  | "status"
+  | "service_type"
+  | "start_at"
+  | "end_at"
+>;
+
+export interface AppointmentQueueItem extends AppointmentSummary {
+  encounterStatus: EncounterStatus | null;
+  patientName: string;
+}
 
 export type EncounterSummary = Pick<
   EncounterRow,
@@ -115,8 +134,21 @@ export interface OrganizationClinicalRecords {
 }
 
 export interface WalkInCredentials {
+  patientId: string;
   walkInId: string;
   pin: string;
+}
+
+export interface PatientRegistrationInput {
+  displayName: string;
+  email: string;
+  organizationId: string;
+  password: string;
+}
+
+export interface PatientRegistrationResult {
+  email: string;
+  signedIn: boolean;
 }
 
 export interface WalkInRegistrationInput {
@@ -134,6 +166,7 @@ export interface WalkInAccessInput {
 
 export interface WalkInAccessRecords {
   patients: Array<Pick<PatientSummary, "id" | "name" | "walk_in_id">>;
+  appointments: AppointmentSummary[];
   encounters: Array<Pick<EncounterSummary, "id" | "status" | "period_start">>;
   observations: Array<
     Pick<ObservationSummary, "id" | "code" | "status" | "value">
