@@ -3,7 +3,7 @@
 ## Phase 2 verification
 
 - [ ] In the hosted Supabase Dashboard, create confirmed synthetic Auth users and run `supabase/validation/phase2_hosted_test_accounts.sql`.
-- [ ] Generate/import a P-256 walk-in JWT signing key, set `WALK_IN_JWT_PRIVATE_JWK` as an Edge Function secret, and redeploy `issue-walk-in-token`.
+- [ ] Deploy `get-walk-in-records`, verify it returns only the PIN-authenticated walk-in patient's records, then delete the obsolete `issue-walk-in-token` function.
 - [ ] Start the three apps (`patient-web` on 3000, `provider-web` on 3001, `admin-web` on 3002) and run the login/RLS smoke tests.
 - [ ] Use the admin screen to create a walk-in; use its one-time ID/PIN in the patient screen and verify the scoped records.
 - [ ] Run `supabase/validation/phase2_auth_rls.sql` in the hosted SQL Editor and confirm every result is `true`.

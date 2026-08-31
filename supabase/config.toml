@@ -255,9 +255,9 @@ inspector_port = 8083
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 # entrypoint = "./functions/MY_FUNCTION_NAME/index.ts"
 
-# Walk-in patients do not have an auth.users row, so this public endpoint verifies
-# their one-time PIN itself before minting a 15-minute, patient-scoped JWT.
-[functions.issue-walk-in-token]
+# Walk-in patients do not have an auth.users row. This public endpoint verifies
+# their one-time PIN itself, then returns only their server-scoped records.
+[functions.get-walk-in-records]
 verify_jwt = false
 
 [analytics]

@@ -1,6 +1,6 @@
 'use client';
 
-import { createBrowserSupabaseClient, createWalkInSupabaseClient } from '@odyssey/supabase-client';
+import { createBrowserSupabaseClient } from '@odyssey/supabase-client';
 import { useEffect, useState, type FormEvent } from 'react';
 
 const organizationId = '10000000-0000-0000-0000-000000000001';
@@ -44,20 +44,12 @@ export default function Home() {
   async function useWalkIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    const { data, error } = await createBrowserSupabaseClient().functions.invoke('issue-walk-in-token', { body: {
+    const { data, error } = await createBrowserSupabaseClient().functions.invoke('get-walk-in-records', { body: {
       organization_id: organizationId, walk_in_id: String(fields.get('walkInId')), pin: String(fields.get('pin')),
     } });
-    if (error || !data?.access_token) return setStatus(`Walk-in sign-in failed: ${error?.message ?? 'No access token returned.'}`);
-    const walkIn = createWalkInSupabaseClient(data.access_token);
-    const [patients, encounters, observations] = await Promise.all([
-      walkIn.from('patients').select('id, name, walk_in_id'),
-      walkIn.from('encounters').select('id, status, period_start'),
-      walkIn.from('observations').select('id, code, status, value'),
-    ]);
-    const queryError = [patients, encounters, observations].find((result) => result.error)?.error;
-    if (queryError) return setStatus(`Walk-in RLS query failed: ${queryError.message}`);
-    setRecords({ patients: patients.data ?? [], encounters: encounters.data ?? [], observations: observations.data ?? [] });
-    setStatus('Walk-in token accepted. The records below must belong only to this walk-in patient.');
+    if (error || !data?.patients) return setStatus(`Walk-in access failed: ${error?.message ?? 'No records returned.'}`);
+    setRecords({ patients: data.patients ?? [], encounters: data.encounters ?? [], observations: data.observations ?? [] });
+    setStatus('Walk-in credentials verified. The records below belong only to this walk-in patient.');
   }
 
   async function claimWalkIn(event: FormEvent<HTMLFormElement>) {
