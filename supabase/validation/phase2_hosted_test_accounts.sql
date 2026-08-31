@@ -2,11 +2,11 @@
 --
 -- First create these confirmed Email/Password users in Dashboard > Authentication
 -- > Users. Use the same local-only password for each: LocalOnly-2026!
---   doctor@synthetic.odyssey.test
---   nurse@synthetic.odyssey.test
---   front-desk@synthetic.odyssey.test
---   admin@synthetic.odyssey.test
---   lab@synthetic.odyssey.test
+--   doctor@odc.com
+--   nurse@odc.com
+--   frontdesk@odc.com
+--   admin@odc.com
+--   lab@odc.com
 --   patient@synthetic.odyssey.test
 --
 -- Then run this file in Dashboard > SQL Editor. It only links the already

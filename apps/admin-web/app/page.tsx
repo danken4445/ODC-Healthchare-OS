@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 const organizationId = '10000000-0000-0000-0000-000000000001';
 
 export default function Home() {
-  const [email, setEmail] = useState('front-desk@synthetic.odyssey.test');
+  const [email, setEmail] = useState('frontdesk@odc.com');
   const [password, setPassword] = useState('');
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [status, setStatus] = useState('Sign in as front desk or admin to register a walk-in patient.');
