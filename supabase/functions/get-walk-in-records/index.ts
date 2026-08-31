@@ -1,9 +1,34 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
+import * as Sentry from "npm:@sentry/deno@10.73.0";
+
+Sentry.init({
+  dsn: Deno.env.get("SENTRY_DSN"),
+  environment: Deno.env.get("SENTRY_ENVIRONMENT") ?? "production",
+  tracesSampleRate: 0.05,
+  sendDefaultPii: false,
+  initialScope: {
+    tags: {
+      application: "get-walk-in-records",
+      data_classification: "no-phi",
+    },
+  },
+  beforeSend(event) {
+    delete event.user;
+    delete event.request;
+    delete event.breadcrumbs;
+    delete event.extra;
+    delete event.message;
+    event.exception?.values?.forEach((value) => {
+      value.value = "Edge Function error";
+    });
+    return event;
+  },
+});
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, sentry-trace, baggage",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -23,7 +48,7 @@ function response(body: Record<string, unknown>, status: number): Response {
 // Walk-in users do not have an auth.users account. This endpoint verifies the
 // one-time ID/PIN server-side, then returns only that patient's records. The
 // service key never leaves the Edge Function and no JWT is minted or persisted.
-Deno.serve(async (request) => {
+async function handleRequest(request: Request): Promise<Response> {
   if (request.method === "OPTIONS")
     return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST")
@@ -33,6 +58,12 @@ Deno.serve(async (request) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
     console.error("Walk-in records function is missing server configuration.");
+    Sentry.captureMessage(
+      "Walk-in records function is missing server configuration.",
+      {
+        level: "error",
+      },
+    );
     return response({ error: "Walk-in access is unavailable." }, 503);
   }
 
@@ -71,6 +102,10 @@ Deno.serve(async (request) => {
       verificationError.code,
       verificationError.message,
     );
+    Sentry.captureMessage("Walk-in verification RPC failed.", {
+      level: "error",
+      tags: { database_code: verificationError.code ?? "unknown" },
+    });
     return response(
       { error: "Walk-in access is temporarily unavailable." },
       503,
@@ -116,6 +151,10 @@ Deno.serve(async (request) => {
       "Walk-in record query failed:",
       recordError?.code ?? "patient_missing",
     );
+    Sentry.captureMessage("Walk-in record query failed.", {
+      level: "error",
+      tags: { database_code: recordError?.code ?? "patient_missing" },
+    });
     return response(
       { error: "Walk-in access is temporarily unavailable." },
       503,
@@ -133,6 +172,10 @@ Deno.serve(async (request) => {
   });
   if (auditError) {
     console.error("Walk-in access audit failed:", auditError.code);
+    Sentry.captureMessage("Walk-in access audit failed.", {
+      level: "error",
+      tags: { database_code: auditError.code ?? "unknown" },
+    });
     return response(
       { error: "Walk-in access is temporarily unavailable." },
       503,
@@ -148,4 +191,19 @@ Deno.serve(async (request) => {
     },
     200,
   );
+}
+
+Deno.serve(async (request) => {
+  try {
+    const result = await handleRequest(request);
+    if (result.status >= 500) await Sentry.flush(2_000);
+    return result;
+  } catch (error) {
+    Sentry.captureException(error);
+    await Sentry.flush(2_000);
+    return response(
+      { error: "Walk-in access is temporarily unavailable." },
+      500,
+    );
+  }
 });

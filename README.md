@@ -66,3 +66,26 @@ For the hosted Phase 2 test UI, create the synthetic Email/Password users in Das
 Create three separate Supabase projects (`odyssey-healthcare-os-dev`, `-staging`, `-prod`) and three Vercel projects, one per app. Add the matching environment values in Vercel. Never use production credentials locally.
 
 Enable GitHub branch protection on `main` with required pull requests and the `CI / quality` check. Store non-public keys in Doppler or 1Password, then sync them to GitHub/Vercel secrets; do not place service-role keys in any browser environment variable.
+
+## Phase 5 observability and guardrails
+
+Each Next.js app sends errors and low-volume traces to its own Sentry project.
+Set `NEXT_PUBLIC_SENTRY_DSN` in the matching Vercel project; set `SENTRY_DSN`
+for server-side reporting when it differs. To upload private source maps during
+builds, add `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` as build
+secrets only. The SDK deliberately removes request data, users, breadcrumbs,
+extras, and exception messages before sending so patient data is not reported.
+Set `SENTRY_DSN` and `SENTRY_ENVIRONMENT` as Supabase Edge Function secrets
+before deploying `get-walk-in-records`.
+
+Every pull request to `main` now runs the local Supabase-backed Playwright
+vertical slice and `supabase/tests/rls_access.sql`. These checks are intentionally
+based on the seeded synthetic users; a policy that exposes another organization
+or role will abort the RLS job. Make the `quality`, `migrations`, `rls`, and
+`vertical-slice` job checks required in branch protection (GitHub may display
+them grouped under the `CI` workflow).
+
+Production backup status and the pre-launch restore drill require Dashboard
+access and cannot be verified from this repository. Follow
+[`docs/operations/backup-restore-drill.md`](docs/operations/backup-restore-drill.md)
+and retain the completed evidence in the launch record.

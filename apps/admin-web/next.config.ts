@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
+
 const nextConfig: NextConfig = {
   transpilePackages: [
     "@odyssey/supabase-client",
@@ -6,4 +8,14 @@ const nextConfig: NextConfig = {
     "@odyssey/ui",
   ],
 };
-export default nextConfig;
+
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  tunnelRoute: "/monitoring",
+  webpack: {
+    treeshake: { removeDebugLogging: true },
+    automaticVercelMonitors: true,
+  },
+});
