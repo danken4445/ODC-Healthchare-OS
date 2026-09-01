@@ -7,6 +7,7 @@ import {
   type AppointmentStatus,
   type AppointmentSummary,
   type ClinicServiceSummary,
+  type ClinicServiceInput,
   type ClinicAccountInput,
   type CreatedClinicAccount,
   type Database,
@@ -19,6 +20,7 @@ import {
   type PatientProfileInput,
   type PrescriptionInput,
   type SoapObservationInput,
+  type SoapNoteInput,
   type OrganizationClinicalRecords,
   type PatientAccessRecords,
   type PatientRegistrationInput,
@@ -32,6 +34,7 @@ import {
   type WalkInCredentials,
   type WalkInRegistrationInput,
   type WaitingRoomQueueItem,
+  type WeeklyAvailabilityWindow,
 } from "@odyssey/types";
 
 let browserClient: SupabaseClient<Database> | undefined;
@@ -56,7 +59,7 @@ const appointmentSummaryColumns =
 const appointmentSlotSummaryColumns =
   "id, appointment_id, organization_id, practitioner_role_id, clinic_service_id, status, service_type, start_at, end_at";
 const clinicServiceSummaryColumns =
-  "id, organization_id, code, name, description, duration_minutes, base_price, currency, booking_enabled";
+  "id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, booking_enabled";
 const waitingRoomQueueColumns =
   "appointment_id, organization_id, queue_date, queue_number, service_name, scheduled_at, stage";
 const publicClinicSummaryColumns = "id, name, telecom, address";
@@ -281,6 +284,18 @@ export async function addSoapObservation(client: SupabaseClient<Database>, input
   return error ? failure(error) : success(data);
 }
 
+export async function saveSoapNote(
+  client: SupabaseClient<Database>,
+  input: SoapNoteInput,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("add_soap_note", {
+    p_encounter_id: input.encounterId,
+    p_text: input.text,
+    p_supersedes_id: input.supersedesId ?? null,
+  });
+  return error ? failure(error) : success(data);
+}
+
 export async function issuePrescription(client: SupabaseClient<Database>, input: PrescriptionInput): Promise<SupabaseResult<string>> {
   const { data, error } = await client.rpc("issue_prescription", {
     p_encounter_id: input.encounterId,
@@ -466,6 +481,49 @@ export async function getClinicServices(
   return success((data ?? []) as unknown as ClinicServiceSummary[]);
 }
 
+/** Adds a bookable service to the current provider's clinic catalog. */
+export async function createClinicService(client: SupabaseClient<Database>, organizationId: string, input: ClinicServiceInput): Promise<SupabaseResult<ClinicServiceSummary>> {
+  const { data: serviceId, error } = await client.rpc("save_provider_clinic_service", {
+    p_service_id: null,
+    p_organization_id: organizationId,
+    p_code: input.code,
+    p_name: input.name,
+    p_description: input.description ?? "",
+    p_duration_minutes: input.durationMinutes,
+    p_base_price: input.basePrice ?? null,
+    p_booking_enabled: input.bookingEnabled,
+  });
+  if (error) return failure(error);
+  const { data, error: selectError } = await client.from("clinic_services").select(clinicServiceSummaryColumns).eq("id", serviceId).single();
+  if (selectError) return failure(selectError);
+  return success(data as unknown as ClinicServiceSummary);
+}
+
+/** Updates a service in the current provider's clinic catalog. */
+export async function updateClinicService(client: SupabaseClient<Database>, organizationId: string, serviceId: string, input: ClinicServiceInput): Promise<SupabaseResult<ClinicServiceSummary>> {
+  const { data: savedId, error } = await client.rpc("save_provider_clinic_service", {
+    p_service_id: serviceId,
+    p_organization_id: organizationId,
+    p_code: input.code,
+    p_name: input.name,
+    p_description: input.description ?? "",
+    p_duration_minutes: input.durationMinutes,
+    p_base_price: input.basePrice ?? null,
+    p_booking_enabled: input.bookingEnabled,
+  });
+  if (error) return failure(error);
+  const { data, error: selectError } = await client.from("clinic_services").select(clinicServiceSummaryColumns).eq("id", savedId).single();
+  if (selectError) return failure(selectError);
+  return success(data as unknown as ClinicServiceSummary);
+}
+
+/** Retires a service while preserving its appointment history. */
+export async function retireClinicService(client: SupabaseClient<Database>, serviceId: string): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc("retire_provider_clinic_service", { p_service_id: serviceId });
+  if (error) return failure(error);
+  return success(undefined);
+}
+
 export async function getPublicClinic(
   client: SupabaseClient<Database>,
   organizationId: string,
@@ -501,6 +559,16 @@ export async function getCurrentStaffOrganization(
   if (error) return failure(error);
   if (!data) return failure({ message: "No active staff clinic is assigned." });
   return success(data);
+}
+
+export async function getCurrentProviderRoleId(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<string | null>> {
+  const { data, error } = await client.rpc("get_current_provider_role_id", {
+    p_organization_id: organizationId,
+  });
+  return error ? failure(error) : success(data);
 }
 
 /** Checks portal admission through the database before an app loads its UI. */
@@ -661,6 +729,38 @@ export async function createAppointmentSlot(
   });
   if (error) return failure(error);
   return success(data);
+}
+
+/** Creates consecutive, service-length slots across a provider-selected period. */
+export async function createAppointmentSlotRange(
+  client: SupabaseClient<Database>,
+  input: AppointmentSlotInput,
+): Promise<SupabaseResult<number>> {
+  const { data, error } = await client.rpc("create_appointment_slot_range", {
+    p_clinic_service_id: input.clinicServiceId,
+    p_end_at: input.endAt,
+    p_start_at: input.startAt,
+  });
+  if (error) return failure(error);
+  return success(Number(data));
+}
+
+/** Saves a provider's recurring weekly hours and refreshes future free slots. */
+export async function saveProviderWeeklyAvailability(
+  client: SupabaseClient<Database>,
+  clinicServiceId: string,
+  windows: WeeklyAvailabilityWindow[],
+): Promise<SupabaseResult<number>> {
+  const { data, error } = await client.rpc("save_provider_weekly_availability", {
+    p_clinic_service_id: clinicServiceId,
+    p_windows: windows.map((window) => ({
+      day_of_week: window.dayOfWeek,
+      start_time: window.startTime,
+      end_time: window.endTime,
+    })),
+  });
+  if (error) return failure(error);
+  return success(Number(data));
 }
 
 export async function setAppointmentSlotUnavailable(

@@ -48,6 +48,20 @@ function formatAppointmentTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function downloadClinicalDocument(
+  title: string,
+  statement: string,
+  issuedAt: string,
+) {
+  const content = `${title}\nIssued: ${new Date(issuedAt).toLocaleString()}\n\n${statement}\n`;
+  const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "clinical-document"}.txt`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Home() {
   const [email, setEmail] = useState("patient@synthetic.odyssey.test");
   const [password, setPassword] = useState("");
@@ -647,7 +661,10 @@ export default function Home() {
                   <p className="hint">{encounter.period_start ? new Date(encounter.period_start).toLocaleString() : "Date pending"} · {encounter.status.replaceAll("_", " ")}</p>
                   {records.observations.filter((item) => item.encounter_id === encounter.id && item.code.startsWith("SOAP-")).map((item) => <div key={item.id}><strong>{item.code_display}</strong><p>{typeof item.value === "object" && item.value && !Array.isArray(item.value) && typeof item.value.text === "string" ? item.value.text : ""}</p>{item.supersedes_id && <small>Revised note</small>}</div>)}
                   {records.medicationRequests.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>Prescription: {item.medication_display}</strong><p>{Array.isArray(item.dosage_instruction) && typeof item.dosage_instruction[0] === "object" && item.dosage_instruction[0] && !Array.isArray(item.dosage_instruction[0]) && typeof item.dosage_instruction[0].text === "string" ? item.dosage_instruction[0].text : "Directions recorded"}</p>{item.note && <p>{item.note}</p>}</div>)}
-                  {records.documentReferences.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>{item.content_title ?? item.type_display ?? "Medical certificate"}</strong><p>{item.description}</p></div>)}
+                  {records.documentReferences.filter((item) => item.encounter_id === encounter.id).map((item) => {
+                    const title = item.content_title ?? item.type_display ?? "Medical certificate";
+                    return <div key={item.id}><strong>{title}</strong><p>{item.description}</p><Button size="sm" variant="outline" onClick={() => downloadClinicalDocument(title, item.description ?? "", item.date_at)}>Download certificate</Button></div>;
+                  })}
                 </article>
               ))}
             </div>

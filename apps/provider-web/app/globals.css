@@ -1,1 +1,28 @@
 @import "@odyssey/ui/styles.css";
+
+.cms-grid { margin: 1rem 0 1.5rem; align-items: start; }
+.cms-grid h3, .schedule-heading { margin-top: 0; }
+.service-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.booking-toggle { display: flex; align-items: center; gap: .55rem; font-size: .9rem; font-weight: 600; }
+.booking-toggle input { width: 1rem; height: 1rem; accent-color: var(--odyssey-primary); }
+.service-list { display: grid; gap: .6rem; margin-top: 1rem; }
+.service-list article { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: .75rem 0; border-bottom: 1px solid var(--odyssey-border); }
+.service-list article:last-child { border-bottom: 0; }
+.service-list strong, .service-list small { display: block; }
+.service-list small { margin-top: .2rem; color: var(--odyssey-muted-foreground); font-size: .8rem; }
+.service-actions { display: inline-flex; gap: .15rem; flex-shrink: 0; }
+.schedule-heading { margin-bottom: .25rem; }
+.weekly-schedule { display: grid; gap: 1rem; margin-bottom: 1.25rem; }
+.weekly-days { display: grid; gap: .5rem; }
+.weekly-day { display: grid; grid-template-columns: 10rem 8rem 1.5rem 8rem; align-items: center; gap: .6rem; }
+.day-enabled { display: flex; align-items: center; gap: .5rem; }
+.day-enabled input { accent-color: var(--odyssey-primary); }
+.patient-history-card { grid-column: 1 / -1; }
+.cms-grid + .schedule-heading + .hint + .inline-form { grid-template-columns: 1.4fr 1fr 1fr auto; }
+
+@media (max-width: 700px) {
+  .cms-grid, .service-form-row { grid-template-columns: 1fr; }
+  .cms-grid + .schedule-heading + .hint + .inline-form { grid-template-columns: 1fr; }
+  .service-list article { align-items: flex-start; flex-direction: column; }
+  .weekly-day { grid-template-columns: 1fr 1fr 1rem 1fr; }
+}

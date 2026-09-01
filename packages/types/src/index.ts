@@ -18,6 +18,8 @@ export type MedicationRequestRow = DatabaseRow<"medication_requests">;
 export type DocumentReferenceRow = DatabaseRow<"document_references">;
 export type OrganizationRow = DatabaseRow<"organizations">;
 export type PlatformAdminRow = DatabaseRow<"platform_admins">;
+export type ProviderWeeklyAvailabilityRow =
+  DatabaseRow<"provider_weekly_availability">;
 export type WaitingRoomQueueRow = DatabaseRow<"waiting_room_queue">;
 
 export type AppointmentStatus =
@@ -90,6 +92,7 @@ export type ClinicServiceSummary = Pick<
   ClinicServiceRow,
   | "id"
   | "organization_id"
+  | "owner_practitioner_role_id"
   | "code"
   | "name"
   | "description"
@@ -98,6 +101,22 @@ export type ClinicServiceSummary = Pick<
   | "currency"
   | "booking_enabled"
 >;
+
+/** Values a provider can maintain for a service offered from their clinic. */
+export interface ClinicServiceInput {
+  code: string;
+  name: string;
+  description?: string;
+  durationMinutes: number;
+  basePrice?: number | null;
+  bookingEnabled: boolean;
+}
+
+export interface WeeklyAvailabilityWindow {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
 
 /** Public waiting-room projection. It intentionally contains no patient data. */
 export type WaitingRoomQueueItem = Pick<
@@ -209,6 +228,12 @@ export type DocumentReferenceSummary = Pick<
 export interface SoapObservationInput {
   encounterId: string;
   section: "S" | "O" | "A" | "P";
+  text: string;
+  supersedesId?: string | null;
+}
+
+export interface SoapNoteInput {
+  encounterId: string;
   text: string;
   supersedesId?: string | null;
 }

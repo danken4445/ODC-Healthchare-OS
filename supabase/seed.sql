@@ -64,11 +64,12 @@ insert into public.patients (id, organization_id, auth_user_id, name) values
 on conflict (id) do nothing;
 
 insert into public.clinic_services (
-  id, organization_id, code, name, description, duration_minutes, base_price, currency
+  id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency
 ) values
   (
     '52000000-0000-0000-0000-000000000001',
     '10000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000101',
     'GENERAL-CONSULT',
     'General consultation',
     'Primary care assessment with the clinic doctor.',
@@ -79,6 +80,7 @@ insert into public.clinic_services (
   (
     '52000000-0000-0000-0000-000000000002',
     '10000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000101',
     'FOLLOW-UP',
     'Follow-up consultation',
     'Review progress and next steps after a previous visit.',

@@ -199,10 +199,16 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
   const medication = `Synthetic medication ${runId}`;
   const certificateStatement = `Synthetic certificate statement ${runId}`;
   await expect(providerPage.getByRole("heading", { name: "Consultation chart" })).toBeVisible();
-  await providerPage.getByLabel("Section").selectOption("S");
-  await providerPage.getByLabel("Clinical note").fill(soapText);
-  await providerPage.getByRole("button", { name: "Save note" }).click();
+  await expect(providerPage.getByRole("heading", { name: "Patient medical history" })).toBeVisible();
+  await expect(providerPage.getByText("synthetic-observation")).toBeVisible();
+  await providerPage.getByLabel("Complete SOAP note").fill(soapText);
+  await providerPage.getByRole("button", { name: "Save SOAP note" }).click();
   await expect(providerPage.getByRole("status")).toContainText("SOAP note saved");
+
+  const revisedSoapText = `${soapText} revised`;
+  await providerPage.getByLabel("Complete SOAP note").fill(revisedSoapText);
+  await providerPage.getByRole("button", { name: "Save SOAP note" }).click();
+  await expect(providerPage.getByRole("status")).toContainText("SOAP note revision saved");
 
   await providerPage.getByLabel("Medication").fill(medication);
   await providerPage.getByLabel("Dosage and directions").fill("One synthetic unit daily for two days");
@@ -215,27 +221,34 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
   await expect(providerPage.getByRole("status")).toContainText("Medical certificate issued");
 
   // No patient refresh: these assertions cover the clinical Realtime chain.
-  await expect(patientPage.getByText(soapText)).toBeVisible({ timeout: 15_000 });
+  await expect(patientPage.getByText(revisedSoapText)).toBeVisible({ timeout: 15_000 });
   await expect(patientPage.getByText(`Prescription: ${medication}`)).toBeVisible({ timeout: 15_000 });
   await expect(patientPage.getByText(certificateStatement)).toBeVisible({ timeout: 15_000 });
+  const certificateBlock = patientPage.getByText(certificateStatement).locator("..");
+  const downloadPromise = patientPage.waitForEvent("download");
+  await certificateBlock.getByRole("button", { name: "Download certificate" }).click();
+  const certificateDownload = await downloadPromise;
+  expect(certificateDownload.suggestedFilename()).toContain("Synthetic-certificate");
 
   await providerPage.getByRole("button", { name: "Complete encounter" }).click();
   await expect(providerPage.getByRole("status")).toContainText("Encounter completed");
   await expect(patientPage.getByText(/finished/i)).toBeVisible({ timeout: 15_000 });
 
+  await patientPage.getByLabel("Phone").fill("+63 900 000 0000");
+  await patientPage.getByLabel("Address").fill(`Synthetic address ${runId}`);
+  await patientPage.getByRole("button", { name: "Save profile" }).click();
+  await expect(patientPage.getByRole("status")).toContainText("Profile updated");
+
   const future = new Date();
   future.setDate(future.getDate() + 2);
-  future.setHours(10, 0, 0, 0);
-  const localInput = new Date(
-    future.getTime() - future.getTimezoneOffset() * 60_000,
-  )
-    .toISOString()
-    .slice(0, 16);
+  const weekday = future.toLocaleDateString("en-US", { weekday: "long" });
   await providerPage.getByLabel("Service").selectOption({ index: 1 });
-  await providerPage.getByLabel("Start time").fill(localInput);
+  await providerPage.getByRole("checkbox", { name: weekday }).check();
+  await providerPage.getByLabel(`${weekday} start time`).fill("10:00");
+  await providerPage.getByLabel(`${weekday} end time`).fill("11:00");
   await providerPage.getByRole("button", { name: "Add availability" }).click();
   await expect(providerPage.getByRole("status")).toContainText(
-    "Availability added",
+    "Weekly availability saved",
   );
 
   await adminPage.getByLabel("Patient name").fill(walkInName);

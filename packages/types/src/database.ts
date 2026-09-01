@@ -274,6 +274,7 @@ export type Database = {
           id: string;
           name: string;
           organization_id: string;
+          owner_practitioner_role_id: string | null;
           updated_at: string;
         };
         Insert: {
@@ -288,6 +289,7 @@ export type Database = {
           id?: string;
           name: string;
           organization_id: string;
+          owner_practitioner_role_id?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -302,9 +304,17 @@ export type Database = {
           id?: string;
           name?: string;
           organization_id?: string;
+          owner_practitioner_role_id?: string | null;
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "clinic_services_owner_practitioner_role_id_fkey";
+            columns: ["owner_practitioner_role_id"];
+            isOneToOne: false;
+            referencedRelation: "practitioner_roles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "clinic_services_organization_id_fkey";
             columns: ["organization_id"];
@@ -1504,11 +1514,77 @@ export type Database = {
         };
         Relationships: [];
       };
+      provider_weekly_availability: {
+        Row: {
+          clinic_service_id: string;
+          created_at: string;
+          day_of_week: number;
+          end_time: string;
+          id: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          start_time: string;
+          updated_at: string;
+        };
+        Insert: {
+          clinic_service_id: string;
+          created_at?: string;
+          day_of_week: number;
+          end_time: string;
+          id?: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          start_time: string;
+          updated_at?: string;
+        };
+        Update: {
+          clinic_service_id?: string;
+          created_at?: string;
+          day_of_week?: number;
+          end_time?: string;
+          id?: string;
+          organization_id?: string;
+          practitioner_role_id?: string;
+          start_time?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_weekly_availability_clinic_service_id_fkey";
+            columns: ["clinic_service_id"];
+            isOneToOne: false;
+            referencedRelation: "clinic_services";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_weekly_availability_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_weekly_availability_practitioner_role_id_fkey";
+            columns: ["practitioner_role_id"];
+            isOneToOne: false;
+            referencedRelation: "practitioner_roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      add_soap_note: {
+        Args: {
+          p_encounter_id: string;
+          p_supersedes_id?: string | null;
+          p_text: string;
+        };
+        Returns: string;
+      };
       add_soap_observation: {
         Args: {
           p_encounter_id: string;
@@ -1561,6 +1637,35 @@ export type Database = {
           p_start_at: string;
         };
         Returns: string;
+      };
+      create_appointment_slot_range: {
+        Args: {
+          p_clinic_service_id: string;
+          p_end_at: string;
+          p_start_at: string;
+        };
+        Returns: number;
+      };
+      save_provider_weekly_availability: {
+        Args: { p_clinic_service_id: string; p_windows: Json };
+        Returns: number;
+      };
+      save_provider_clinic_service: {
+        Args: {
+          p_base_price: number | null;
+          p_booking_enabled: boolean;
+          p_code: string;
+          p_description: string;
+          p_duration_minutes: number;
+          p_name: string;
+          p_organization_id: string;
+          p_service_id: string | null;
+        };
+        Returns: string;
+      };
+      retire_provider_clinic_service: {
+        Args: { p_service_id: string };
+        Returns: undefined;
       };
       enroll_patient_at_clinic: {
         Args: { p_display_name: string; p_organization_id: string };
@@ -1621,6 +1726,10 @@ export type Database = {
       };
       get_current_staff_organization: {
         Args: Record<PropertyKey, never>;
+        Returns: string | null;
+      };
+      get_current_provider_role_id: {
+        Args: { p_organization_id: string };
         Returns: string | null;
       };
       get_portal_access: {

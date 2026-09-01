@@ -1,29 +1,35 @@
 "use client";
 
 import {
-  addSoapObservation,
-  createAppointmentSlot,
   createBrowserSupabaseClient,
+  createClinicService,
   finishClinicalEncounter,
   getClinicServices,
   getCurrentUserEmail,
   getPortalAccess,
   getCurrentStaffOrganization,
+  getCurrentProviderRoleId,
   getDailyAppointmentQueue,
   getOrganizationClinicalRecords,
   getProviderAppointmentSlots,
   issueMedicalCertificate,
   issuePrescription,
   setAppointmentSlotUnavailable,
+  saveProviderWeeklyAvailability,
+  saveSoapNote,
   signInWithPassword,
   signOut,
   startAppointmentEncounter,
   subscribeToAppointmentQueue,
+  subscribeToClinicalHistory,
+  retireClinicService,
+  updateClinicService,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
   AppointmentSlotSummary,
   ClinicServiceSummary,
+  ClinicServiceInput,
   OrganizationClinicalRecords,
 } from "@odyssey/types";
 import {
@@ -44,6 +50,20 @@ function formatTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function clinicalText(value: unknown): string {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return "";
+  const text = (value as Record<string, unknown>).text;
+  return typeof text === "string" ? text : "";
+}
+
+function dosageText(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return clinicalText(value[0]);
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 export default function Home() {
   const [email, setEmail] = useState("doctor@synthetic.odyssey.test");
   const [password, setPassword] = useState("");
@@ -58,11 +78,46 @@ export default function Home() {
     "Sign in as the assigned doctor to see today's queue.",
   );
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [editingService, setEditingService] = useState<ClinicServiceSummary | null>(null);
+  const [scheduleServiceId, setScheduleServiceId] = useState("");
   const [clinicalRecords, setClinicalRecords] =
     useState<OrganizationClinicalRecords | null>(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(null);
   const [clinicalBusy, setClinicalBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
+  const [providerRoleId, setProviderRoleId] = useState<string | null>(null);
+
+  const ownedServices = services.filter(
+    (service) => service.owner_practitioner_role_id === providerRoleId,
+  );
+  const selectedEncounter = clinicalRecords?.encounters.find(
+    (encounter) => encounter.id === selectedEncounterId,
+  );
+  const selectedAppointment = queue.find(
+    (appointment) => appointment.id === selectedEncounter?.appointment_id,
+  );
+  const priorEncounters = clinicalRecords?.encounters.filter(
+    (encounter) =>
+      encounter.patient_id === selectedEncounter?.patient_id &&
+      encounter.id !== selectedEncounterId,
+  ) ?? [];
+  const currentSoapNote = clinicalRecords?.observations.find(
+    (item) =>
+      item.encounter_id === selectedEncounterId && item.code === "SOAP-NOTE",
+  );
+  const legacySoapDraft = ["SOAP-S", "SOAP-O", "SOAP-A", "SOAP-P"]
+    .map((code) =>
+      clinicalRecords?.observations.find(
+        (item) => item.encounter_id === selectedEncounterId && item.code === code,
+      ),
+    )
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .map((item) => `${item.code_display}:\n${clinicalText(item.value)}`)
+    .join("\n\n");
+  const currentSoapDraft = currentSoapNote
+    ? clinicalText(currentSoapNote.value)
+    : legacySoapDraft;
 
   const loadQueue = useCallback(
     async (clinicId = organizationId) => {
@@ -130,7 +185,15 @@ export default function Home() {
         );
       },
     );
-    return unsubscribe;
+    const unsubscribeClinical = subscribeToClinicalHistory(
+      createBrowserSupabaseClient(),
+      organizationId,
+      () => void loadClinicalRecords(),
+    );
+    return () => {
+      unsubscribe();
+      unsubscribeClinical();
+    };
   }, [loadAvailability, loadClinicalRecords, loadQueue, organizationId, signedInAs]);
 
   async function loadStaffClinic() {
@@ -139,6 +202,13 @@ export default function Home() {
     );
     if (result.error)
       return setStatus(`Clinic access failed: ${result.error.message}`);
+    const roleResult = await getCurrentProviderRoleId(
+      createBrowserSupabaseClient(),
+      result.data,
+    );
+    if (roleResult.error)
+      return setStatus(`Provider role query failed: ${roleResult.error.message}`);
+    setProviderRoleId(roleResult.data);
     setOrganizationId(result.data);
     await Promise.all([loadQueue(result.data), loadAvailability(result.data), loadClinicalRecords(result.data)]);
   }
@@ -196,16 +266,16 @@ export default function Home() {
     if (!selectedEncounterId) return;
     const form = event.currentTarget;
     const fields = new FormData(form);
-    const section = String(fields.get("section")) as "S" | "O" | "A" | "P";
-    const current = clinicalRecords?.observations.find((item) => item.encounter_id === selectedEncounterId && item.code === `SOAP-${section}`);
     setClinicalBusy(true);
-    const result = await addSoapObservation(createBrowserSupabaseClient(), {
-      encounterId: selectedEncounterId, section, text: String(fields.get("text") ?? ""), supersedesId: current?.id,
+    const result = await saveSoapNote(createBrowserSupabaseClient(), {
+      encounterId: selectedEncounterId,
+      text: String(fields.get("text") ?? ""),
+      supersedesId: currentSoapNote?.id,
     });
     setClinicalBusy(false);
     if (result.error) return setStatus(`Unable to save SOAP note: ${result.error.message}`);
     form.reset();
-    setStatus(current ? "SOAP note revision saved." : "SOAP note saved.");
+    setStatus(currentSoapNote ? "SOAP note revision saved." : "SOAP note saved.");
     await loadClinicalRecords();
   }
 
@@ -248,28 +318,27 @@ export default function Home() {
     if (!organizationId) return setStatus("No staff clinic is assigned.");
     const form = event.currentTarget;
     const fields = new FormData(form);
-    const start = new Date(String(fields.get("startAt") ?? ""));
     const selectedService = services.find(
-      (service) => service.id === String(fields.get("clinicServiceId") ?? ""),
+      (service) => service.id === String(fields.get("scheduleServiceId") ?? ""),
     );
-    if (!selectedService || Number.isNaN(start.getTime())) {
-      setStatus("Choose a service and valid start time.");
+    if (!selectedService) {
+      setStatus("Choose a service for this weekly schedule.");
       return;
     }
-    const end = new Date(
-      start.getTime() + selectedService.duration_minutes * 60_000,
-    );
-    setAvailabilityBusy(true);
-    const result = await createAppointmentSlot(createBrowserSupabaseClient(), {
-      clinicServiceId: selectedService.id,
-      startAt: start.toISOString(),
-      endAt: end.toISOString(),
+    const windows = WEEKDAYS.flatMap((day, index) => {
+      if (!fields.get(`day-${index}-enabled`)) return [];
+      const startTime = String(fields.get(`day-${index}-start`) ?? "");
+      const endTime = String(fields.get(`day-${index}-end`) ?? "");
+      if (!startTime || !endTime || endTime <= startTime) return [];
+      return [{ dayOfWeek: index, startTime, endTime }];
     });
+    if (!windows.length) return setStatus("Choose at least one day and a valid time range.");
+    if (windows.length !== [...fields.keys()].filter((key) => key.endsWith("-enabled")).length) return setStatus("Every enabled day needs a valid start and end time.");
+    setAvailabilityBusy(true);
+    const result = await saveProviderWeeklyAvailability(createBrowserSupabaseClient(), selectedService.id, windows);
     setAvailabilityBusy(false);
-    if (result.error)
-      return setStatus(`Unable to add availability: ${result.error.message}`);
-    setStatus("Availability added. Patients can book it now.");
-    form.reset();
+    if (result.error) return setStatus(`Unable to save weekly availability: ${result.error.message}`);
+    setStatus(`Weekly availability saved. ${result.data} future appointment slots are now bookable.`);
     await loadAvailability();
   }
 
@@ -294,6 +363,55 @@ export default function Home() {
     await loadAvailability();
   }
 
+  async function handleSaveService(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!organizationId) return setStatus("No staff clinic is assigned.");
+    const fields = new FormData(form);
+    const name = String(fields.get("name") ?? "").trim();
+    const code = String(fields.get("code") ?? "").trim().toUpperCase();
+    const durationMinutes = Number(fields.get("durationMinutes"));
+    const basePriceValue = String(fields.get("basePrice") ?? "").trim();
+    const basePrice = basePriceValue ? Number(basePriceValue) : null;
+    if (!name || !code || !Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 480 || (basePrice !== null && (!Number.isFinite(basePrice) || basePrice < 0))) {
+      return setStatus("Enter a name, unique code, duration from 5–480 minutes, and a valid fee.");
+    }
+    const input: ClinicServiceInput = { name, code, durationMinutes, basePrice, description: String(fields.get("description") ?? ""), bookingEnabled: fields.get("bookingEnabled") === "on" };
+    const scheduleChanged = Boolean(
+      editingService &&
+        (editingService.name !== name ||
+          editingService.duration_minutes !== durationMinutes ||
+          editingService.booking_enabled !== input.bookingEnabled),
+    );
+    setServiceBusy(true);
+    const result = editingService
+      ? await updateClinicService(createBrowserSupabaseClient(), organizationId, editingService.id, input)
+      : await createClinicService(createBrowserSupabaseClient(), organizationId, input);
+    setServiceBusy(false);
+    if (result.error) return setStatus(`Unable to save service: ${result.error.message}`);
+    setEditingService(null);
+    form.reset();
+    setStatus(
+      editingService
+        ? scheduleChanged
+          ? "Service updated. Re-save weekly availability for this service."
+          : "Service updated."
+        : "Service added to your catalog.",
+    );
+    await loadAvailability();
+  }
+
+  async function handleRetireService(service: ClinicServiceSummary) {
+    if (!window.confirm(`Retire ${service.name}? Existing appointments will be kept.`)) return;
+    setServiceBusy(true);
+    const result = await retireClinicService(createBrowserSupabaseClient(), service.id);
+    setServiceBusy(false);
+    if (result.error) return setStatus(`Unable to retire service: ${result.error.message}`);
+    if (editingService?.id === service.id) setEditingService(null);
+    setStatus("Service retired and removed from future booking.");
+    await loadAvailability();
+  }
+
   async function handleSignOut() {
     const result = await signOut(createBrowserSupabaseClient());
     if (result.error)
@@ -306,6 +424,7 @@ export default function Home() {
     setLiveStatus("Offline");
     setClinicalRecords(null);
     setSelectedEncounterId(null);
+    setProviderRoleId(null);
     setStatus("Signed out.");
   }
 
@@ -351,7 +470,7 @@ export default function Home() {
             </span>
           </div>
           <DataTable
-            caption="Appointments assigned to this doctor today."
+            caption="Clinical appointments visible to this provider today."
             data={queue}
             emptyMessage="Your queue is empty."
             getRowId={(appointment) => appointment.id}
@@ -380,9 +499,9 @@ export default function Home() {
                 cell: (appointment) =>
                   appointment.encounterStatus === "in_progress" ? (
                     <span className="encounter-status">In progress</span>
-                  ) : (
+                  ) : canPrescribe ? (
                     <AppointmentStatusBadge status={appointment.status} />
-                  ),
+                  ) : null,
               },
               {
                 id: "action",
@@ -412,20 +531,33 @@ export default function Home() {
           {selectedEncounterId && (
             <section aria-labelledby="chart-heading">
               <div className="section-heading">
-                <h2 id="chart-heading">Consultation chart</h2>
+                <div>
+                  <p className="eyebrow">{selectedAppointment?.patientName ?? "Patient"}</p>
+                  <h2 id="chart-heading">Consultation chart</h2>
+                </div>
                 {canPrescribe && <Button disabled={clinicalBusy} onClick={() => void handleFinishEncounter()}>Complete encounter</Button>}
               </div>
               <div className="clinical-grid">
                 <Card>
-                  <h3>SOAP notes</h3>
+                  <h3>SOAP note</h3>
                   <form className="stack" onSubmit={handleSoap}>
-                    <Field label="Section"><select className="odyssey-input" name="section" required><option value="S">Subjective</option><option value="O">Objective</option><option value="A">Assessment</option><option value="P">Plan</option></select></Field>
-                    <Field label="Clinical note"><textarea className="odyssey-input" name="text" rows={5} maxLength={10000} required /></Field>
-                    <Button type="submit" disabled={clinicalBusy}>Save note</Button>
+                    <Field label="Complete SOAP note" hint="Record subjective, objective, assessment, and plan in this single note.">
+                      <textarea
+                        className="odyssey-input"
+                        name="text"
+                        rows={10}
+                        maxLength={20000}
+                        key={currentSoapNote?.id ?? `new-soap-note-${selectedEncounterId}`}
+                        defaultValue={currentSoapDraft}
+                        placeholder={"Subjective:\n\nObjective:\n\nAssessment:\n\nPlan:"}
+                        required
+                      />
+                    </Field>
+                    <Button type="submit" disabled={clinicalBusy}>Save SOAP note</Button>
                   </form>
                   <div className="record-list">
                     {clinicalRecords?.observations.filter((item) => item.encounter_id === selectedEncounterId && item.code.startsWith("SOAP-")).map((item) => (
-                      <article key={item.id}><strong>{item.code_display}</strong><p>{typeof item.value === "object" && item.value && !Array.isArray(item.value) && typeof item.value.text === "string" ? item.value.text : ""}</p><small>{item.supersedes_id ? "Revision" : "Original"} · {item.effective_at ? new Date(item.effective_at).toLocaleString() : ""}</small></article>
+                      <article key={item.id}><strong>{item.code_display}</strong><p>{clinicalText(item.value)}</p><small>{item.supersedes_id ? "Revision" : "Original"} · {item.effective_at ? new Date(item.effective_at).toLocaleString() : ""}</small></article>
                     ))}
                   </div>
                 </Card>
@@ -446,24 +578,81 @@ export default function Home() {
                     <Button type="submit" disabled={clinicalBusy}>Issue certificate</Button>
                   </form>
                 </Card>}
+                <Card className="patient-history-card">
+                  <h3>Patient medical history</h3>
+                  {!priorEncounters.length && <p className="hint">No earlier encounters are recorded at this clinic.</p>}
+                  <div className="record-list">
+                    {priorEncounters.map((encounter) => (
+                      <article key={encounter.id}>
+                        <strong>{encounter.service_type ?? "Clinical visit"}</strong>
+                        <small>{encounter.period_start ? new Date(encounter.period_start).toLocaleString() : "Date pending"} · {encounter.status.replaceAll("_", " ")}</small>
+                        {clinicalRecords?.observations.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>{item.code_display ?? item.code}</strong><p>{clinicalText(item.value)}</p></div>)}
+                        {clinicalRecords?.medicationRequests.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>Prescription: {item.medication_display ?? item.medication_code}</strong><p>{dosageText(item.dosage_instruction)}</p>{item.note && <p>{item.note}</p>}</div>)}
+                        {clinicalRecords?.documentReferences.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>{item.content_title ?? item.type_display ?? "Clinical document"}</strong><p>{item.description}</p></div>)}
+                      </article>
+                    ))}
+                  </div>
+                </Card>
               </div>
             </section>
           )}
 
           {canPrescribe && <section>
-            <h2>My availability</h2>
-            <form className="inline-form" onSubmit={handleCreateAvailability}>
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Doctor CMS</p>
+                <h2>My services &amp; schedule</h2>
+              </div>
+              <span className="hint">Control what patients can book with you.</span>
+            </div>
+            <div className="two-column cms-grid">
+              <Card>
+                <div className="section-heading">
+                  <h3>{editingService ? "Edit service" : "Add a service"}</h3>
+                  {editingService && <Button size="sm" variant="ghost" onClick={() => setEditingService(null)}>Cancel</Button>}
+                </div>
+                <form className="stack" onSubmit={handleSaveService}>
+                  <div className="service-form-row">
+                    <Field label="Service name"><Input name="name" key={`name-${editingService?.id ?? "new"}`} defaultValue={editingService?.name ?? ""} required /></Field>
+                    <Field label="Code"><Input name="code" key={`code-${editingService?.id ?? "new"}`} defaultValue={editingService?.code ?? ""} placeholder="CONSULT-30" required /></Field>
+                  </div>
+                  <Field label="Description"><Input name="description" key={`description-${editingService?.id ?? "new"}`} defaultValue={editingService?.description ?? ""} maxLength={500} /></Field>
+                  <div className="service-form-row">
+                    <Field label="Duration (minutes)"><Input name="durationMinutes" key={`duration-${editingService?.id ?? "new"}`} type="number" min="5" max="480" defaultValue={editingService?.duration_minutes ?? 30} required /></Field>
+                    <Field label="Fee (PHP)"><Input name="basePrice" key={`price-${editingService?.id ?? "new"}`} type="number" min="0" step="0.01" defaultValue={editingService?.base_price ?? ""} /></Field>
+                  </div>
+                  <label className="booking-toggle"><input name="bookingEnabled" key={`booking-${editingService?.id ?? "new"}`} type="checkbox" defaultChecked={editingService?.booking_enabled ?? true} /> Available for online booking</label>
+                  <Button type="submit" disabled={serviceBusy}>{serviceBusy ? "Saving…" : editingService ? "Save service" : "Add service"}</Button>
+                </form>
+              </Card>
+              <Card>
+                <h3>My service catalog</h3>
+                <div className="service-list">
+                  {ownedServices.map((service) => (
+                    <article key={service.id}>
+                      <div><strong>{service.name}</strong><small>{service.duration_minutes} min · {service.base_price === null ? "Fee on consultation" : `PHP ${service.base_price.toLocaleString()}`}</small></div>
+                      <div className="service-actions"><Button size="sm" variant="ghost" onClick={() => setEditingService(service)}>Edit</Button><Button size="sm" variant="ghost" disabled={serviceBusy} onClick={() => void handleRetireService(service)}>Retire</Button></div>
+                    </article>
+                  ))}
+                  {!ownedServices.length && <p className="hint">Add your first bookable service.</p>}
+                </div>
+              </Card>
+            </div>
+            <h3 className="schedule-heading">Weekly availability</h3>
+            <p className="hint">Set a window such as 10:00 AM–5:00 PM. We create consecutive slots using the selected service duration.</p>
+            <form className="weekly-schedule" onSubmit={handleCreateAvailability}>
               <Field label="Service">
                 <select
                   className="odyssey-input"
-                  name="clinicServiceId"
+                  name="scheduleServiceId"
+                  value={scheduleServiceId}
+                  onChange={(event) => setScheduleServiceId(event.target.value)}
                   required
-                  defaultValue=""
                 >
                   <option value="" disabled>
                     Select a service
                   </option>
-                  {services
+                  {ownedServices
                     .filter((service) => service.booking_enabled)
                     .map((service) => (
                       <option key={service.id} value={service.id}>
@@ -472,9 +661,14 @@ export default function Home() {
                     ))}
                 </select>
               </Field>
-              <Field label="Start time">
-                <Input name="startAt" type="datetime-local" required />
-              </Field>
+              <div className="weekly-days">
+                {WEEKDAYS.map((day, index) => <div className="weekly-day" key={day}>
+                  <label className="day-enabled"><input name={`day-${index}-enabled`} type="checkbox" /> <strong>{day}</strong></label>
+                  <Input aria-label={`${day} start time`} name={`day-${index}-start`} type="time" defaultValue="10:00" />
+                  <span>to</span>
+                  <Input aria-label={`${day} end time`} name={`day-${index}-end`} type="time" defaultValue="17:00" />
+                </div>)}
+              </div>
               <Button type="submit" disabled={availabilityBusy}>
                 {availabilityBusy ? "Saving…" : "Add availability"}
               </Button>
