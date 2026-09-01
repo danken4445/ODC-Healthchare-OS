@@ -63,6 +63,31 @@ insert into public.patients (id, organization_id, auth_user_id, name) values
   ('40000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000104', '{"text":"Synthetic Other Patient"}'::jsonb)
 on conflict (id) do nothing;
 
+insert into public.clinic_services (
+  id, organization_id, code, name, description, duration_minutes, base_price, currency
+) values
+  (
+    '52000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001',
+    'GENERAL-CONSULT',
+    'General consultation',
+    'Primary care assessment with the clinic doctor.',
+    30,
+    650.00,
+    'PHP'
+  ),
+  (
+    '52000000-0000-0000-0000-000000000002',
+    '10000000-0000-0000-0000-000000000001',
+    'FOLLOW-UP',
+    'Follow-up consultation',
+    'Review progress and next steps after a previous visit.',
+    30,
+    450.00,
+    'PHP'
+  )
+on conflict (id) do nothing;
+
 insert into public.appointments (id, organization_id, patient_id, practitioner_role_id, status, start_at, end_at) values
   ('50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'booked', now(), now() + interval '30 minutes'),
   ('50000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000002', null, 'booked', now(), now() + interval '30 minutes')
@@ -71,14 +96,14 @@ on conflict (id) do nothing;
 -- Six deterministic synthetic slots starting at the next UTC hour. The relative
 -- times keep reset environments bookable without committing a fixed old date.
 insert into public.appointment_slots (
-  id, organization_id, practitioner_role_id, status, service_type, start_at, end_at
+  id, organization_id, practitioner_role_id, clinic_service_id, status, service_type, start_at, end_at
 ) values
-  ('51000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '1 hour', date_trunc('hour', now()) + interval '1 hour 30 minutes'),
-  ('51000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '2 hours', date_trunc('hour', now()) + interval '2 hours 30 minutes'),
-  ('51000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '3 hours', date_trunc('hour', now()) + interval '3 hours 30 minutes'),
-  ('51000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '4 hours', date_trunc('hour', now()) + interval '4 hours 30 minutes'),
-  ('51000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '5 hours', date_trunc('hour', now()) + interval '5 hours 30 minutes'),
-  ('51000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'free', 'General consultation', date_trunc('hour', now()) + interval '6 hours', date_trunc('hour', now()) + interval '6 hours 30 minutes')
+  ('51000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000001', 'free', 'General consultation', date_trunc('hour', now()) + interval '1 hour', date_trunc('hour', now()) + interval '1 hour 30 minutes'),
+  ('51000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000002', 'free', 'Follow-up consultation', date_trunc('hour', now()) + interval '2 hours', date_trunc('hour', now()) + interval '2 hours 30 minutes'),
+  ('51000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000001', 'free', 'General consultation', date_trunc('hour', now()) + interval '3 hours', date_trunc('hour', now()) + interval '3 hours 30 minutes'),
+  ('51000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000002', 'free', 'Follow-up consultation', date_trunc('hour', now()) + interval '4 hours', date_trunc('hour', now()) + interval '4 hours 30 minutes'),
+  ('51000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000001', 'free', 'General consultation', date_trunc('hour', now()) + interval '5 hours', date_trunc('hour', now()) + interval '5 hours 30 minutes'),
+  ('51000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', '52000000-0000-0000-0000-000000000002', 'free', 'Follow-up consultation', date_trunc('hour', now()) + interval '6 hours', date_trunc('hour', now()) + interval '6 hours 30 minutes')
 on conflict (id) do nothing;
 
 insert into public.encounters (id, organization_id, patient_id, appointment_id, status, period_start) values

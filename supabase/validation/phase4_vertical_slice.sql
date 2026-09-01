@@ -7,6 +7,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000103', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000103"}', true);
 set local role authenticated;
+select public.set_patient_clinic_context('10000000-0000-0000-0000-000000000001');
 select public.book_appointment_slot('51000000-0000-0000-0000-000000000001') is not null
   as patient_books_available_slot;
 select count(*) = 2 as patient_sees_only_their_two_appointments

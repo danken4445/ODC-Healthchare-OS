@@ -35,6 +35,7 @@ reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000103', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000103"}', true);
 set local role authenticated;
+select public.set_patient_clinic_context('10000000-0000-0000-0000-000000000001');
 select count(*) = 1 as patient_sees_only_own_patient_row from public.patients;
 select count(*) = 1 as patient_sees_only_own_appointments from public.appointments;
 select count(*) = 1 as patient_sees_only_own_encounters from public.encounters;

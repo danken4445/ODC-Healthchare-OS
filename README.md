@@ -37,6 +37,53 @@ booking, front-desk walk-in booking, the provider's no-refresh Realtime update,
 and Encounter creation. Run `supabase/validation/phase4_vertical_slice.sql` as
 a database administrator for the matching direct RLS/RPC check.
 
+## Loop 1 core visit
+
+The Phase 4 slice is extended into the complete scheduling loop:
+
+- The patient portal publicly lists active clinic services, then supports
+  registration, booking, and a Realtime “My appointments” tracker.
+- Front desk sees a live daily schedule, schedules existing or walk-in
+  patients, and records check-in, cancellation, and no-show transitions.
+- Doctors manage their own bookable availability and work an assignment-scoped
+  daily queue.
+- `/waiting-room` on the admin app is an unauthenticated Realtime display backed
+  by a privacy-safe projection containing queue numbers and workflow stages but
+  no patient identity data.
+
+Apply `20260901000500_core_visit_loop.sql`, reset with synthetic seed data, and
+run `supabase/validation/loop1_core_visit.sql` for the direct RLS/RPC checks.
+The Playwright suite covers the live patient → front desk → waiting room →
+doctor handoff as well as administrative and walk-in scheduling.
+
+## Clinical documentation loop
+
+An in-progress appointment encounter now opens a consultation chart for doctors
+and nurses. SOAP sections are immutable FHIR `Observation` records; revisions
+form a database-enforced chain through `supersedes_id`. Doctor-authored
+prescriptions and medical certificates are stored as `MedicationRequest` and
+`DocumentReference` resources attached to the same encounter. Narrow RPCs
+derive the patient, clinic, and clinical author from the signed-in provider,
+and direct browser writes to these clinical tables are disabled.
+
+The patient portal subscribes to those encounter-linked resources and displays
+them in medical history without a refresh. Patients can also update a bounded
+set of profile demographics through a self-only database function. Apply
+`20260901000900_clinical_documentation_loop.sql`, then run
+`supabase/validation/loop2_clinical_documentation.sql` and the cross-role
+Playwright test.
+
+## Multi-clinic tenancy
+
+Each clinic is an `organizations` tenant. Staff accounts resolve exactly one
+active clinic from their practitioner role and cannot switch clinics in the UI
+or through RLS. Patient authentication is universal, but selecting or joining a
+clinic creates an isolated Patient record and a database-enforced clinic access
+context; direct reads, bookings, Realtime subscriptions, and clinic data are
+then scoped to that clinic only. Run
+`supabase/validation/multi_clinic_tenancy.sql` after a reset to verify the
+two-clinic boundary.
+
 For staging, apply all migrations, deploy `get-walk-in-records`, create the
 synthetic users, and run `phase2_hosted_test_accounts.sql` to link their roles
 and create temporary synthetic slots. Set `E2E_PATIENT_*`, `E2E_PROVIDER_*`, and

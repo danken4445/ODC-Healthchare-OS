@@ -8,11 +8,17 @@ export type DatabaseRow<TableName extends keyof Database["public"]["Tables"]> =
   Database["public"]["Tables"][TableName]["Row"];
 
 export type PatientRow = DatabaseRow<"patients">;
+export type PatientClinicContextRow = DatabaseRow<"patient_clinic_contexts">;
 export type AppointmentRow = DatabaseRow<"appointments">;
 export type AppointmentSlotRow = DatabaseRow<"appointment_slots">;
+export type ClinicServiceRow = DatabaseRow<"clinic_services">;
 export type EncounterRow = DatabaseRow<"encounters">;
 export type ObservationRow = DatabaseRow<"observations">;
 export type MedicationRequestRow = DatabaseRow<"medication_requests">;
+export type DocumentReferenceRow = DatabaseRow<"document_references">;
+export type OrganizationRow = DatabaseRow<"organizations">;
+export type PlatformAdminRow = DatabaseRow<"platform_admins">;
+export type WaitingRoomQueueRow = DatabaseRow<"waiting_room_queue">;
 
 export type AppointmentStatus =
   Database["public"]["Enums"]["appointment_status"];
@@ -21,6 +27,8 @@ export type SlotStatus = Database["public"]["Enums"]["slot_status"];
 export type ObservationStatus =
   Database["public"]["Enums"]["observation_status"];
 export type RequestStatus = Database["public"]["Enums"]["request_status"];
+export type WaitingQueueStage =
+  Database["public"]["Enums"]["waiting_queue_stage"];
 
 /**
  * App-facing FHIR-shaped summaries. These intentionally exclude raw storage
@@ -35,6 +43,8 @@ export interface PatientSummary extends Pick<
   | "name"
   | "birth_date"
   | "gender"
+  | "telecom"
+  | "address"
   | "walk_in_id"
   | "created_at"
   | "updated_at"
@@ -56,19 +66,82 @@ export type AppointmentSummary = Pick<
   | "minutes_duration"
   | "description"
   | "patient_instruction"
+  | "clinic_service_id"
+  | "queue_date"
+  | "queue_number"
 >;
 
 /** FHIR Slot fields exposed by the scheduling UI. */
 export type AppointmentSlotSummary = Pick<
   AppointmentSlotRow,
   | "id"
+  | "appointment_id"
   | "organization_id"
   | "practitioner_role_id"
+  | "clinic_service_id"
   | "status"
   | "service_type"
   | "start_at"
   | "end_at"
 >;
+
+/** Public FHIR HealthcareService fields used by the clinic portal. */
+export type ClinicServiceSummary = Pick<
+  ClinicServiceRow,
+  | "id"
+  | "organization_id"
+  | "code"
+  | "name"
+  | "description"
+  | "duration_minutes"
+  | "base_price"
+  | "currency"
+  | "booking_enabled"
+>;
+
+/** Public waiting-room projection. It intentionally contains no patient data. */
+export type WaitingRoomQueueItem = Pick<
+  WaitingRoomQueueRow,
+  | "appointment_id"
+  | "organization_id"
+  | "queue_date"
+  | "queue_number"
+  | "service_name"
+  | "scheduled_at"
+  | "stage"
+>;
+
+export type PublicClinicSummary = Pick<
+  OrganizationRow,
+  "id" | "name" | "telecom" | "address"
+>;
+
+export type PortalName = "patient" | "provider" | "admin";
+
+/** Database-authoritative result used to admit a signed-in identity to a portal. */
+export interface PortalAccess {
+  allowed: boolean;
+  isSuperadmin: boolean;
+  organizationIds: string[];
+  roleCodes: string[];
+}
+
+export type AssignableClinicAccountRole =
+  "admin" | "doctor" | "nurse" | "lab_staff" | "specialist" | "front_desk";
+
+export interface ClinicAccountInput {
+  displayName: string;
+  email: string;
+  organizationId: string;
+  password: string;
+  roleCode: AssignableClinicAccountRole;
+}
+
+export interface CreatedClinicAccount {
+  id: string;
+  email: string;
+  roleCode: AssignableClinicAccountRole;
+}
 
 export interface AppointmentQueueItem extends AppointmentSummary {
   encounterStatus: EncounterStatus | null;
@@ -101,6 +174,8 @@ export type ObservationSummary = Pick<
   | "effective_at"
   | "value"
   | "value_unit"
+  | "supersedes_id"
+  | "issued_at"
 >;
 
 export type MedicationRequestSummary = Pick<
@@ -113,11 +188,62 @@ export type MedicationRequestSummary = Pick<
   | "medication_code"
   | "medication_display"
   | "authored_on"
+  | "dosage_instruction"
+  | "note"
 >;
+
+export type DocumentReferenceSummary = Pick<
+  DocumentReferenceRow,
+  | "id"
+  | "organization_id"
+  | "patient_id"
+  | "encounter_id"
+  | "status"
+  | "type_code"
+  | "type_display"
+  | "date_at"
+  | "description"
+  | "content_title"
+>;
+
+export interface SoapObservationInput {
+  encounterId: string;
+  section: "S" | "O" | "A" | "P";
+  text: string;
+  supersedesId?: string | null;
+}
+
+export interface PrescriptionInput {
+  encounterId: string;
+  medication: string;
+  dosage: string;
+  note?: string;
+}
+
+export interface MedicalCertificateInput {
+  encounterId: string;
+  title: string;
+  statement: string;
+}
+
+export interface PatientProfileInput {
+  patientId: string;
+  displayName: string;
+  birthDate: string | null;
+  gender: "female" | "male" | "other" | "unknown" | null;
+  phone: string;
+  address: string;
+}
 
 export interface DateRange {
   start: Date | string;
   end: Date | string;
+}
+
+export interface AppointmentSlotInput {
+  clinicServiceId: string;
+  endAt: string;
+  startAt: string;
 }
 
 export interface PatientAccessRecords {
@@ -125,12 +251,15 @@ export interface PatientAccessRecords {
   appointments: AppointmentSummary[];
   encounters: EncounterSummary[];
   observations: ObservationSummary[];
+  medicationRequests: MedicationRequestSummary[];
+  documentReferences: DocumentReferenceSummary[];
 }
 
 export interface OrganizationClinicalRecords {
   encounters: EncounterSummary[];
   observations: ObservationSummary[];
   medicationRequests: MedicationRequestSummary[];
+  documentReferences: DocumentReferenceSummary[];
 }
 
 export interface WalkInCredentials {
