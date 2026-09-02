@@ -16,6 +16,9 @@ export type EncounterRow = DatabaseRow<"encounters">;
 export type ObservationRow = DatabaseRow<"observations">;
 export type MedicationRequestRow = DatabaseRow<"medication_requests">;
 export type DocumentReferenceRow = DatabaseRow<"document_references">;
+export type ServiceRequestRow = DatabaseRow<"service_requests">;
+export type DiagnosticReportRow = DatabaseRow<"diagnostic_reports">;
+export type ClinicalNotificationRow = DatabaseRow<"clinical_notifications">;
 export type OrganizationRow = DatabaseRow<"organizations">;
 export type PlatformAdminRow = DatabaseRow<"platform_admins">;
 export type ProviderWeeklyAvailabilityRow =
@@ -29,6 +32,84 @@ export type InventoryStockMovementRow =
   DatabaseRow<"inventory_stock_movements">;
 export type StaffDepartmentAssignmentRow =
   DatabaseRow<"staff_department_assignments">;
+export interface BillingEventRow {
+  id: string;
+  organization_id: string;
+  encounter_id: string | null;
+  patient_id: string | null;
+  payor_type: PayorType;
+  status: BillingEventStatus;
+  coverage_id: string | null;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface BillingLineItemRow {
+  id: string;
+  organization_id: string;
+  billing_event_id: string;
+  source_type: "clinic_service" | "inventory_usage" | "laboratory_service" | "pos_item";
+  source_id: string | null;
+  description: string;
+  quantity: number;
+  unit_cost: number;
+  unit_price: number;
+  currency: string;
+  line_total: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface InvoiceRow {
+  id: string;
+  organization_id: string;
+  billing_event_id: string;
+  patient_id: string | null;
+  invoice_number: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_due: number;
+  amount_paid: number;
+  balance_due: number;
+  issued_at: string | null;
+  due_at: string | null;
+  paid_at: string | null;
+  qr_payment_token: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface PaymentRow {
+  id: string;
+  organization_id: string;
+  invoice_id: string;
+  amount: number;
+  currency: string;
+  method: PaymentMethod;
+  status: PaymentStatus;
+  reference_number: string | null;
+  qr_token: string | null;
+  confirmed_at: string | null;
+  recorded_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface PosSaleRow {
+  id: string;
+  organization_id: string;
+  billing_event_id: string;
+  cashier_user_id: string;
+  status: PosSaleStatus;
+  customer_name: string | null;
+  receipt_number: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export type CoverageRow = DatabaseRow<"coverages">;
+export type ClaimRow = DatabaseRow<"claims">;
 
 export type AppointmentStatus =
   Database["public"]["Enums"]["appointment_status"];
@@ -39,6 +120,14 @@ export type ObservationStatus =
 export type RequestStatus = Database["public"]["Enums"]["request_status"];
 export type WaitingQueueStage =
   Database["public"]["Enums"]["waiting_queue_stage"];
+
+/** Loop 5 financial enums */
+export type PayorType = "self_pay" | "hmo" | "philhealth_nbb" | "government_subsidized";
+export type BillingEventStatus = "draft" | "finalized" | "cancelled";
+export type InvoiceStatus = "draft" | "issued" | "paid" | "partially_paid" | "void" | "cancelled";
+export type PaymentMethod = "cash" | "card" | "qr_ewallet" | "bank_transfer" | "check";
+export type PaymentStatus = "pending" | "confirmed" | "failed" | "refunded";
+export type PosSaleStatus = "open" | "completed" | "void";
 
 /**
  * App-facing FHIR-shaped summaries. These intentionally exclude raw storage
@@ -112,7 +201,6 @@ export type ClinicServiceSummary = Pick<
 
 /** Values a provider can maintain for a service offered from their clinic. */
 export interface ClinicServiceInput {
-  code: string;
   name: string;
   description?: string;
   durationMinutes: number;
@@ -179,7 +267,19 @@ export type ClinicRolePermission =
   | "can_manage_staff_roles"
   | "can_view_inventory"
   | "can_manage_inventory"
-  | "can_tag_inventory_usage";
+  | "can_tag_inventory_usage"
+  | "can_order_diagnostics"
+  | "can_view_diagnostics"
+  | "can_view_lab_worklist"
+  | "can_record_lab_results"
+  | "can_view_referrals"
+  | "can_update_referrals"
+  | "can_manage_laboratory_services"
+  | "can_manage_billing"
+  | "can_view_billing"
+  | "can_manage_pos"
+  | "can_manage_claims"
+  | "can_view_claims";
 
 export interface ClinicRoleDefinition {
   code: string;
@@ -222,7 +322,109 @@ export type ObservationSummary = Pick<
   | "value_unit"
   | "supersedes_id"
   | "issued_at"
+  | "diagnostic_report_id"
+  | "reference_range"
+  | "note"
 >;
+
+export type ServiceRequestSummary = Pick<
+  ServiceRequestRow,
+  | "id"
+  | "organization_id"
+  | "patient_id"
+  | "encounter_id"
+  | "requester_practitioner_id"
+  | "status"
+  | "category"
+  | "priority"
+  | "code"
+  | "code_display"
+  | "performer_practitioner_role_id"
+  | "note"
+  | "created_at"
+  | "updated_at"
+>;
+
+export type DiagnosticReportSummary = Pick<
+  DiagnosticReportRow,
+  | "id"
+  | "organization_id"
+  | "patient_id"
+  | "encounter_id"
+  | "based_on_service_request_id"
+  | "status"
+  | "code"
+  | "code_display"
+  | "effective_at"
+  | "issued_at"
+  | "conclusion"
+>;
+
+export type ClinicalNotificationSummary = Pick<
+  ClinicalNotificationRow,
+  | "id"
+  | "organization_id"
+  | "service_request_id"
+  | "diagnostic_report_id"
+  | "kind"
+  | "title"
+  | "message"
+  | "read_at"
+  | "created_at"
+>;
+
+export interface DiagnosticServiceRequestInput {
+  encounterId: string;
+  category: "laboratory" | "referral";
+  priority: "routine" | "urgent" | "asap" | "stat";
+  note?: string;
+  performerPractitionerRoleId?: string | null;
+  laboratoryServiceId?: string | null;
+}
+
+export interface DiagnosticResultInput {
+  display: string;
+  value: string | number | boolean;
+  unit?: string;
+  referenceRange?: { low?: number; high?: number; text?: string };
+  note?: string;
+}
+
+export interface DiagnosticReportInput {
+  serviceRequestId: string;
+  conclusion?: string;
+  results: DiagnosticResultInput[];
+}
+
+export interface DiagnosticsWorkspace {
+  serviceRequests: ServiceRequestSummary[];
+  diagnosticReports: DiagnosticReportSummary[];
+  observations: ObservationSummary[];
+  notifications: ClinicalNotificationSummary[];
+}
+
+export interface SpecialistOption {
+  practitionerRoleId: string;
+  displayName: string;
+  specialty: Json;
+  organizationName: string;
+}
+
+export interface LaboratoryServiceSummary {
+  id: string;
+  code: string;
+  name: string;
+  labCost: number;
+  active: boolean;
+}
+
+export interface DiagnosticEncounterOption {
+  id: string;
+  patientName: string;
+  serviceType: string | null;
+  periodStart: string;
+  status: EncounterStatus;
+}
 
 export type MedicationRequestSummary = Pick<
   MedicationRequestRow,
@@ -308,6 +510,8 @@ export type InventoryItemSummary = Pick<
   | "name"
   | "description"
   | "unit_of_measure"
+  | "unit_cost"
+  | "selling_price"
   | "unit_price"
   | "currency"
   | "active"
@@ -334,6 +538,7 @@ export type InventoryUsageSummary = Pick<
   | "encounter_id"
   | "patient_id"
   | "quantity"
+  | "unit_cost"
   | "unit_price"
   | "currency"
   | "tagged_by"
@@ -370,17 +575,22 @@ export interface InventoryWorkspace {
 
 export interface InventoryItemInput {
   organizationId: string;
-  sku: string;
   name: string;
   description?: string;
   unitOfMeasure: string;
-  unitPrice: number;
+  unitCost: number;
+  sellingPrice: number;
   currency?: string;
+}
+
+export interface InventoryItemPricingInput {
+  itemId: string;
+  unitCost: number;
+  sellingPrice: number;
 }
 
 export interface DepartmentInput {
   organizationId: string;
-  code: string;
   name: string;
   description?: string;
 }
@@ -455,6 +665,8 @@ export interface PatientAccessRecords {
   observations: ObservationSummary[];
   medicationRequests: MedicationRequestSummary[];
   documentReferences: DocumentReferenceSummary[];
+  serviceRequests: ServiceRequestSummary[];
+  diagnosticReports: DiagnosticReportSummary[];
 }
 
 export interface OrganizationClinicalRecords {
@@ -462,6 +674,8 @@ export interface OrganizationClinicalRecords {
   observations: ObservationSummary[];
   medicationRequests: MedicationRequestSummary[];
   documentReferences: DocumentReferenceSummary[];
+  serviceRequests: ServiceRequestSummary[];
+  diagnosticReports: DiagnosticReportSummary[];
 }
 
 export interface WalkInCredentials {
@@ -543,8 +757,156 @@ export type FhirResourceType =
   | "InventoryItem"
   | "SupplyDelivery"
   | "Coverage"
-  | "Claim";
+  | "Claim"
+  | "Invoice"
+  | "PaymentReconciliation";
 export interface AuditActor {
   id: string;
   role: "patient" | "provider" | "admin" | "system";
+}
+
+/* ─── Loop 5: Financial types ─── */
+
+export interface BillingEventSummary {
+  id: string;
+  organization_id: string;
+  encounter_id: string | null;
+  patient_id: string | null;
+  payor_type: PayorType;
+  status: BillingEventStatus;
+  coverage_id: string | null;
+  finalized_at: string | null;
+  notes: string | null;
+  created_at: string;
+  patient_name: string;
+  line_item_count: number;
+  total: number;
+}
+
+export interface BillingLineItemSummary {
+  id: string;
+  source_type: "clinic_service" | "inventory_usage" | "laboratory_service" | "pos_item";
+  source_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  currency: string;
+  line_total: number;
+}
+
+export interface InvoiceSummary {
+  id: string;
+  organization_id: string;
+  billing_event_id: string;
+  patient_id: string | null;
+  invoice_number: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_due: number;
+  amount_paid: number;
+  balance_due: number;
+  issued_at: string | null;
+  paid_at: string | null;
+  patient_name: string;
+  qr_payment_token: string | null;
+}
+
+export interface PaymentSummary {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  method: PaymentMethod;
+  status: PaymentStatus;
+  reference_number: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
+export interface PosSaleSummary {
+  id: string;
+  billing_event_id: string;
+  status: PosSaleStatus;
+  customer_name: string | null;
+  receipt_number: string;
+  completed_at: string | null;
+  total: number;
+}
+
+export interface ClaimSummary {
+  id: string;
+  patient_id: string;
+  patient_name: string;
+  encounter_id: string | null;
+  coverage_id: string | null;
+  status: string;
+  use: string;
+  claim_type: string;
+  payor_type: PayorType | null;
+  total: number | null;
+  submitted_at: string | null;
+  adjudicated_at: string | null;
+  adjudication_result: "approved" | "denied" | "partial" | null;
+  approved_amount: number | null;
+  denied_reason: string | null;
+  philhealth_claim_number: string | null;
+  items: unknown;
+  created_at: string;
+}
+
+export interface BillingWorkspace {
+  billing_events: BillingEventSummary[];
+  invoices: InvoiceSummary[];
+  recent_payments: PaymentSummary[];
+  pos_sales: PosSaleSummary[];
+}
+
+export interface BillableEncounter {
+  id: string;
+  patient_id: string;
+  patient_name: string;
+  appointment_id: string | null;
+  service_type: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  status: EncounterStatus;
+  service_name: string | null;
+  service_price: number | null;
+}
+
+export interface PatientInvoice {
+  id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  total_due: number;
+  amount_paid: number;
+  balance_due: number;
+  issued_at: string | null;
+  paid_at: string | null;
+  qr_payment_token: string | null;
+  payor_type: PayorType;
+  line_items: BillingLineItemSummary[];
+}
+
+export interface PaymentInput {
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  reference?: string;
+}
+
+export interface PosCartItem {
+  item_id: string;
+  quantity: number;
+}
+
+export interface PosCheckoutResult {
+  billing_event_id: string;
+  pos_sale_id: string;
+  invoice_id: string;
+  payment_id: string;
+  receipt_number: string;
+  total: number;
 }

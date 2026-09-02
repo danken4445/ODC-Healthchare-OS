@@ -47,11 +47,20 @@ erDiagram
   AUTH_USERS ||--o{ STAFF_DEPARTMENT_ASSIGNMENTS : receives
   ORGANIZATIONS ||--o{ STAFF_DEPARTMENT_ASSIGNMENTS : scopes
   DEPARTMENTS ||--o{ STAFF_DEPARTMENT_ASSIGNMENTS : defaults
+  ORGANIZATIONS ||--o{ BILLING_EVENTS : scopes
+  ENCOUNTERS ||--o{ BILLING_EVENTS : generates
+  PATIENTS ||--o{ BILLING_EVENTS : billed_for
+  COVERAGES ||--o{ BILLING_EVENTS : applies_to
+  BILLING_EVENTS ||--o{ BILLING_LINE_ITEMS : contains
+  BILLING_EVENTS ||--o| INVOICES : invoiced_as
+  BILLING_EVENTS ||--o| CLAIMS : claimed_as
+  BILLING_EVENTS ||--o| POS_SALES : sold_as
+  INVOICES ||--o{ PAYMENTS : receives
 ```
 
 | Table                  | FHIR resource        | Key relationship / design choice                                                 |
 | ---------------------- | -------------------- | -------------------------------------------------------------------------------- |
-| `organizations`        | Organization         | Clinic/facility tenant.                                                          |
+| `organizations`        | Organization         | Clinic/facility tenant with `default_payor_type`.                                |
 | `practitioners`        | Practitioner         | Staff identity; role assignment is separate.                                     |
 | `practitioner_roles`   | PractitionerRole     | Connects staff capability to one organization.                                   |
 | `patients`             | Patient              | Supports both `auth_user_id` and per-organization `walk_in_id`.                  |
@@ -65,14 +74,20 @@ erDiagram
 | `medication_requests`  | MedicationRequest    | Connects patient, encounter, and requester.                                      |
 | `service_requests`     | ServiceRequest       | `category` is `laboratory` or `referral`.                                        |
 | `diagnostic_reports`   | DiagnosticReport     | References the order; result observations point back to it.                      |
+| `clinical_notifications` | Communication      | Recipient-only result and referral workflow notifications.                       |
 | `document_references`  | DocumentReference    | Medical certificates and uploaded/generated clinical documents.                  |
 | `departments`          | Location             | Clinic department/location used as the stock boundary.                            |
-| `inventory_items`      | InventoryItem        | Distinct item master independent of quantity and location.                        |
+| `inventory_items`      | InventoryItem        | Distinct item master with acquisition cost and patient selling price.             |
 | `department_stock`     | Inventory report     | One current quantity per item/location; clinic totals are always derived.         |
-| `inventory_usages`     | Supply delivery      | Immutable encounter/patient usage and the consumable billing source.              |
+| `inventory_usages`     | Supply delivery      | Immutable encounter/patient usage with cost/price snapshots, synced to billing.   |
 | `inventory_stock_movements` | Logistics event | Append-only receipt, adjustment, transfer, and usage history.                     |
 | `staff_department_assignments` | Inventory context | Optional default department for a staff identity; unassigned taggers choose at use time. |
-| `coverages` / `claims` | Coverage / Claim     | Present for future HMO workflows.                                                |
+| `billing_events`       | Billing event        | Separates pricing from payment: captures billable event and sets `payor_type`.   |
+| `billing_line_items`   | ChargeItem           | Standard catalog-priced line items from visits, consumables, labs, or POS.       |
+| `invoices`             | Invoice              | Patient-facing invoice with QR payment token and real-time payment status.       |
+| `payments`             | PaymentReconciliation | Individual payment transactions (cash, card, QR, bank transfer).                 |
+| `pos_sales`            | Retail transaction   | Walk-in point-of-sale retail purchase with sequential receipt numbers.           |
+| `coverages` / `claims` | Coverage / Claim     | HMO authorizations and PhilHealth / No Balance Billing reimbursement claims.     |
 | `audit_log`            | Audit infrastructure | Append-only audit trail keyed by tenant, table, record, actor, action, and time. |
 
 `roles`, `role_permissions`, and `user_roles` are authorization data rather than FHIR

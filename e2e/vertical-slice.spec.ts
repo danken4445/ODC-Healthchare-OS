@@ -16,6 +16,11 @@ const frontDeskPassword = process.env.E2E_FRONT_DESK_PASSWORD ?? localPassword;
 const inventoryEmail =
   process.env.E2E_INVENTORY_EMAIL ?? "inventory@synthetic.odyssey.test";
 const inventoryPassword = process.env.E2E_INVENTORY_PASSWORD ?? localPassword;
+const labEmail = process.env.E2E_LAB_EMAIL ?? "lab@synthetic.odyssey.test";
+const labPassword = process.env.E2E_LAB_PASSWORD ?? localPassword;
+const specialistEmail =
+  process.env.E2E_SPECIALIST_EMAIL ?? "specialist@synthetic.odyssey.test";
+const specialistPassword = process.env.E2E_SPECIALIST_PASSWORD ?? localPassword;
 
 async function signIn(
   page: Page,
@@ -409,5 +414,93 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
     inventoryContext.close(),
     nurseContext.close(),
     providerContext.close(),
+  ]);
+});
+
+test("doctor order → lab result and specialist referral → patient history", async ({
+  browser,
+}) => {
+  const runId = String(Date.now());
+  const labOrder = `Synthetic CBC ${runId}`;
+  const referral = `Synthetic cardiology referral ${runId}`;
+  const doctorContext = await browser.newContext();
+  const doctorPage = await doctorContext.newPage();
+  await signIn(
+    doctorPage,
+    "http://127.0.0.1:3001",
+    providerEmail,
+    providerPassword,
+  );
+  await doctorPage.getByRole("button", { name: "Open chart" }).first().click();
+
+  const labContext = await browser.newContext();
+  const labPage = await labContext.newPage();
+  await signIn(labPage, "http://127.0.0.1:3001", labEmail, labPassword);
+  await expect(
+    labPage.getByRole("heading", { name: "Laboratory worklist" }),
+  ).toBeVisible();
+  const specialistContext = await browser.newContext();
+  const specialistPage = await specialistContext.newPage();
+  await signIn(
+    specialistPage,
+    "http://127.0.0.1:3001",
+    specialistEmail,
+    specialistPassword,
+  );
+  const patientContext = await browser.newContext();
+  const patientPage = await patientContext.newPage();
+  await signIn(
+    patientPage,
+    "http://127.0.0.1:3000",
+    patientEmail,
+    patientPassword,
+  );
+
+  const orderCard = doctorPage
+    .getByRole("heading", { name: "Lab order or referral" })
+    .locator("..");
+  await orderCard.getByLabel("Clinical code").fill(`CBC-${runId}`);
+  await orderCard.getByLabel("Order / referral").fill(labOrder);
+  await orderCard.getByRole("button", { name: "Place request" }).click();
+  const labCard = labPage
+    .getByRole("heading", { name: labOrder })
+    .locator("..");
+  await expect(labCard).toBeVisible({ timeout: 15_000 });
+  await labCard.getByLabel("Result code").fill("HGB");
+  await labCard.getByLabel("Result name").fill("Hemoglobin");
+  await labCard.getByLabel("Value").fill("140");
+  await labCard.getByLabel("Unit").fill("g/L");
+  await labCard.getByRole("button", { name: "Publish final report" }).click();
+  await expect(patientPage.getByText(`Lab result: ${labOrder}`)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(doctorPage.getByText("Laboratory result ready")).toBeVisible({
+    timeout: 15_000,
+  });
+
+  await orderCard.getByLabel("Request type").selectOption("referral");
+  await orderCard.getByLabel("Clinical code").fill(`CARD-${runId}`);
+  await orderCard.getByLabel("Order / referral").fill(referral);
+  await orderCard
+    .getByLabel("Specialist")
+    .selectOption({ label: "Synthetic Specialist" });
+  await orderCard.getByRole("button", { name: "Place request" }).click();
+  const referralRow = specialistPage
+    .getByRole("row")
+    .filter({ hasText: referral });
+  await expect(referralRow).toBeVisible({ timeout: 15_000 });
+  await referralRow.getByRole("button", { name: "Complete" }).click();
+  await expect(patientPage.getByText(`Referral: ${referral}`)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(doctorPage.getByText("Referral updated")).toBeVisible({
+    timeout: 15_000,
+  });
+
+  await Promise.all([
+    doctorContext.close(),
+    labContext.close(),
+    specialistContext.close(),
+    patientContext.close(),
   ]);
 });

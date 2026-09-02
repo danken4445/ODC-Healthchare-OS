@@ -17,6 +17,7 @@ import {
   subscribeToInventory,
   tagInventoryUsage,
   transferDepartmentStock,
+  updateInventoryItemPricing,
 } from "@odyssey/supabase-client";
 import type {
   InventoryEncounterOption,
@@ -103,6 +104,7 @@ const srTabs = [
   { id: "adjust", label: "Adjust", icon: "🔧" },
   { id: "transfer", label: "Transfer", icon: "🔀" },
   { id: "add-item", label: "Add item", icon: "➕" },
+  { id: "pricing", label: "Pricing", icon: "₱" },
   { id: "add-dept", label: "Add department", icon: "🏢" },
 ];
 
@@ -132,6 +134,7 @@ export default function InventoryPage() {
   /* Dashboard state */
   const [activeTab, setActiveTab] = useState("receive");
   const [stockFilter, setStockFilter] = useState<string>("all");
+  const [pricingItemId, setPricingItemId] = useState("");
 
   /* ─── Derived data ────────────────────────────────────────── */
   const itemTotals = useMemo(
@@ -195,9 +198,13 @@ export default function InventoryPage() {
     const outOfStockCount = workspace.stock.filter(
       (s) => Number(s.quantity) <= 0,
     ).length;
-    const totalValue = workspace.stock.reduce((sum, s) => {
+    const inventoryCost = workspace.stock.reduce((sum, s) => {
       const item = workspace.items.find((i) => i.id === s.item_id);
-      return sum + Number(s.quantity) * Number(item?.unit_price ?? 0);
+      return sum + Number(s.quantity) * Number(item?.unit_cost ?? 0);
+    }, 0);
+    const retailValue = workspace.stock.reduce((sum, s) => {
+      const item = workspace.items.find((i) => i.id === s.item_id);
+      return sum + Number(s.quantity) * Number(item?.selling_price ?? 0);
     }, 0);
 
     return {
@@ -206,7 +213,9 @@ export default function InventoryPage() {
       lowStockCount,
       outOfStockCount,
       alertCount: lowStockCount + outOfStockCount,
-      totalValue,
+      inventoryCost,
+      retailValue,
+      potentialMargin: retailValue - inventoryCost,
     };
   }, [workspace]);
 
@@ -498,9 +507,27 @@ export default function InventoryPage() {
           <span className="inv-kpi-card__icon">💰</span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">
-              {fmtCurrency(kpi.totalValue)}
+              {fmtCurrency(kpi.inventoryCost)}
             </span>
-            <span className="inv-kpi-card__label">Total stock value</span>
+            <span className="inv-kpi-card__label">Stock at cost</span>
+          </div>
+        </div>
+        <div className="inv-kpi-card inv-kpi-card--value">
+          <span className="inv-kpi-card__icon" aria-hidden="true">₱</span>
+          <div className="inv-kpi-card__content">
+            <span className="inv-kpi-card__value">
+              {fmtCurrency(kpi.retailValue)}
+            </span>
+            <span className="inv-kpi-card__label">Retail value</span>
+          </div>
+        </div>
+        <div className="inv-kpi-card inv-kpi-card--value">
+          <span className="inv-kpi-card__icon" aria-hidden="true">↗</span>
+          <div className="inv-kpi-card__content">
+            <span className="inv-kpi-card__value">
+              {fmtCurrency(kpi.potentialMargin)}
+            </span>
+            <span className="inv-kpi-card__label">Potential gross margin</span>
           </div>
         </div>
       </section>
@@ -627,10 +654,26 @@ export default function InventoryPage() {
               ),
             },
             {
-              id: "price",
-              header: "Unit charge",
+              id: "cost",
+              header: "Unit cost",
               cell: (row) =>
-                fmtCurrency(Number(row.unit_price), row.currency),
+                fmtCurrency(Number(row.unit_cost), row.currency),
+            },
+            {
+              id: "price",
+              header: "Selling price",
+              cell: (row) =>
+                fmtCurrency(Number(row.selling_price), row.currency),
+            },
+            {
+              id: "margin",
+              header: "Gross margin",
+              cell: (row) => {
+                const sellingPrice = Number(row.selling_price);
+                const margin = sellingPrice - Number(row.unit_cost);
+                const rate = sellingPrice > 0 ? (margin / sellingPrice) * 100 : 0;
+                return `${fmtCurrency(margin, row.currency)} (${rate.toFixed(1)}%)`;
+              },
             },
             {
               id: "active",
@@ -1014,7 +1057,6 @@ export default function InventoryPage() {
                           createBrowserSupabaseClient(),
                           {
                             organizationId,
-                            sku: String(fields.get("sku") ?? ""),
                             name: String(fields.get("name") ?? ""),
                             description: String(
                               fields.get("description") ?? "",
@@ -1022,7 +1064,8 @@ export default function InventoryPage() {
                             unitOfMeasure: String(
                               fields.get("unit") ?? "",
                             ),
-                            unitPrice: Number(fields.get("unitPrice")),
+                            unitCost: Number(fields.get("unitCost")),
+                            sellingPrice: Number(fields.get("sellingPrice")),
                           },
                         ),
                       "Item added to the master catalog.",
@@ -1030,14 +1073,6 @@ export default function InventoryPage() {
                   }
                 >
                   <div className="two-column">
-                    <Field label="SKU / Code">
-                      <Input
-                        name="sku"
-                        maxLength={80}
-                        placeholder="e.g. SYR-10ML"
-                        required
-                      />
-                    </Field>
                     <Field label="Item name">
                       <Input
                         name="name"
@@ -1055,9 +1090,9 @@ export default function InventoryPage() {
                         required
                       />
                     </Field>
-                    <Field label="Unit charge (PHP)">
+                    <Field label="Unit cost (PHP)">
                       <Input
-                        name="unitPrice"
+                        name="unitCost"
                         type="number"
                         min="0"
                         step="0.01"
@@ -1066,6 +1101,16 @@ export default function InventoryPage() {
                       />
                     </Field>
                   </div>
+                  <Field label="Selling price (PHP)">
+                    <Input
+                      name="sellingPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue="0"
+                      required
+                    />
+                  </Field>
                   <Field label="Description">
                     <Input
                       name="description"
@@ -1075,6 +1120,87 @@ export default function InventoryPage() {
                   </Field>
                   <Button disabled={busy} type="submit">
                     {busy ? "Adding…" : "Add item to catalog"}
+                  </Button>
+                </form>
+              </Card>
+            </TabPanel>
+
+            {/* ── Pricing ─────────────────────────────────────── */}
+            <TabPanel active={activeTab === "pricing"} id="pricing">
+              <Card>
+                <h3>Update item cost and selling price</h3>
+                <p className="hint">
+                  Selling price is charged to the patient. Unit cost is kept
+                  separately for stock valuation and gross-margin analytics.
+                </p>
+                <form
+                  className="stack"
+                  onSubmit={(event) =>
+                    void runForm(
+                      event,
+                      async (fields) =>
+                        updateInventoryItemPricing(
+                          createBrowserSupabaseClient(),
+                          {
+                            itemId: String(fields.get("itemId") ?? ""),
+                            unitCost: Number(fields.get("unitCost")),
+                            sellingPrice: Number(fields.get("sellingPrice")),
+                          },
+                        ),
+                      "Item pricing updated. Future usage will use the new selling price.",
+                    )
+                  }
+                >
+                  <Field label="Inventory item">
+                    <select
+                      className="odyssey-input"
+                      name="itemId"
+                      value={pricingItemId}
+                      onChange={(event) => setPricingItemId(event.target.value)}
+                      required
+                    >
+                      <option value="">Select an item</option>
+                      {workspace.items.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({item.sku})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {(() => {
+                    const item = workspace.items.find(
+                      (row) => row.id === pricingItemId,
+                    );
+                    return (
+                      <div
+                        className="two-column"
+                        key={item?.id ?? "no-pricing-item"}
+                      >
+                        <Field label="Unit cost (PHP)">
+                          <Input
+                            name="unitCost"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={item?.unit_cost ?? 0}
+                            required
+                          />
+                        </Field>
+                        <Field label="Selling price (PHP)">
+                          <Input
+                            name="sellingPrice"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={item?.selling_price ?? 0}
+                            required
+                          />
+                        </Field>
+                      </div>
+                    );
+                  })()}
+                  <Button disabled={busy || !pricingItemId} type="submit">
+                    {busy ? "Saving…" : "Save pricing"}
                   </Button>
                 </form>
               </Card>
@@ -1096,7 +1222,6 @@ export default function InventoryPage() {
                       async (fields) =>
                         createDepartment(createBrowserSupabaseClient(), {
                           organizationId,
-                          code: String(fields.get("code") ?? ""),
                           name: String(fields.get("name") ?? ""),
                           description: String(
                             fields.get("description") ?? "",
@@ -1107,14 +1232,6 @@ export default function InventoryPage() {
                   }
                 >
                   <div className="two-column">
-                    <Field label="Department code">
-                      <Input
-                        name="code"
-                        maxLength={40}
-                        placeholder="e.g. IPD, PHARMACY"
-                        required
-                      />
-                    </Field>
                     <Field label="Department name">
                       <Input
                         name="name"
@@ -1166,7 +1283,7 @@ export default function InventoryPage() {
                     quantity: Number(fields.get("usageQuantity")),
                     departmentId: inventoryDepartmentSelection || null,
                   }),
-                "Consumable tagged and stock decremented.",
+                "Consumable held for the patient and added to the draft bill. Stock will deduct when billing is finalized.",
               )
             }
           >
@@ -1354,7 +1471,7 @@ export default function InventoryPage() {
               <h2>Encounter usage records</h2>
             </div>
             <span className="hint">
-              Loop 5 billing reads these records as consumable line items.
+              Confirmed usage records are created only after billing finalization.
             </span>
           </div>
           <DataTable
@@ -1384,11 +1501,30 @@ export default function InventoryPage() {
                 cell: (row) => fmt(Number(row.quantity)),
               },
               {
+                id: "cost",
+                header: "Cost",
+                cell: (row) =>
+                  fmtCurrency(
+                    Number(row.quantity) * Number(row.unit_cost),
+                    row.currency,
+                  ),
+              },
+              {
                 id: "charge",
                 header: "Charge",
                 cell: (row) =>
                   fmtCurrency(
                     Number(row.quantity) * Number(row.unit_price),
+                    row.currency,
+                  ),
+              },
+              {
+                id: "margin",
+                header: "Gross margin",
+                cell: (row) =>
+                  fmtCurrency(
+                    Number(row.quantity) *
+                      (Number(row.unit_price) - Number(row.unit_cost)),
                     row.currency,
                   ),
               },

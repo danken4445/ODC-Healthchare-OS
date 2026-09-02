@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -571,6 +571,67 @@ export type Database = {
           },
         ];
       };
+      clinical_notifications: {
+        Row: {
+          created_at: string;
+          diagnostic_report_id: string | null;
+          id: string;
+          kind: string;
+          message: string;
+          organization_id: string;
+          read_at: string | null;
+          recipient_user_id: string;
+          service_request_id: string;
+          title: string;
+        };
+        Insert: {
+          created_at?: string;
+          diagnostic_report_id?: string | null;
+          id?: string;
+          kind: string;
+          message: string;
+          organization_id: string;
+          read_at?: string | null;
+          recipient_user_id: string;
+          service_request_id: string;
+          title: string;
+        };
+        Update: {
+          created_at?: string;
+          diagnostic_report_id?: string | null;
+          id?: string;
+          kind?: string;
+          message?: string;
+          organization_id?: string;
+          read_at?: string | null;
+          recipient_user_id?: string;
+          service_request_id?: string;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_notifications_diagnostic_report_id_fkey";
+            columns: ["diagnostic_report_id"];
+            isOneToOne: false;
+            referencedRelation: "diagnostic_reports";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notifications_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notifications_service_request_id_fkey";
+            columns: ["service_request_id"];
+            isOneToOne: false;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       diagnostic_reports: {
         Row: {
           based_on_service_request_id: string | null;
@@ -878,7 +939,9 @@ export type Database = {
           id: string;
           name: string;
           organization_id: string;
+          selling_price: number;
           sku: string;
+          unit_cost: number;
           unit_of_measure: string;
           unit_price: number;
           updated_at: string;
@@ -891,7 +954,9 @@ export type Database = {
           id?: string;
           name: string;
           organization_id: string;
+          selling_price?: number;
           sku: string;
+          unit_cost?: number;
           unit_of_measure: string;
           unit_price?: number;
           updated_at?: string;
@@ -904,7 +969,9 @@ export type Database = {
           id?: string;
           name?: string;
           organization_id?: string;
+          selling_price?: number;
           sku?: string;
+          unit_cost?: number;
           unit_of_measure?: string;
           unit_price?: number;
           updated_at?: string;
@@ -1016,6 +1083,7 @@ export type Database = {
           quantity: number;
           stock_id: string;
           tagged_by: string;
+          unit_cost: number;
           unit_price: number;
           used_at: string;
         };
@@ -1031,6 +1099,7 @@ export type Database = {
           quantity: number;
           stock_id: string;
           tagged_by: string;
+          unit_cost?: number;
           unit_price: number;
           used_at?: string;
         };
@@ -1046,6 +1115,7 @@ export type Database = {
           quantity?: number;
           stock_id?: string;
           tagged_by?: string;
+          unit_cost?: number;
           unit_price?: number;
           used_at?: string;
         };
@@ -1952,6 +2022,18 @@ export type Database = {
         };
         Returns: string;
       };
+      create_diagnostic_service_request: {
+        Args: {
+          p_category: string;
+          p_code: string;
+          p_code_display: string;
+          p_encounter_id: string;
+          p_note?: string;
+          p_performer_practitioner_role_id?: string;
+          p_priority?: string;
+        };
+        Returns: string;
+      };
       adjust_department_stock: {
         Args: {
           p_department_id: string;
@@ -2082,12 +2164,34 @@ export type Database = {
         };
         Returns: string;
       };
+      mark_clinical_notification_read: {
+        Args: { p_notification_id: string };
+        Returns: undefined;
+      };
+      record_diagnostic_report: {
+        Args: {
+          p_conclusion: string;
+          p_results: Json;
+          p_service_request_id: string;
+        };
+        Returns: string;
+      };
       list_inventory_encounters: {
         Args: { p_organization_id: string };
         Returns: {
           id: string;
           period_start: string;
           service_type: string;
+        }[];
+      };
+      list_diagnostic_encounters: {
+        Args: { p_organization_id: string };
+        Returns: {
+          id: string;
+          patient_name: string;
+          period_start: string;
+          service_type: string | null;
+          status: Database["public"]["Enums"]["encounter_status"];
         }[];
       };
       list_clinic_staff: {
@@ -2206,6 +2310,13 @@ export type Database = {
         };
         Returns: undefined;
       };
+      update_referral_status: {
+        Args: {
+          p_service_request_id: string;
+          p_status: Database["public"]["Enums"]["request_status"];
+        };
+        Returns: undefined;
+      };
       update_own_patient_profile: {
         Args: {
           p_address: string;
@@ -2224,6 +2335,103 @@ export type Database = {
           p_walk_in_id: string;
         };
         Returns: string;
+      };
+      get_billing_workspace: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
+      get_billable_encounters: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: {
+          appointment_id: string | null;
+          id: string;
+          patient_id: string;
+          patient_name: string;
+          period_end: string | null;
+          period_start: string | null;
+          service_name: string | null;
+          service_price: number | null;
+          service_type: string | null;
+          status: Database["public"]["Enums"]["encounter_status"];
+        }[];
+      };
+      get_billing_line_items: {
+        Args: {
+          p_billing_event_id: string;
+        };
+        Returns: {
+          currency: string;
+          description: string;
+          id: string;
+          line_total: number;
+          quantity: number;
+          source_id: string | null;
+          source_type: string;
+          unit_price: number;
+        }[];
+      };
+      generate_billing_event: {
+        Args: {
+          p_encounter_id: string;
+          p_organization_id: string;
+          p_payor_type_override?: string | null;
+        };
+        Returns: string;
+      };
+      finalize_billing_event: {
+        Args: {
+          p_billing_event_id: string;
+        };
+        Returns: Json;
+      };
+      record_payment: {
+        Args: {
+          p_amount: number;
+          p_invoice_id: string;
+          p_method: string;
+          p_reference?: string | null;
+        };
+        Returns: string;
+      };
+      create_pos_sale: {
+        Args: {
+          p_customer_name?: string | null;
+          p_items: Json;
+          p_organization_id: string;
+          p_payment_method?: string;
+        };
+        Returns: Json;
+      };
+      get_patient_invoices: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
+      get_claims_workspace: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
+      submit_claim: {
+        Args: {
+          p_claim_id: string;
+        };
+        Returns: undefined;
+      };
+      adjudicate_claim: {
+        Args: {
+          p_approved_amount?: number | null;
+          p_claim_id: string;
+          p_denied_reason?: string | null;
+          p_result: string;
+        };
+        Returns: undefined;
       };
     };
     Enums: {

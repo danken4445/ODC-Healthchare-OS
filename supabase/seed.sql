@@ -13,6 +13,7 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000106', 'authenticated', 'authenticated', 'admin@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000107', 'authenticated', 'authenticated', 'lab@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000108', 'authenticated', 'authenticated', 'inventory@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000109', 'authenticated', 'authenticated', 'specialist@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000103', 'authenticated', 'authenticated', 'patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000104', 'authenticated', 'authenticated', 'other-patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now())
 on conflict (id) do nothing;
@@ -49,7 +50,8 @@ insert into public.practitioners (id, organization_id, auth_user_id, name) value
   ('20000000-0000-0000-0000-000000000105', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000105', '{"text":"Synthetic Front Desk"}'::jsonb),
   ('20000000-0000-0000-0000-000000000106', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000106', '{"text":"Synthetic Administrator"}'::jsonb),
   ('20000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000107', '{"text":"Synthetic Lab Staff"}'::jsonb),
-  ('20000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000108', '{"text":"Synthetic Inventory Staff"}'::jsonb)
+  ('20000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000108', '{"text":"Synthetic Inventory Staff"}'::jsonb),
+  ('20000000-0000-0000-0000-000000000109', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000109', '{"text":"Synthetic Specialist"}'::jsonb)
 on conflict (id) do nothing;
 
 insert into public.practitioner_roles (id, organization_id, practitioner_id, role_code) values
@@ -58,7 +60,8 @@ insert into public.practitioner_roles (id, organization_id, practitioner_id, rol
   ('30000000-0000-0000-0000-000000000105', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000105', 'front_desk'),
   ('30000000-0000-0000-0000-000000000106', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000106', 'admin'),
   ('30000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000107', 'lab_staff'),
-  ('30000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000108', 'inventory_staff')
+  ('30000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000108', 'inventory_staff'),
+  ('30000000-0000-0000-0000-000000000109', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000109', 'specialist')
 on conflict (id) do nothing;
 
 insert into public.patients (id, organization_id, auth_user_id, name) values
@@ -128,11 +131,12 @@ insert into public.departments (id, organization_id, code, name, description) va
 on conflict (id) do nothing;
 
 insert into public.inventory_items (
-  id, organization_id, sku, name, description, unit_of_measure, unit_price, currency
+  id, organization_id, sku, name, description, unit_of_measure,
+  unit_cost, selling_price, unit_price, currency
 ) values
-  ('91000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'SYR-5ML', 'Syringe 5 mL', 'Single-use sterile syringe.', 'piece', 15.00, 'PHP'),
-  ('91000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'GAUZE-2X2', 'Gauze pad 2x2', 'Sterile gauze pad.', 'piece', 8.00, 'PHP'),
-  ('91000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'SYR-5ML', 'Other Clinic Syringe 5 mL', 'Tenant-isolation test item.', 'piece', 20.00, 'PHP')
+  ('91000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'SYR-5ML', 'Syringe 5 mL', 'Single-use sterile syringe.', 'piece', 8.00, 15.00, 15.00, 'PHP'),
+  ('91000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'GAUZE-2X2', 'Gauze pad 2x2', 'Sterile gauze pad.', 'piece', 4.50, 8.00, 8.00, 'PHP'),
+  ('91000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'SYR-5ML', 'Other Clinic Syringe 5 mL', 'Tenant-isolation test item.', 'piece', 11.00, 20.00, 20.00, 'PHP')
 on conflict (id) do nothing;
 
 insert into public.department_stock (
@@ -159,3 +163,149 @@ insert into public.medication_requests (id, organization_id, patient_id, encount
 on conflict (id) do nothing;
 
 insert into public.hello_world (message) values ('Odyssey Healthcare OS foundation is connected.');
+
+-- ──────────────────────────────────────────────────────────────────────
+-- Loop 5: Financial Seed Data
+-- ──────────────────────────────────────────────────────────────────────
+
+-- Organization default payor types
+update public.organizations
+set default_payor_type = 'self_pay'
+where id = '10000000-0000-0000-0000-000000000001';
+
+update public.organizations
+set default_payor_type = 'philhealth_nbb'
+where id = '10000000-0000-0000-0000-000000000002';
+
+-- Coverages
+insert into public.coverages (
+  id, organization_id, patient_id, status, kind, payor,
+  payor_type, hmo_provider_name, hmo_member_number, max_benefit_limit, remaining_benefit
+) values (
+  'a4000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000001',
+  'active', 'hmo',
+  '{"name": "Maxicare Healthcare"}'::jsonb,
+  'hmo', 'Maxicare Healthcare', 'MAX-99281-PH', 100000.00, 95000.00
+) on conflict (id) do nothing;
+
+insert into public.coverages (
+  id, organization_id, patient_id, status, kind, payor,
+  payor_type, philhealth_id, philhealth_category
+) values (
+  'a4000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000002',
+  'active', 'public_health',
+  '{"name": "Philippine Health Insurance Corporation"}'::jsonb,
+  'philhealth_nbb', '12-345678901-2', 'employed'
+) on conflict (id) do nothing;
+
+-- Clinic 1: Self-Pay Billing Event & Paid Invoice
+insert into public.billing_events (
+  id, organization_id, encounter_id, patient_id, payor_type, status, finalized_at
+) values (
+  'a0000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  '60000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000001',
+  'self_pay', 'finalized', now()
+) on conflict (id) do nothing;
+
+insert into public.billing_line_items (
+  id, organization_id, billing_event_id, source_type, description, quantity, unit_price, currency
+) values (
+  'a5000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  'clinic_service', 'General Medical Consultation', 1, 500.00, 'PHP'
+), (
+  'a5000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  'inventory_usage', 'Syringe 5 mL', 1, 15.00, 'PHP'
+) on conflict (id) do nothing;
+
+insert into public.invoices (
+  id, organization_id, billing_event_id, patient_id, invoice_number,
+  status, subtotal, total_due, amount_paid, balance_due, issued_at, paid_at,
+  qr_payment_token
+) values (
+  'a1000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000001',
+  'INV-20260903-00001',
+  'paid', 515.00, 515.00, 515.00, 0.00, now(), now(),
+  'tok_synthetic_paid_001'
+) on conflict (id) do nothing;
+
+insert into public.payments (
+  id, organization_id, invoice_id, amount, currency, method, status,
+  reference_number, confirmed_at
+) values (
+  'a2000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'a1000000-0000-0000-0000-000000000001',
+  515.00, 'PHP', 'cash', 'confirmed',
+  'CSH-20260903-01', now()
+) on conflict (id) do nothing;
+
+-- Clinic 2: PhilHealth NBB Billing Event & Claim (Zero Balance for Patient)
+insert into public.billing_events (
+  id, organization_id, encounter_id, patient_id, payor_type, status,
+  coverage_id, finalized_at
+) values (
+  'a0000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000002',
+  '60000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000002',
+  'philhealth_nbb', 'finalized',
+  'a4000000-0000-0000-0000-000000000002', now()
+) on conflict (id) do nothing;
+
+insert into public.billing_line_items (
+  id, organization_id, billing_event_id, source_type, description, quantity, unit_price, currency
+) values (
+  'a5000000-0000-0000-0000-000000000003',
+  '10000000-0000-0000-0000-000000000002',
+  'a0000000-0000-0000-0000-000000000002',
+  'clinic_service', 'Government Hospital OPD Visit', 1, 600.00, 'PHP'
+), (
+  'a5000000-0000-0000-0000-000000000004',
+  '10000000-0000-0000-0000-000000000002',
+  'a0000000-0000-0000-0000-000000000002',
+  'inventory_usage', 'Other Clinic Syringe 5 mL', 1, 20.00, 'PHP'
+) on conflict (id) do nothing;
+
+insert into public.claims (
+  id, organization_id, patient_id, encounter_id, coverage_id,
+  status, use, claim_type, billing_event_id, payor_type,
+  billable_period_start, billable_period_end,
+  provider_organization_id, total, philhealth_claim_number, submitted_at,
+  items
+) values (
+  'a3000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000002',
+  '60000000-0000-0000-0000-000000000002',
+  'a4000000-0000-0000-0000-000000000002',
+  'active', 'claim', 'institutional',
+  'a0000000-0000-0000-0000-000000000002', 'philhealth_nbb',
+  current_date, current_date,
+  '10000000-0000-0000-0000-000000000002', 620.00, 'PH-NBB-2026-0001', now(),
+  '[{"description":"Government Hospital OPD Visit","quantity":1,"unit_price":600.00,"line_total":600.00},{"description":"Other Clinic Syringe 5 mL","quantity":1,"unit_price":20.00,"line_total":20.00}]'::jsonb
+) on conflict (id) do nothing;
+
+insert into public.invoices (
+  id, organization_id, billing_event_id, patient_id, invoice_number,
+  status, subtotal, total_due, amount_paid, balance_due, issued_at, paid_at
+) values (
+  'a1000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000002',
+  'a0000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000002',
+  'INV-20260903-00002',
+  'paid', 620.00, 0.00, 0.00, 0.00, now(), now()
+) on conflict (id) do nothing;

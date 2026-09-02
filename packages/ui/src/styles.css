@@ -441,3 +441,31 @@ textarea.odyssey-input {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ─── Financial components ─── */
+.odyssey-currency {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.odyssey-qr {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+}
+.odyssey-qr svg {
+  display: block;
+}
+.odyssey-qr__label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--odyssey-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}

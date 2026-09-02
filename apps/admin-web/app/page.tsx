@@ -15,6 +15,10 @@ import {
   signOut,
   subscribeToAppointmentQueue,
   updateAppointmentStatus,
+  createDiagnosticServiceRequest,
+  getSpecialistOptions,
+  getLaboratoryServices,
+  listDiagnosticEncounters,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
@@ -22,6 +26,9 @@ import type {
   PatientSummary,
   PublicClinicSummary,
   WalkInCredentials,
+  DiagnosticEncounterOption,
+  SpecialistOption,
+  LaboratoryServiceSummary,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -63,6 +70,32 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState("Offline");
+  const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(false);
+  const [diagnosticEncounters, setDiagnosticEncounters] = useState<
+    DiagnosticEncounterOption[]
+  >([]);
+  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
+  const [selectedSpecialistRoleId, setSelectedSpecialistRoleId] = useState("");
+  const [laboratoryServices, setLaboratoryServices] = useState<LaboratoryServiceSummary[]>([]);
+
+  async function loadDiagnosticOrdering(clinicId: string) {
+    const client = createBrowserSupabaseClient();
+    const permission = await hasOrganizationPermission(
+      client,
+      clinicId,
+      "can_order_diagnostics",
+    );
+    setCanOrderDiagnostics(!permission.error && permission.data);
+    if (permission.error || !permission.data) return;
+    const [encounterResult, specialistResult, laboratoryServiceResult] = await Promise.all([
+      listDiagnosticEncounters(client, clinicId),
+      getSpecialistOptions(client, clinicId),
+      getLaboratoryServices(client, clinicId),
+    ]);
+    if (!encounterResult.error) setDiagnosticEncounters(encounterResult.data);
+    if (!specialistResult.error) setSpecialists(specialistResult.data);
+    if (!laboratoryServiceResult.error) setLaboratoryServices(laboratoryServiceResult.data);
+  }
 
   async function loadSchedule(clinicId = organizationId) {
     if (!clinicId) return;
@@ -193,12 +226,14 @@ export default function Home() {
     setOrganizationId(firstClinicId);
     setStatus("Signed in. Loading your clinic schedule.");
     await loadSchedule(firstClinicId);
+    await loadDiagnosticOrdering(firstClinicId);
   }
 
   async function handleClinicChange(clinicId: string) {
     setOrganizationId(clinicId);
     setStatus("Loading the selected clinic schedule.");
     await loadSchedule(clinicId);
+    await loadDiagnosticOrdering(clinicId);
   }
 
   async function handleCreateWalkIn(event: FormEvent<HTMLFormElement>) {
@@ -209,6 +244,9 @@ export default function Home() {
     const slotId = String(fields.get("slotId") ?? "");
     setSubmitting(true);
     setIssuedCredentials(null);
+    setCanOrderDiagnostics(false);
+    setDiagnosticEncounters([]);
+    setSpecialists([]);
     const patientResult = await createWalkInPatient(
       createBrowserSupabaseClient(),
       {
@@ -300,6 +338,40 @@ export default function Home() {
     setStatus("Signed out.");
   }
 
+  async function handleDiagnosticOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const category = String(fields.get("category")) as
+      "laboratory" | "referral";
+    setSubmitting(true);
+    const result = await createDiagnosticServiceRequest(
+      createBrowserSupabaseClient(),
+      {
+        encounterId: String(fields.get("encounterId")),
+        category,
+        priority: String(fields.get("priority")) as
+          "routine" | "urgent" | "asap" | "stat",
+        note: String(fields.get("note") ?? ""),
+        performerPractitionerRoleId:
+          category === "referral"
+            ? String(fields.get("specialistRoleId") ?? "")
+            : null,
+        laboratoryServiceId:
+          category === "laboratory"
+            ? String(fields.get("laboratoryServiceId") ?? "")
+            : null,
+      },
+    );
+    setSubmitting(false);
+    if (result.error)
+      return setStatus(`Unable to place request: ${result.error.message}`);
+    event.currentTarget.reset();
+    setSelectedSpecialistRoleId("");
+    setStatus(
+      `${category === "laboratory" ? "Lab order" : "Referral"} placed from the encounter.`,
+    );
+  }
+
   if (signedInAs && isPlatformAdmin) {
     return (
       <main>
@@ -370,6 +442,7 @@ export default function Home() {
               )}
               {canManageAccounts && <Link href="/staff">Staff accounts</Link>}
               {canAccessInventory && <Link href="/inventory">Inventory</Link>}
+              {canManageAccounts && <Link href="/laboratory-services">Laboratory services</Link>}
               <Button onClick={() => void loadSchedule()}>Refresh</Button>{" "}
               <Button variant="secondary" onClick={handleSignOut}>
                 Sign out
@@ -473,6 +546,88 @@ export default function Home() {
               },
             ]}
           />
+
+          {canOrderDiagnostics && (
+            <section>
+              <h2>Laboratory order</h2>
+              <form className="stack" onSubmit={handleDiagnosticOrder}>
+                <Field label="Encounter">
+                  <select
+                    className="odyssey-input"
+                    name="encounterId"
+                    defaultValue=""
+                    required
+                  >
+                    <option value="" disabled>
+                      Select an encounter
+                    </option>
+                    {diagnosticEncounters.map((encounter) => (
+                      <option key={encounter.id} value={encounter.id}>
+                        {encounter.patientName} ·{" "}
+                        {encounter.serviceType ?? "Clinical visit"} ·{" "}
+                        {formatTime(encounter.periodStart)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <input type="hidden" name="category" value="laboratory" />
+                <Field label="Laboratory service">
+                  <select className="odyssey-input" name="laboratoryServiceId" defaultValue="" required>
+                    <option value="" disabled>Select a laboratory service</option>
+                    {laboratoryServices.filter((service) => service.active).map((service) => (
+                      <option key={service.id} value={service.id}>{service.name} · PHP {service.labCost.toFixed(2)}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Priority">
+                  <select
+                    className="odyssey-input"
+                    name="priority"
+                    defaultValue="routine"
+                  >
+                    <option value="routine">Routine</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="asap">ASAP</option>
+                    <option value="stat">STAT</option>
+                  </select>
+                </Field>
+                <Field label="Clinical note">
+                  <textarea
+                    className="odyssey-input"
+                    name="note"
+                    rows={3}
+                    maxLength={5000}
+                  />
+                </Field>
+                <Button
+                  type="submit"
+                  disabled={submitting || !diagnosticEncounters.length}
+                >
+                  Place lab order
+                </Button>
+              </form>
+              <h2>Specialist referral</h2>
+              <form className="stack" onSubmit={handleDiagnosticOrder}>
+                <Field label="Encounter">
+                  <select className="odyssey-input" name="encounterId" defaultValue="" required>
+                    <option value="" disabled>Select an encounter</option>
+                    {diagnosticEncounters.map((encounter) => <option key={encounter.id} value={encounter.id}>{encounter.patientName} · {encounter.serviceType ?? "Clinical visit"} · {formatTime(encounter.periodStart)}</option>)}
+                  </select>
+                </Field>
+                <input type="hidden" name="category" value="referral" />
+                <Field label="Specialist" hint="Affiliated clinic or hospital is included.">
+                  <select className="odyssey-input" name="specialistRoleId" value={selectedSpecialistRoleId} onChange={(event) => setSelectedSpecialistRoleId(event.target.value)} required>
+                    <option value="" disabled>Select a specialist</option>
+                    {specialists.map((specialist) => <option key={specialist.practitionerRoleId} value={specialist.practitionerRoleId}>{specialist.displayName} · {specialist.organizationName}</option>)}
+                  </select>
+                  {selectedSpecialistRoleId && <p className="hint">Affiliated clinic/hospital: {specialists.find((specialist) => specialist.practitionerRoleId === selectedSpecialistRoleId)?.organizationName}</p>}
+                </Field>
+                <Field label="Priority"><select className="odyssey-input" name="priority" defaultValue="routine"><option value="routine">Routine</option><option value="urgent">Urgent</option><option value="asap">ASAP</option><option value="stat">STAT</option></select></Field>
+                <Field label="Clinical note"><textarea className="odyssey-input" name="note" rows={3} maxLength={5000} /></Field>
+                <Button type="submit" disabled={submitting || !diagnosticEncounters.length}>Place referral</Button>
+              </form>
+            </section>
+          )}
 
           <section>
             <h2>Schedule an existing patient</h2>

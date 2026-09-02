@@ -42,3 +42,9 @@
 - [ ] Apply `20260902000100_inventory_consumables_loop.sql`, deploy the updated `create-clinic-user` function, and regenerate database types from staging.
 - [ ] Run `supabase/validation/loop3_inventory_consumables.sql` and confirm every inventory permission, atomic stock, and two-clinic isolation result is `true`.
 - [ ] Run the Playwright cross-role flow and confirm provider usage tagging decrements the inventory workspace without refresh.
+
+## Loop 4 staging verification
+
+- [ ] Apply `20260903000500_diagnostics_loop.sql`, create the synthetic lab and specialist accounts, and regenerate database types from staging.
+- [ ] Run `supabase/validation/loop4_diagnostics.sql` and confirm all permission, audit, atomic-result, and two-clinic isolation checks pass.
+- [ ] Run the Playwright diagnostics flow and confirm lab results, doctor notifications, specialist referral routing, and patient history update without refresh.

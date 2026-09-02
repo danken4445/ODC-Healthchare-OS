@@ -30,6 +30,14 @@ import {
   tagInventoryUsage,
   retireClinicService,
   updateClinicService,
+  createDiagnosticServiceRequest,
+  getDiagnosticsWorkspace,
+  getSpecialistOptions,
+  getLaboratoryServices,
+  markClinicalNotificationRead,
+  recordDiagnosticReport,
+  subscribeToDiagnostics,
+  updateReferralStatus,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
@@ -38,6 +46,9 @@ import type {
   ClinicServiceInput,
   OrganizationClinicalRecords,
   InventoryWorkspace,
+  DiagnosticsWorkspace,
+  SpecialistOption,
+  LaboratoryServiceSummary,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -133,15 +144,25 @@ export default function Home() {
   const [providerRoleId, setProviderRoleId] = useState<string | null>(null);
   const [inventory, setInventory] = useState<InventoryWorkspace | null>(null);
   const [canTagInventory, setCanTagInventory] = useState(false);
-  const [inventoryDepartmentId, setInventoryDepartmentId] = useState<string | null>(
-    null,
-  );
+  const [inventoryDepartmentId, setInventoryDepartmentId] = useState<
+    string | null
+  >(null);
   const [inventoryDepartmentSelection, setInventoryDepartmentSelection] =
     useState("");
   const [inventoryBusy, setInventoryBusy] = useState(false);
   const [canTriage, setCanTriage] = useState(false);
   const [selectedTriageAppointmentId, setSelectedTriageAppointmentId] =
     useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsWorkspace | null>(
+    null,
+  );
+  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
+  const [selectedSpecialistRoleId, setSelectedSpecialistRoleId] = useState("");
+  const [laboratoryServices, setLaboratoryServices] = useState<LaboratoryServiceSummary[]>([]);
+  const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(false);
+  const [canRecordLabResults, setCanRecordLabResults] = useState(false);
+  const [canUpdateReferrals, setCanUpdateReferrals] = useState(false);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
 
   const ownedServices = services.filter(
     (service) => service.owner_practitioner_role_id === providerRoleId,
@@ -258,6 +279,25 @@ export default function Home() {
     [organizationId],
   );
 
+  const loadDiagnostics = useCallback(
+    async (clinicId = organizationId) => {
+      if (!clinicId) return;
+      const [workspaceResult, specialistResult, laboratoryServiceResult] = await Promise.all([
+        getDiagnosticsWorkspace(createBrowserSupabaseClient(), clinicId),
+        getSpecialistOptions(createBrowserSupabaseClient(), clinicId),
+        getLaboratoryServices(createBrowserSupabaseClient(), clinicId),
+      ]);
+      if (workspaceResult.error)
+        return setStatus(
+          `Diagnostics query failed: ${workspaceResult.error.message}`,
+        );
+      setDiagnostics(workspaceResult.data);
+      if (!specialistResult.error) setSpecialists(specialistResult.data);
+      if (!laboratoryServiceResult.error) setLaboratoryServices(laboratoryServiceResult.data);
+    },
+    [organizationId],
+  );
+
   useEffect(() => {
     void getCurrentUserEmail(createBrowserSupabaseClient()).then((result) => {
       if (!result.error && result.data) {
@@ -296,16 +336,26 @@ export default function Home() {
           () => void loadInventory(),
         )
       : () => undefined;
+    const unsubscribeDiagnostics = subscribeToDiagnostics(
+      createBrowserSupabaseClient(),
+      organizationId,
+      () => {
+        void loadDiagnostics();
+        void loadClinicalRecords();
+      },
+    );
     return () => {
       unsubscribe();
       unsubscribeClinical();
       unsubscribeInventory();
+      unsubscribeDiagnostics();
     };
   }, [
     canTagInventory,
     loadAvailability,
     loadClinicalRecords,
     loadInventory,
+    loadDiagnostics,
     loadQueue,
     organizationId,
     signedInAs,
@@ -333,31 +383,55 @@ export default function Home() {
       return setStatus(
         `Department context query failed: ${departmentResult.error.message}`,
       );
-    const [inventoryPermission, triagePermission, consultationPermission] =
-      await Promise.all([
-        hasOrganizationPermission(
-          createBrowserSupabaseClient(),
-          result.data,
-          "can_tag_inventory_usage",
-        ),
-        hasOrganizationPermission(
-          createBrowserSupabaseClient(),
-          result.data,
-          "can_record_triage",
-        ),
-        hasOrganizationPermission(
-          createBrowserSupabaseClient(),
-          result.data,
-          "can_start_consultation",
-        ),
-      ]);
+    const [
+      inventoryPermission,
+      triagePermission,
+      consultationPermission,
+      orderPermission,
+      labPermission,
+      referralPermission,
+    ] = await Promise.all([
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_tag_inventory_usage",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_record_triage",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_start_consultation",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_order_diagnostics",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_record_lab_results",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_update_referrals",
+      ),
+    ]);
     if (
       inventoryPermission.error ||
       triagePermission.error ||
-      consultationPermission.error
+      consultationPermission.error ||
+      orderPermission.error ||
+      labPermission.error ||
+      referralPermission.error
     )
       return setStatus(
-        `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message}`,
+        `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message}`,
       );
     setProviderRoleId(roleResult.data);
     setOrganizationId(result.data);
@@ -366,11 +440,15 @@ export default function Home() {
     setCanTagInventory(inventoryPermission.data);
     setCanTriage(triagePermission.data);
     setCanPrescribe(consultationPermission.data);
+    setCanOrderDiagnostics(orderPermission.data);
+    setCanRecordLabResults(labPermission.data);
+    setCanUpdateReferrals(referralPermission.data);
     await Promise.all([
       loadQueue(result.data),
       loadAvailability(result.data),
       loadClinicalRecords(result.data),
       inventoryPermission.data ? loadInventory(result.data) : Promise.resolve(),
+      loadDiagnostics(result.data),
     ]);
   }
 
@@ -535,7 +613,7 @@ export default function Home() {
     if (result.error)
       return setStatus(`Unable to tag consumable: ${result.error.message}`);
     form.reset();
-    setStatus("Consumable tagged and department stock decremented.");
+    setStatus("Consumable held for the patient and added to the draft bill. Stock will deduct when billing is finalized.");
     await loadInventory();
   }
 
@@ -624,15 +702,11 @@ export default function Home() {
     if (!organizationId) return setStatus("No staff clinic is assigned.");
     const fields = new FormData(form);
     const name = String(fields.get("name") ?? "").trim();
-    const code = String(fields.get("code") ?? "")
-      .trim()
-      .toUpperCase();
     const durationMinutes = Number(fields.get("durationMinutes"));
     const basePriceValue = String(fields.get("basePrice") ?? "").trim();
     const basePrice = basePriceValue ? Number(basePriceValue) : null;
     if (
       !name ||
-      !code ||
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 5 ||
       durationMinutes > 480 ||
@@ -644,7 +718,6 @@ export default function Home() {
     }
     const input: ClinicServiceInput = {
       name,
-      code,
       durationMinutes,
       basePrice,
       description: String(fields.get("description") ?? ""),
@@ -723,7 +796,76 @@ export default function Home() {
     setInventoryDepartmentSelection("");
     setCanTriage(false);
     setSelectedTriageAppointmentId(null);
+    setDiagnostics(null);
+    setSpecialists([]);
+    setSelectedSpecialistRoleId("");
+    setLaboratoryServices([]);
+    setCanOrderDiagnostics(false);
+    setCanRecordLabResults(false);
+    setCanUpdateReferrals(false);
     setStatus("Signed out.");
+  }
+
+  async function handleDiagnosticOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedEncounterId) return;
+    const fields = new FormData(event.currentTarget);
+    const category = String(fields.get("category")) as
+      "laboratory" | "referral";
+    setDiagnosticsBusy(true);
+    const result = await createDiagnosticServiceRequest(
+      createBrowserSupabaseClient(),
+      {
+        encounterId: selectedEncounterId,
+        category,
+        priority: String(fields.get("priority")) as
+          "routine" | "urgent" | "asap" | "stat",
+        note: String(fields.get("note") ?? ""),
+        performerPractitionerRoleId:
+          category === "referral"
+            ? String(fields.get("specialistRoleId") ?? "")
+            : null,
+        laboratoryServiceId:
+          category === "laboratory"
+            ? String(fields.get("laboratoryServiceId") ?? "")
+            : null,
+      },
+    );
+    setDiagnosticsBusy(false);
+    if (result.error)
+      return setStatus(`Unable to place request: ${result.error.message}`);
+    event.currentTarget.reset();
+    setSelectedSpecialistRoleId("");
+    setStatus(
+      `${category === "laboratory" ? "Lab order" : "Referral"} placed.`,
+    );
+    await loadDiagnostics();
+  }
+
+  async function handleLabResult(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    setDiagnosticsBusy(true);
+    const result = await recordDiagnosticReport(createBrowserSupabaseClient(), {
+      serviceRequestId: String(fields.get("serviceRequestId")),
+      conclusion: String(fields.get("conclusion") ?? ""),
+      results: [
+        {
+          display: String(fields.get("resultDisplay")),
+          value: String(fields.get("value")),
+          unit: String(fields.get("unit") ?? ""),
+          referenceRange: { text: String(fields.get("referenceRange") ?? "") },
+        },
+      ],
+    });
+    setDiagnosticsBusy(false);
+    if (result.error)
+      return setStatus(`Unable to record result: ${result.error.message}`);
+    event.currentTarget.reset();
+    setStatus(
+      "Final diagnostic report published and ordering provider notified.",
+    );
+    await loadDiagnostics();
   }
 
   return (
@@ -767,6 +909,152 @@ export default function Home() {
               </Button>
             </span>
           </div>
+          {!!diagnostics?.notifications.length && (
+            <section aria-labelledby="notifications-heading">
+              <h2 id="notifications-heading">Diagnostics notifications</h2>
+              <div className="record-list">
+                {diagnostics.notifications.map((notification) => (
+                  <article key={notification.id}>
+                    <strong>{notification.title}</strong>
+                    <p>{notification.message}</p>
+                    <small>
+                      {new Date(notification.created_at).toLocaleString()}
+                    </small>{" "}
+                    {!notification.read_at && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void markClinicalNotificationRead(
+                            createBrowserSupabaseClient(),
+                            notification.id,
+                          ).then(() => loadDiagnostics())
+                        }
+                      >
+                        Mark read
+                      </Button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          {canRecordLabResults && (
+            <section aria-labelledby="lab-worklist-heading">
+              <h2 id="lab-worklist-heading">Laboratory worklist</h2>
+              {!diagnostics?.serviceRequests.some(
+                (request) =>
+                  request.category === "laboratory" &&
+                  request.status === "active",
+              ) && <p className="hint">No active laboratory orders.</p>}
+              <div className="clinical-grid">
+                {diagnostics?.serviceRequests
+                  .filter(
+                    (request) =>
+                      request.category === "laboratory" &&
+                      request.status === "active",
+                  )
+                  .map((request) => (
+                    <Card key={request.id}>
+                      <h3>{request.code_display ?? request.code}</h3>
+                      <p className="hint">
+                        {request.priority ?? "routine"} · ordered{" "}
+                        {new Date(request.created_at).toLocaleString()}
+                      </p>
+                      {request.note && <p>{request.note}</p>}
+                      <form className="stack" onSubmit={handleLabResult}>
+                        <input
+                          type="hidden"
+                          name="serviceRequestId"
+                          value={request.id}
+                        />
+                        <Field label="Result name">
+                          <Input name="resultDisplay" required />
+                        </Field>
+                        <Field label="Value">
+                          <Input name="value" required />
+                        </Field>
+                        <Field label="Unit">
+                          <Input name="unit" />
+                        </Field>
+                        <Field label="Reference range">
+                          <Input name="referenceRange" />
+                        </Field>
+                        <Field label="Conclusion">
+                          <textarea
+                            className="odyssey-input"
+                            name="conclusion"
+                            rows={3}
+                            maxLength={5000}
+                          />
+                        </Field>
+                        <Button type="submit" disabled={diagnosticsBusy}>
+                          Publish final report
+                        </Button>
+                      </form>
+                    </Card>
+                  ))}
+              </div>
+            </section>
+          )}
+          {canUpdateReferrals && (
+            <section aria-labelledby="referrals-heading">
+              <h2 id="referrals-heading">My specialist referrals</h2>
+              <DataTable
+                caption="Referrals routed specifically to your specialist role."
+                data={
+                  diagnostics?.serviceRequests.filter(
+                    (request) => request.category === "referral",
+                  ) ?? []
+                }
+                emptyMessage="No referrals are assigned to you."
+                getRowId={(request) => request.id}
+                columns={[
+                  {
+                    id: "request",
+                    header: "Referral",
+                    cell: (request) => request.code_display ?? request.code,
+                  },
+                  {
+                    id: "priority",
+                    header: "Priority",
+                    cell: (request) => request.priority ?? "routine",
+                  },
+                  {
+                    id: "status",
+                    header: "Status",
+                    cell: (request) => request.status.replaceAll("_", " "),
+                  },
+                  {
+                    id: "action",
+                    header: "",
+                    cell: (request) =>
+                      request.status === "completed" ||
+                      request.status === "revoked" ? null : (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            void updateReferralStatus(
+                              createBrowserSupabaseClient(),
+                              request.id,
+                              "completed",
+                            ).then((result) => {
+                              if (result.error)
+                                setStatus(
+                                  `Unable to update referral: ${result.error.message}`,
+                                );
+                              else void loadDiagnostics();
+                            })
+                          }
+                        >
+                          Complete
+                        </Button>
+                      ),
+                  },
+                ]}
+              />
+            </section>
+          )}
           <DataTable
             caption={
               canTriage
@@ -1228,6 +1516,85 @@ export default function Home() {
                     </form>
                   </Card>
                 )}
+                {canOrderDiagnostics && (
+                  <Card>
+                    <h3>Laboratory order</h3>
+                    <form className="stack" onSubmit={handleDiagnosticOrder}>
+                      <input type="hidden" name="category" value="laboratory" />
+                      <Field label="Laboratory service">
+                        <select className="odyssey-input" name="laboratoryServiceId" defaultValue="" required>
+                          <option value="" disabled>Select a laboratory service</option>
+                          {laboratoryServices.filter((service) => service.active).map((service) => (
+                            <option key={service.id} value={service.id}>{service.name} · PHP {service.labCost.toFixed(2)}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Priority">
+                        <select
+                          className="odyssey-input"
+                          name="priority"
+                          defaultValue="routine"
+                        >
+                          <option value="routine">Routine</option>
+                          <option value="urgent">Urgent</option>
+                          <option value="asap">ASAP</option>
+                          <option value="stat">STAT</option>
+                        </select>
+                      </Field>
+                      <Field label="Clinical note">
+                        <textarea
+                          className="odyssey-input"
+                          name="note"
+                          rows={3}
+                          maxLength={5000}
+                        />
+                      </Field>
+                      <Button type="submit" disabled={diagnosticsBusy}>
+                        Place lab order
+                      </Button>
+                    </form>
+                    <h3>Specialist referral</h3>
+                    <form className="stack" onSubmit={handleDiagnosticOrder}>
+                      <input type="hidden" name="category" value="referral" />
+                      <Field label="Specialist" hint="The affiliated clinic or hospital is shown with each specialist.">
+                        <select className="odyssey-input" name="specialistRoleId" value={selectedSpecialistRoleId} onChange={(event) => setSelectedSpecialistRoleId(event.target.value)} required>
+                          <option value="" disabled>Select a specialist</option>
+                          {specialists.map((specialist) => (
+                            <option key={specialist.practitionerRoleId} value={specialist.practitionerRoleId}>
+                              {specialist.displayName} · {specialist.organizationName}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedSpecialistRoleId && <p className="hint">Affiliated clinic/hospital: {specialists.find((specialist) => specialist.practitionerRoleId === selectedSpecialistRoleId)?.organizationName}</p>}
+                      </Field>
+                      <Field label="Priority">
+                        <select className="odyssey-input" name="priority" defaultValue="routine">
+                          <option value="routine">Routine</option><option value="urgent">Urgent</option><option value="asap">ASAP</option><option value="stat">STAT</option>
+                        </select>
+                      </Field>
+                      <Field label="Clinical note"><textarea className="odyssey-input" name="note" rows={3} maxLength={5000} /></Field>
+                      <Button type="submit" disabled={diagnosticsBusy}>Place referral</Button>
+                    </form>
+                    <div className="record-list">
+                      {diagnostics?.serviceRequests
+                        .filter(
+                          (request) =>
+                            request.encounter_id === selectedEncounterId,
+                        )
+                        .map((request) => (
+                          <article key={request.id}>
+                            <strong>
+                              {request.code_display ?? request.code}
+                            </strong>
+                            <p>
+                              {request.category} ·{" "}
+                              {request.status.replaceAll("_", " ")}
+                            </p>
+                          </article>
+                        ))}
+                    </div>
+                  </Card>
+                )}
                 {canPrescribe && (
                   <Card>
                     <h3>Medical certificate</h3>
@@ -1470,15 +1837,6 @@ export default function Home() {
                           name="name"
                           key={`name-${editingService?.id ?? "new"}`}
                           defaultValue={editingService?.name ?? ""}
-                          required
-                        />
-                      </Field>
-                      <Field label="Code">
-                        <Input
-                          name="code"
-                          key={`code-${editingService?.id ?? "new"}`}
-                          defaultValue={editingService?.code ?? ""}
-                          placeholder="CONSULT-30"
                           required
                         />
                       </Field>

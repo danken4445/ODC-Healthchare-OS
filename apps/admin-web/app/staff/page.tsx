@@ -79,6 +79,41 @@ const permissionOptions: Array<{
     label: "Tag consumables",
     hint: "Record consumables against encounters.",
   },
+  {
+    value: "can_order_diagnostics",
+    label: "Order diagnostics",
+    hint: "Place lab orders and specialist referrals.",
+  },
+  {
+    value: "can_view_diagnostics",
+    label: "View diagnostics",
+    hint: "Review clinic diagnostic requests and reports.",
+  },
+  {
+    value: "can_view_lab_worklist",
+    label: "Lab worklist",
+    hint: "See active laboratory orders.",
+  },
+  {
+    value: "can_record_lab_results",
+    label: "Record lab results",
+    hint: "Publish final reports and observations.",
+  },
+  {
+    value: "can_view_referrals",
+    label: "Specialist referrals",
+    hint: "See referrals routed to this specialist.",
+  },
+  {
+    value: "can_update_referrals",
+    label: "Update referrals",
+    hint: "Progress or complete routed referrals.",
+  },
+  {
+    value: "can_manage_laboratory_services",
+    label: "Laboratory services",
+    hint: "Maintain the laboratory service catalog and lab costs.",
+  },
 ];
 
 const portalPermissions = permissionOptions.filter((permission) =>
@@ -176,7 +211,9 @@ export default function StaffAdministrationPage() {
       clinicId,
     );
     if (result.error)
-      return setStatus(`Unable to load staff assignments: ${result.error.message}`);
+      return setStatus(
+        `Unable to load staff assignments: ${result.error.message}`,
+      );
     setDepartments(result.data.departments);
     setStaff(result.data.staff);
   }
@@ -193,10 +230,11 @@ export default function StaffAdministrationPage() {
   ) {
     if (!organizationId) return;
     setSubmitting(true);
-    const result = await assignStaffDepartment(
-      createBrowserSupabaseClient(),
-      { organizationId, userId, departmentId },
-    );
+    const result = await assignStaffDepartment(createBrowserSupabaseClient(), {
+      organizationId,
+      userId,
+      departmentId,
+    });
     setSubmitting(false);
     if (result.error)
       return setStatus(`Department assignment failed: ${result.error.message}`);
@@ -237,11 +275,7 @@ export default function StaffAdministrationPage() {
     event.preventDefault();
     if (!organizationId) return;
     const fields = new FormData(event.currentTarget);
-    const code = String(fields.get("code") ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
+    const code = editingRole?.code ?? "";
     const permissions = permissionOptions
       .filter((permission) => fields.get(permission.value))
       .map((permission) => permission.value);
@@ -288,7 +322,9 @@ export default function StaffAdministrationPage() {
             </Field>
           </section>
           <section aria-labelledby="department-assignments-heading">
-            <h2 id="department-assignments-heading">Staff department assignments</h2>
+            <h2 id="department-assignments-heading">
+              Staff department assignments
+            </h2>
             <p className="hint">
               Assign a default department for inventory tagging. Staff without
               an assignment will choose the department when tagging a supply.
@@ -298,7 +334,8 @@ export default function StaffAdministrationPage() {
                 <article key={`${member.userId}-${member.roleCode}`}>
                   <strong>{member.displayName}</strong>
                   <p>
-                    {member.email ?? "No email"} · {member.roleCode.replaceAll("_", " ")}
+                    {member.email ?? "No email"} ·{" "}
+                    {member.roleCode.replaceAll("_", " ")}
                   </p>
                   <Field label="Department">
                     <select
@@ -311,9 +348,7 @@ export default function StaffAdministrationPage() {
                         )
                       }
                     >
-                      <option value="">
-                        No default — choose when tagging
-                      </option>
+                      <option value="">No default — choose when tagging</option>
                       {departments
                         .filter((department) => department.active)
                         .map((department) => (
@@ -325,7 +360,9 @@ export default function StaffAdministrationPage() {
                   </Field>
                 </article>
               ))}
-              {!staff.length && <p className="hint">No clinic staff accounts found.</p>}
+              {!staff.length && (
+                <p className="hint">No clinic staff accounts found.</p>
+              )}
             </div>
           </section>
           <section aria-labelledby="roles-heading">
@@ -378,18 +415,6 @@ export default function StaffAdministrationPage() {
                     required
                     minLength={2}
                     maxLength={80}
-                  />
-                </Field>
-                <Field
-                  label="Role code"
-                  hint="Used internally; lowercase letters, numbers, and underscores only."
-                >
-                  <Input
-                    name="code"
-                    key={editingRole?.code ?? "new-code"}
-                    defaultValue={editingRole?.code ?? ""}
-                    readOnly={Boolean(editingRole)}
-                    required
                   />
                 </Field>
                 <fieldset className="stack">

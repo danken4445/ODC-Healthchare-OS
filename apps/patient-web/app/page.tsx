@@ -20,6 +20,8 @@ import {
   subscribeToClinicalHistory,
   subscribeToWaitingRoomQueue,
   updateOwnPatientProfile,
+  getPatientInvoices,
+  subscribeToInvoiceUpdates,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentSlotSummary,
@@ -28,6 +30,7 @@ import type {
   PublicClinicSummary,
   WalkInAccessInput,
   WalkInAccessRecords,
+  PatientInvoice,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -35,6 +38,10 @@ import {
   DataTable,
   Field,
   Input,
+  InvoiceStatusBadge,
+  PayorTypeBadge,
+  CurrencyDisplay,
+  QrPaymentCode,
 } from "@odyssey/ui";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -75,6 +82,7 @@ export default function Home() {
     useState<WalkInAccessRecords | null>(null);
   const [walkInCredentials, setWalkInCredentials] =
     useState<WalkInAccessInput | null>(null);
+  const [invoices, setInvoices] = useState<PatientInvoice[]>([]);
   const [busySlotId, setBusySlotId] = useState<string | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
@@ -115,6 +123,8 @@ export default function Home() {
         observations: [],
         medicationRequests: [],
         documentReferences: [],
+        serviceRequests: [],
+        diagnosticReports: [],
       });
       return;
     }
@@ -130,6 +140,15 @@ export default function Home() {
     }
     setSlots(slotResult.data);
     setRecords(recordResult.data);
+    await loadInvoices(clinicId);
+  }
+
+  async function loadInvoices(clinicId: string) {
+    const client = createBrowserSupabaseClient();
+    const invoiceResult = await getPatientInvoices(client, clinicId);
+    if (!invoiceResult.error) {
+      setInvoices(invoiceResult.data ?? []);
+    }
   }
 
   function selectClinic(clinicId: string) {
@@ -169,9 +188,13 @@ export default function Home() {
   useEffect(() => {
     if (!signedInAs || !organizationId) return;
     return subscribeToClinicalHistory(
-      createBrowserSupabaseClient(), organizationId,
+      createBrowserSupabaseClient(),
+      organizationId,
       () => void loadPatientDashboard(organizationId),
-      (connectionStatus) => setLiveStatus(connectionStatus === "SUBSCRIBED" ? "Live" : connectionStatus),
+      (connectionStatus) =>
+        setLiveStatus(
+          connectionStatus === "SUBSCRIBED" ? "Live" : connectionStatus,
+        ),
     );
   }, [organizationId, signedInAs]);
 
@@ -185,6 +208,15 @@ export default function Home() {
         setLiveStatus(
           connectionStatus === "SUBSCRIBED" ? "Live" : connectionStatus,
         ),
+    );
+  }, [organizationId, signedInAs]);
+
+  useEffect(() => {
+    if (!organizationId || !signedInAs) return;
+    return subscribeToInvoiceUpdates(
+      createBrowserSupabaseClient(),
+      organizationId,
+      () => void loadInvoices(organizationId),
     );
   }, [organizationId, signedInAs]);
 
@@ -367,15 +399,20 @@ export default function Home() {
     const patient = records?.patients[0];
     if (!patient) return;
     const fields = new FormData(event.currentTarget);
-    const result = await updateOwnPatientProfile(createBrowserSupabaseClient(), {
-      patientId: patient.id,
-      displayName: String(fields.get("displayName") ?? ""),
-      birthDate: String(fields.get("birthDate") ?? "") || null,
-      gender: (String(fields.get("gender") ?? "") || null) as "female" | "male" | "other" | "unknown" | null,
-      phone: String(fields.get("phone") ?? ""),
-      address: String(fields.get("address") ?? ""),
-    });
-    if (result.error) return setStatus(`Profile update failed: ${result.error.message}`);
+    const result = await updateOwnPatientProfile(
+      createBrowserSupabaseClient(),
+      {
+        patientId: patient.id,
+        displayName: String(fields.get("displayName") ?? ""),
+        birthDate: String(fields.get("birthDate") ?? "") || null,
+        gender: (String(fields.get("gender") ?? "") || null) as
+          "female" | "male" | "other" | "unknown" | null,
+        phone: String(fields.get("phone") ?? ""),
+        address: String(fields.get("address") ?? ""),
+      },
+    );
+    if (result.error)
+      return setStatus(`Profile update failed: ${result.error.message}`);
     setStatus("Profile updated.");
     await loadPatientDashboard(patient.organization_id);
   }
@@ -640,11 +677,65 @@ export default function Home() {
         <section aria-labelledby="profile-heading">
           <h2 id="profile-heading">My profile</h2>
           <form className="inline-form" onSubmit={handleProfileUpdate}>
-            <Field label="Full name"><Input name="displayName" defaultValue={records.patients[0].displayName} minLength={2} maxLength={120} required /></Field>
-            <Field label="Birth date"><Input name="birthDate" type="date" defaultValue={records.patients[0].birth_date ?? ""} /></Field>
-            <Field label="Gender"><select className="odyssey-input" name="gender" defaultValue={records.patients[0].gender ?? ""}><option value="">Prefer not to say</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="unknown">Unknown</option></select></Field>
-            <Field label="Phone"><Input name="phone" maxLength={40} defaultValue={Array.isArray(records.patients[0].telecom) && typeof records.patients[0].telecom[0] === "object" && records.patients[0].telecom[0] && !Array.isArray(records.patients[0].telecom[0]) && typeof records.patients[0].telecom[0].value === "string" ? records.patients[0].telecom[0].value : ""} /></Field>
-            <Field label="Address"><Input name="address" maxLength={500} defaultValue={Array.isArray(records.patients[0].address) && typeof records.patients[0].address[0] === "object" && records.patients[0].address[0] && !Array.isArray(records.patients[0].address[0]) && typeof records.patients[0].address[0].text === "string" ? records.patients[0].address[0].text : ""} /></Field>
+            <Field label="Full name">
+              <Input
+                name="displayName"
+                defaultValue={records.patients[0].displayName}
+                minLength={2}
+                maxLength={120}
+                required
+              />
+            </Field>
+            <Field label="Birth date">
+              <Input
+                name="birthDate"
+                type="date"
+                defaultValue={records.patients[0].birth_date ?? ""}
+              />
+            </Field>
+            <Field label="Gender">
+              <select
+                className="odyssey-input"
+                name="gender"
+                defaultValue={records.patients[0].gender ?? ""}
+              >
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </Field>
+            <Field label="Phone">
+              <Input
+                name="phone"
+                maxLength={40}
+                defaultValue={
+                  Array.isArray(records.patients[0].telecom) &&
+                  typeof records.patients[0].telecom[0] === "object" &&
+                  records.patients[0].telecom[0] &&
+                  !Array.isArray(records.patients[0].telecom[0]) &&
+                  typeof records.patients[0].telecom[0].value === "string"
+                    ? records.patients[0].telecom[0].value
+                    : ""
+                }
+              />
+            </Field>
+            <Field label="Address">
+              <Input
+                name="address"
+                maxLength={500}
+                defaultValue={
+                  Array.isArray(records.patients[0].address) &&
+                  typeof records.patients[0].address[0] === "object" &&
+                  records.patients[0].address[0] &&
+                  !Array.isArray(records.patients[0].address[0]) &&
+                  typeof records.patients[0].address[0].text === "string"
+                    ? records.patients[0].address[0].text
+                    : ""
+                }
+              />
+            </Field>
             <Button type="submit">Save profile</Button>
           </form>
         </section>
@@ -652,19 +743,319 @@ export default function Home() {
 
       {records && (
         <section aria-labelledby="history-heading">
-          <div className="section-heading"><h2 id="history-heading">Medical history</h2><span className="live-indicator" data-live={liveStatus === "Live"}>{liveStatus} records</span></div>
-          {!records.encounters.length ? <p>No clinical visits recorded yet.</p> : (
+          <div className="section-heading">
+            <h2 id="history-heading">Medical history</h2>
+            <span className="live-indicator" data-live={liveStatus === "Live"}>
+              {liveStatus} records
+            </span>
+          </div>
+          {!records.encounters.length ? (
+            <p>No clinical visits recorded yet.</p>
+          ) : (
             <div className="history-list">
               {records.encounters.map((encounter) => (
                 <article className="history-card" key={encounter.id}>
                   <h3>{encounter.service_type ?? "Clinical visit"}</h3>
-                  <p className="hint">{encounter.period_start ? new Date(encounter.period_start).toLocaleString() : "Date pending"} · {encounter.status.replaceAll("_", " ")}</p>
-                  {records.observations.filter((item) => item.encounter_id === encounter.id && item.code.startsWith("SOAP-")).map((item) => <div key={item.id}><strong>{item.code_display}</strong><p>{typeof item.value === "object" && item.value && !Array.isArray(item.value) && typeof item.value.text === "string" ? item.value.text : ""}</p>{item.supersedes_id && <small>Revised note</small>}</div>)}
-                  {records.medicationRequests.filter((item) => item.encounter_id === encounter.id).map((item) => <div key={item.id}><strong>Prescription: {item.medication_display}</strong><p>{Array.isArray(item.dosage_instruction) && typeof item.dosage_instruction[0] === "object" && item.dosage_instruction[0] && !Array.isArray(item.dosage_instruction[0]) && typeof item.dosage_instruction[0].text === "string" ? item.dosage_instruction[0].text : "Directions recorded"}</p>{item.note && <p>{item.note}</p>}</div>)}
-                  {records.documentReferences.filter((item) => item.encounter_id === encounter.id).map((item) => {
-                    const title = item.content_title ?? item.type_display ?? "Medical certificate";
-                    return <div key={item.id}><strong>{title}</strong><p>{item.description}</p><Button size="sm" variant="outline" onClick={() => downloadClinicalDocument(title, item.description ?? "", item.date_at)}>Download certificate</Button></div>;
-                  })}
+                  <p className="hint">
+                    {encounter.period_start
+                      ? new Date(encounter.period_start).toLocaleString()
+                      : "Date pending"}{" "}
+                    · {encounter.status.replaceAll("_", " ")}
+                  </p>
+                  {records.observations
+                    .filter(
+                      (item) =>
+                        item.encounter_id === encounter.id &&
+                        item.code.startsWith("SOAP-"),
+                    )
+                    .map((item) => (
+                      <div key={item.id}>
+                        <strong>{item.code_display}</strong>
+                        <p>
+                          {typeof item.value === "object" &&
+                          item.value &&
+                          !Array.isArray(item.value) &&
+                          typeof item.value.text === "string"
+                            ? item.value.text
+                            : ""}
+                        </p>
+                        {item.supersedes_id && <small>Revised note</small>}
+                      </div>
+                    ))}
+                  {records.medicationRequests
+                    .filter((item) => item.encounter_id === encounter.id)
+                    .map((item) => (
+                      <div key={item.id}>
+                        <strong>Prescription: {item.medication_display}</strong>
+                        <p>
+                          {Array.isArray(item.dosage_instruction) &&
+                          typeof item.dosage_instruction[0] === "object" &&
+                          item.dosage_instruction[0] &&
+                          !Array.isArray(item.dosage_instruction[0]) &&
+                          typeof item.dosage_instruction[0].text === "string"
+                            ? item.dosage_instruction[0].text
+                            : "Directions recorded"}
+                        </p>
+                        {item.note && <p>{item.note}</p>}
+                      </div>
+                    ))}
+                  {records.documentReferences
+                    .filter((item) => item.encounter_id === encounter.id)
+                    .map((item) => {
+                      const title =
+                        item.content_title ??
+                        item.type_display ??
+                        "Medical certificate";
+                      return (
+                        <div key={item.id}>
+                          <strong>{title}</strong>
+                          <p>{item.description}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              downloadClinicalDocument(
+                                title,
+                                item.description ?? "",
+                                item.date_at,
+                              )
+                            }
+                          >
+                            Download certificate
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  {records.serviceRequests
+                    .filter((item) => item.encounter_id === encounter.id)
+                    .map((item) => (
+                      <div key={item.id}>
+                        <strong>
+                          {item.category === "laboratory"
+                            ? "Lab order"
+                            : "Referral"}
+                          : {item.code_display ?? item.code}
+                        </strong>
+                        <p>
+                          {item.status.replaceAll("_", " ")}
+                          {item.priority ? ` · ${item.priority}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  {records.diagnosticReports
+                    .filter((item) => item.encounter_id === encounter.id)
+                    .map((report) => (
+                      <div key={report.id}>
+                        <strong>
+                          Lab result: {report.code_display ?? report.code}
+                        </strong>
+                        <p>
+                          {report.status}
+                          {report.issued_at
+                            ? ` · ${new Date(report.issued_at).toLocaleString()}`
+                            : ""}
+                        </p>
+                        {records.observations
+                          .filter(
+                            (item) => item.diagnostic_report_id === report.id,
+                          )
+                          .map((result) => (
+                            <p key={result.id}>
+                              {result.code_display ?? result.code}:{" "}
+                              {typeof result.value === "string" ||
+                              typeof result.value === "number"
+                                ? String(result.value)
+                                : JSON.stringify(result.value)}{" "}
+                              {result.value_unit ?? ""}
+                            </p>
+                          ))}
+                        {report.conclusion && <p>{report.conclusion}</p>}
+                      </div>
+                    ))}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {signedInAs && patientAtSelectedClinic && (
+        <section aria-labelledby="billing-heading" style={{ marginTop: "2rem" }}>
+          <div className="section-heading">
+            <h2 id="billing-heading">💳 My Bills &amp; Invoices</h2>
+          </div>
+          {!invoices.length ? (
+            <p>No bills or invoices issued for this clinic.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "1.5rem" }}>
+              {invoices.map((invoice) => (
+                <article
+                  className="odyssey-card"
+                  key={invoice.id}
+                  style={{
+                    padding: "1.5rem",
+                    border: "1px solid var(--odyssey-border)",
+                    borderRadius: "var(--odyssey-radius)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ margin: 0 }}>Invoice {invoice.invoice_number}</h3>
+                      <small style={{ color: "var(--odyssey-muted-foreground)" }}>
+                        Issued{" "}
+                        {invoice.issued_at
+                          ? new Date(invoice.issued_at).toLocaleDateString()
+                          : "Pending"}
+                      </small>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        alignItems: "center",
+                      }}
+                    >
+                      <PayorTypeBadge payorType={invoice.payor_type} />
+                      <InvoiceStatusBadge status={invoice.status} />
+                    </div>
+                  </div>
+
+                  {invoice.payor_type === "philhealth_nbb" ? (
+                    <div
+                      style={{
+                        padding: "0.75rem",
+                        background: "#e8f5e9",
+                        borderRadius: "0.25rem",
+                        margin: "1rem 0",
+                      }}
+                    >
+                      <strong>₱0 Balance Due (No Balance Billing)</strong>
+                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.875rem" }}>
+                        Covered 100% under PhilHealth No Balance Billing policy.
+                        Standard catalog charges are claimed directly by the
+                        facility from PhilHealth.
+                      </p>
+                    </div>
+                  ) : invoice.payor_type === "hmo" ? (
+                    <div
+                      style={{
+                        padding: "0.75rem",
+                        background: "#e3f2fd",
+                        borderRadius: "0.25rem",
+                        margin: "1rem 0",
+                      }}
+                    >
+                      <strong>Covered by HMO Guarantee</strong>
+                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.875rem" }}>
+                        Covered line items are submitted directly to your HMO.
+                        Balance due: <CurrencyDisplay amount={invoice.balance_due} />
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <table
+                    className="odyssey-table"
+                    style={{ margin: "1rem 0", width: "100%" }}
+                  >
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoice.line_items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td>{item.description}</td>
+                          <td>{item.quantity}</td>
+                          <td>
+                            <CurrencyDisplay amount={item.unit_price} />
+                          </td>
+                          <td>
+                            <CurrencyDisplay amount={item.line_total} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td
+                          colSpan={3}
+                          style={{ textAlign: "right", fontWeight: "bold" }}
+                        >
+                          Total:
+                        </td>
+                        <td>
+                          <CurrencyDisplay amount={invoice.total_due} />
+                        </td>
+                      </tr>
+                      {invoice.amount_paid > 0 && (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            style={{ textAlign: "right", color: "green" }}
+                          >
+                            Amount Paid:
+                          </td>
+                          <td>
+                            <CurrencyDisplay amount={invoice.amount_paid} />
+                          </td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td
+                          colSpan={3}
+                          style={{ textAlign: "right", fontWeight: "bold" }}
+                        >
+                          Balance Due:
+                        </td>
+                        <td style={{ fontWeight: "bold" }}>
+                          <CurrencyDisplay amount={invoice.balance_due} />
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {invoice.status !== "paid" &&
+                    invoice.balance_due > 0 &&
+                    invoice.qr_payment_token && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          marginTop: "1rem",
+                          padding: "1rem",
+                          background: "#fafafa",
+                          borderRadius: "var(--odyssey-radius)",
+                        }}
+                      >
+                        <QrPaymentCode
+                          token={invoice.qr_payment_token}
+                          size={160}
+                        />
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "0.85rem",
+                            color: "var(--odyssey-muted-foreground)",
+                          }}
+                        >
+                          Scan QR code to pay via e-wallet ·{" "}
+                          <CurrencyDisplay amount={invoice.balance_due} />
+                        </p>
+                      </div>
+                    )}
                 </article>
               ))}
             </div>
