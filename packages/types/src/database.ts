@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,11 +7,6 @@ export type Json =
   | Json[];
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5";
-  };
   graphql_public: {
     Tables: {
       [_ in never]: never;
@@ -39,6 +34,77 @@ export type Database = {
   };
   public: {
     Tables: {
+      appointment_slots: {
+        Row: {
+          appointment_id: string | null;
+          clinic_service_id: string | null;
+          created_at: string;
+          end_at: string;
+          id: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          service_type: string | null;
+          start_at: string;
+          status: Database["public"]["Enums"]["slot_status"];
+          updated_at: string;
+        };
+        Insert: {
+          appointment_id?: string | null;
+          clinic_service_id?: string | null;
+          created_at?: string;
+          end_at: string;
+          id?: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          service_type?: string | null;
+          start_at: string;
+          status?: Database["public"]["Enums"]["slot_status"];
+          updated_at?: string;
+        };
+        Update: {
+          appointment_id?: string | null;
+          clinic_service_id?: string | null;
+          created_at?: string;
+          end_at?: string;
+          id?: string;
+          organization_id?: string;
+          practitioner_role_id?: string;
+          service_type?: string | null;
+          start_at?: string;
+          status?: Database["public"]["Enums"]["slot_status"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "appointment_slots_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: true;
+            referencedRelation: "appointments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "appointment_slots_clinic_service_id_fkey";
+            columns: ["clinic_service_id"];
+            isOneToOne: false;
+            referencedRelation: "clinic_services";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "appointment_slots_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "appointment_slots_practitioner_role_id_fkey";
+            columns: ["practitioner_role_id"];
+            isOneToOne: false;
+            referencedRelation: "practitioner_roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       appointments: {
         Row: {
           appointment_type: string | null;
@@ -140,77 +206,6 @@ export type Database = {
           },
         ];
       };
-      appointment_slots: {
-        Row: {
-          appointment_id: string | null;
-          clinic_service_id: string | null;
-          created_at: string;
-          end_at: string;
-          id: string;
-          organization_id: string;
-          practitioner_role_id: string;
-          service_type: string | null;
-          start_at: string;
-          status: Database["public"]["Enums"]["slot_status"];
-          updated_at: string;
-        };
-        Insert: {
-          appointment_id?: string | null;
-          clinic_service_id?: string | null;
-          created_at?: string;
-          end_at: string;
-          id?: string;
-          organization_id: string;
-          practitioner_role_id: string;
-          service_type?: string | null;
-          start_at: string;
-          status?: Database["public"]["Enums"]["slot_status"];
-          updated_at?: string;
-        };
-        Update: {
-          appointment_id?: string | null;
-          clinic_service_id?: string | null;
-          created_at?: string;
-          end_at?: string;
-          id?: string;
-          organization_id?: string;
-          practitioner_role_id?: string;
-          service_type?: string | null;
-          start_at?: string;
-          status?: Database["public"]["Enums"]["slot_status"];
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "appointment_slots_appointment_id_fkey";
-            columns: ["appointment_id"];
-            isOneToOne: true;
-            referencedRelation: "appointments";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "appointment_slots_clinic_service_id_fkey";
-            columns: ["clinic_service_id"];
-            isOneToOne: false;
-            referencedRelation: "clinic_services";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "appointment_slots_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "appointment_slots_practitioner_role_id_fkey";
-            columns: ["practitioner_role_id"];
-            isOneToOne: false;
-            referencedRelation: "practitioner_roles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       audit_log: {
         Row: {
           action: string;
@@ -254,69 +249,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "audit_log_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      clinic_services: {
-        Row: {
-          active: boolean;
-          base_price: number | null;
-          booking_enabled: boolean;
-          code: string;
-          created_at: string;
-          currency: string;
-          description: string | null;
-          duration_minutes: number;
-          id: string;
-          name: string;
-          organization_id: string;
-          owner_practitioner_role_id: string | null;
-          updated_at: string;
-        };
-        Insert: {
-          active?: boolean;
-          base_price?: number | null;
-          booking_enabled?: boolean;
-          code: string;
-          created_at?: string;
-          currency?: string;
-          description?: string | null;
-          duration_minutes?: number;
-          id?: string;
-          name: string;
-          organization_id: string;
-          owner_practitioner_role_id?: string | null;
-          updated_at?: string;
-        };
-        Update: {
-          active?: boolean;
-          base_price?: number | null;
-          booking_enabled?: boolean;
-          code?: string;
-          created_at?: string;
-          currency?: string;
-          description?: string | null;
-          duration_minutes?: number;
-          id?: string;
-          name?: string;
-          organization_id?: string;
-          owner_practitioner_role_id?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "clinic_services_owner_practitioner_role_id_fkey";
-            columns: ["owner_practitioner_role_id"];
-            isOneToOne: false;
-            referencedRelation: "practitioner_roles";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "clinic_services_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -417,6 +349,69 @@ export type Database = {
           },
         ];
       };
+      clinic_services: {
+        Row: {
+          active: boolean;
+          base_price: number | null;
+          booking_enabled: boolean;
+          code: string;
+          created_at: string;
+          currency: string;
+          description: string | null;
+          duration_minutes: number;
+          id: string;
+          name: string;
+          organization_id: string;
+          owner_practitioner_role_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          base_price?: number | null;
+          booking_enabled?: boolean;
+          code: string;
+          created_at?: string;
+          currency?: string;
+          description?: string | null;
+          duration_minutes?: number;
+          id?: string;
+          name: string;
+          organization_id: string;
+          owner_practitioner_role_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          base_price?: number | null;
+          booking_enabled?: boolean;
+          code?: string;
+          created_at?: string;
+          currency?: string;
+          description?: string | null;
+          duration_minutes?: number;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          owner_practitioner_role_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_services_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinic_services_owner_practitioner_role_id_fkey";
+            columns: ["owner_practitioner_role_id"];
+            isOneToOne: false;
+            referencedRelation: "practitioner_roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       coverages: {
         Row: {
           beneficiary_relationship: string | null;
@@ -476,6 +471,102 @@ export type Database = {
             columns: ["patient_id"];
             isOneToOne: false;
             referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      department_stock: {
+        Row: {
+          created_at: string;
+          department_id: string;
+          id: string;
+          item_id: string;
+          organization_id: string;
+          quantity: number;
+          reorder_level: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          department_id: string;
+          id?: string;
+          item_id: string;
+          organization_id: string;
+          quantity?: number;
+          reorder_level?: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          department_id?: string;
+          id?: string;
+          item_id?: string;
+          organization_id?: string;
+          quantity?: number;
+          reorder_level?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "department_stock_department_id_organization_id_fkey";
+            columns: ["department_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "departments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "department_stock_item_id_organization_id_fkey";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "department_stock_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      departments: {
+        Row: {
+          active: boolean;
+          code: string;
+          created_at: string;
+          description: string | null;
+          id: string;
+          name: string;
+          organization_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          code: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          name: string;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          code?: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "departments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];
@@ -778,6 +869,231 @@ export type Database = {
         };
         Relationships: [];
       };
+      inventory_items: {
+        Row: {
+          active: boolean;
+          created_at: string;
+          currency: string;
+          description: string | null;
+          id: string;
+          name: string;
+          organization_id: string;
+          sku: string;
+          unit_of_measure: string;
+          unit_price: number;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          created_at?: string;
+          currency?: string;
+          description?: string | null;
+          id?: string;
+          name: string;
+          organization_id: string;
+          sku: string;
+          unit_of_measure: string;
+          unit_price?: number;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          created_at?: string;
+          currency?: string;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          sku?: string;
+          unit_of_measure?: string;
+          unit_price?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_stock_movements: {
+        Row: {
+          created_at: string;
+          department_id: string;
+          id: string;
+          item_id: string;
+          movement_type: string;
+          occurred_at: string;
+          organization_id: string;
+          quantity_delta: number;
+          reason: string | null;
+          recorded_by: string | null;
+          stock_id: string;
+          transfer_group_id: string | null;
+          usage_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          department_id: string;
+          id?: string;
+          item_id: string;
+          movement_type: string;
+          occurred_at?: string;
+          organization_id: string;
+          quantity_delta: number;
+          reason?: string | null;
+          recorded_by?: string | null;
+          stock_id: string;
+          transfer_group_id?: string | null;
+          usage_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          department_id?: string;
+          id?: string;
+          item_id?: string;
+          movement_type?: string;
+          occurred_at?: string;
+          organization_id?: string;
+          quantity_delta?: number;
+          reason?: string | null;
+          recorded_by?: string | null;
+          stock_id?: string;
+          transfer_group_id?: string | null;
+          usage_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_stock_movements_department_id_organization_id_fkey";
+            columns: ["department_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "departments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_stock_movements_item_id_organization_id_fkey";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_stock_movements_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_stock_movements_stock_id_organization_id_fkey";
+            columns: ["stock_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "department_stock";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_stock_movements_usage_id_fkey";
+            columns: ["usage_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_usages";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_usages: {
+        Row: {
+          created_at: string;
+          currency: string;
+          department_id: string;
+          encounter_id: string;
+          id: string;
+          item_id: string;
+          organization_id: string;
+          patient_id: string;
+          quantity: number;
+          stock_id: string;
+          tagged_by: string;
+          unit_price: number;
+          used_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          currency: string;
+          department_id: string;
+          encounter_id: string;
+          id?: string;
+          item_id: string;
+          organization_id: string;
+          patient_id: string;
+          quantity: number;
+          stock_id: string;
+          tagged_by: string;
+          unit_price: number;
+          used_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          currency?: string;
+          department_id?: string;
+          encounter_id?: string;
+          id?: string;
+          item_id?: string;
+          organization_id?: string;
+          patient_id?: string;
+          quantity?: number;
+          stock_id?: string;
+          tagged_by?: string;
+          unit_price?: number;
+          used_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_usages_department_id_organization_id_fkey";
+            columns: ["department_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "departments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_usages_encounter_id_fkey";
+            columns: ["encounter_id"];
+            isOneToOne: false;
+            referencedRelation: "encounters";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_usages_item_id_organization_id_fkey";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_usages_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_usages_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_usages_stock_id_organization_id_fkey";
+            columns: ["stock_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "department_stock";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       medication_requests: {
         Row: {
           authored_on: string;
@@ -1015,6 +1331,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      patient_clinic_contexts: {
+        Row: {
+          auth_user_id: string;
+          created_at: string;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          auth_user_id: string;
+          created_at?: string;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          auth_user_id?: string;
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "patient_clinic_contexts_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       patients: {
         Row: {
           active: boolean;
@@ -1086,37 +1434,26 @@ export type Database = {
           },
         ];
       };
-      patient_clinic_contexts: {
+      platform_admins: {
         Row: {
-          auth_user_id: string;
-          created_at: string;
+          granted_at: string;
+          granted_by: string;
           id: string;
-          organization_id: string;
-          updated_at: string;
+          user_id: string;
         };
         Insert: {
-          auth_user_id: string;
-          created_at?: string;
+          granted_at?: string;
+          granted_by: string;
           id?: string;
-          organization_id: string;
-          updated_at?: string;
+          user_id: string;
         };
         Update: {
-          auth_user_id?: string;
-          created_at?: string;
+          granted_at?: string;
+          granted_by?: string;
           id?: string;
-          organization_id?: string;
-          updated_at?: string;
+          user_id?: string;
         };
-        Relationships: [
-          {
-            foreignKeyName: "patient_clinic_contexts_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-        ];
+        Relationships: [];
       };
       practitioner_roles: {
         Row: {
@@ -1225,6 +1562,64 @@ export type Database = {
           },
         ];
       };
+      provider_weekly_availability: {
+        Row: {
+          clinic_service_id: string;
+          created_at: string;
+          day_of_week: number;
+          end_time: string;
+          id: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          start_time: string;
+          updated_at: string;
+        };
+        Insert: {
+          clinic_service_id: string;
+          created_at?: string;
+          day_of_week: number;
+          end_time: string;
+          id?: string;
+          organization_id: string;
+          practitioner_role_id: string;
+          start_time: string;
+          updated_at?: string;
+        };
+        Update: {
+          clinic_service_id?: string;
+          created_at?: string;
+          day_of_week?: number;
+          end_time?: string;
+          id?: string;
+          organization_id?: string;
+          practitioner_role_id?: string;
+          start_time?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_weekly_availability_clinic_service_id_fkey";
+            columns: ["clinic_service_id"];
+            isOneToOne: false;
+            referencedRelation: "clinic_services";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_weekly_availability_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_weekly_availability_practitioner_role_id_fkey";
+            columns: ["practitioner_role_id"];
+            isOneToOne: false;
+            referencedRelation: "practitioner_roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       role_permissions: {
         Row: {
           created_at: string;
@@ -1287,6 +1682,48 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      staff_department_assignments: {
+        Row: {
+          created_at: string;
+          department_id: string;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          department_id: string;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          department_id?: string;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_department_assignments_department_id_organization_id_fkey";
+            columns: ["department_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "departments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "staff_department_assignments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       service_requests: {
         Row: {
@@ -1400,6 +1837,48 @@ export type Database = {
           },
         ];
       };
+      user_roles: {
+        Row: {
+          created_at: string;
+          id: string;
+          organization_id: string;
+          role_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          organization_id: string;
+          role_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          role_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_roles_role_id_fkey";
+            columns: ["role_id"];
+            isOneToOne: false;
+            referencedRelation: "roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       waiting_room_queue: {
         Row: {
           appointment_id: string;
@@ -1451,127 +1930,6 @@ export type Database = {
           },
         ];
       };
-      user_roles: {
-        Row: {
-          created_at: string;
-          id: string;
-          organization_id: string;
-          role_id: string;
-          updated_at: string;
-          user_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          id?: string;
-          organization_id: string;
-          role_id: string;
-          updated_at?: string;
-          user_id: string;
-        };
-        Update: {
-          created_at?: string;
-          id?: string;
-          organization_id?: string;
-          role_id?: string;
-          updated_at?: string;
-          user_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "user_roles_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "user_roles_role_id_fkey";
-            columns: ["role_id"];
-            isOneToOne: false;
-            referencedRelation: "roles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      platform_admins: {
-        Row: {
-          granted_at: string;
-          granted_by: string;
-          id: string;
-          user_id: string;
-        };
-        Insert: {
-          granted_at?: string;
-          granted_by: string;
-          id?: string;
-          user_id: string;
-        };
-        Update: {
-          granted_at?: string;
-          granted_by?: string;
-          id?: string;
-          user_id?: string;
-        };
-        Relationships: [];
-      };
-      provider_weekly_availability: {
-        Row: {
-          clinic_service_id: string;
-          created_at: string;
-          day_of_week: number;
-          end_time: string;
-          id: string;
-          organization_id: string;
-          practitioner_role_id: string;
-          start_time: string;
-          updated_at: string;
-        };
-        Insert: {
-          clinic_service_id: string;
-          created_at?: string;
-          day_of_week: number;
-          end_time: string;
-          id?: string;
-          organization_id: string;
-          practitioner_role_id: string;
-          start_time: string;
-          updated_at?: string;
-        };
-        Update: {
-          clinic_service_id?: string;
-          created_at?: string;
-          day_of_week?: number;
-          end_time?: string;
-          id?: string;
-          organization_id?: string;
-          practitioner_role_id?: string;
-          start_time?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "provider_weekly_availability_clinic_service_id_fkey";
-            columns: ["clinic_service_id"];
-            isOneToOne: false;
-            referencedRelation: "clinic_services";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "provider_weekly_availability_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "provider_weekly_availability_practitioner_role_id_fkey";
-            columns: ["practitioner_role_id"];
-            isOneToOne: false;
-            referencedRelation: "practitioner_roles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
     };
     Views: {
       [_ in never]: never;
@@ -1580,7 +1938,7 @@ export type Database = {
       add_soap_note: {
         Args: {
           p_encounter_id: string;
-          p_supersedes_id?: string | null;
+          p_supersedes_id?: string;
           p_text: string;
         };
         Returns: string;
@@ -1589,45 +1947,47 @@ export type Database = {
         Args: {
           p_encounter_id: string;
           p_section: string;
-          p_supersedes_id?: string | null;
+          p_supersedes_id?: string;
           p_text: string;
         };
         Returns: string;
       };
-      finish_clinical_encounter: {
-        Args: { p_encounter_id: string };
-        Returns: undefined;
-      };
-      issue_medical_certificate: {
+      adjust_department_stock: {
         Args: {
-          p_encounter_id: string;
-          p_statement: string;
-          p_title: string;
+          p_department_id: string;
+          p_item_id: string;
+          p_movement_type?: string;
+          p_quantity_delta: number;
+          p_reason: string;
         };
         Returns: string;
-      };
-      issue_prescription: {
-        Args: {
-          p_dosage: string;
-          p_encounter_id: string;
-          p_medication: string;
-          p_note?: string | null;
-        };
-        Returns: string;
-      };
-      update_own_patient_profile: {
-        Args: {
-          p_address: string;
-          p_birth_date: string | null;
-          p_display_name: string;
-          p_gender: string | null;
-          p_patient_id: string;
-          p_phone: string;
-        };
-        Returns: undefined;
       };
       book_appointment_slot: {
-        Args: { p_patient_id?: string | null; p_slot_id: string };
+        Args: { p_patient_id?: string; p_slot_id: string };
+        Returns: string;
+      };
+      can_access_organization: {
+        Args: { target_organization_id: string };
+        Returns: boolean;
+      };
+      can_manage_organization_accounts: {
+        Args: { p_organization_id: string };
+        Returns: boolean;
+      };
+      assign_staff_department: {
+        Args: {
+          p_department_id: string | null;
+          p_organization_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
+      claim_walk_in_patient: {
+        Args: {
+          p_organization_id: string;
+          p_pin: string;
+          p_walk_in_id: string;
+        };
         Returns: string;
       };
       create_appointment_slot: {
@@ -1646,51 +2006,10 @@ export type Database = {
         };
         Returns: number;
       };
-      save_provider_weekly_availability: {
-        Args: { p_clinic_service_id: string; p_windows: Json };
-        Returns: number;
-      };
-      save_provider_clinic_service: {
-        Args: {
-          p_base_price: number | null;
-          p_booking_enabled: boolean;
-          p_code: string;
-          p_description: string;
-          p_duration_minutes: number;
-          p_name: string;
-          p_organization_id: string;
-          p_service_id: string | null;
-        };
-        Returns: string;
-      };
-      retire_provider_clinic_service: {
-        Args: { p_service_id: string };
-        Returns: undefined;
-      };
-      enroll_patient_at_clinic: {
-        Args: { p_display_name: string; p_organization_id: string };
-        Returns: string;
-      };
-      can_access_organization: {
-        Args: { target_organization_id: string };
-        Returns: boolean;
-      };
-      can_manage_organization_accounts: {
-        Args: { p_organization_id: string };
-        Returns: boolean;
-      };
-      claim_walk_in_patient: {
-        Args: {
-          p_organization_id: string;
-          p_pin: string;
-          p_walk_in_id: string;
-        };
-        Returns: string;
-      };
       create_walk_in_patient: {
         Args: {
-          p_birth_date?: string | null;
-          p_gender?: string | null;
+          p_birth_date?: string;
+          p_gender?: string;
           p_name: Json;
           p_organization_id: string;
           p_telecom?: Json;
@@ -1700,6 +2019,154 @@ export type Database = {
           pin: string;
           walk_in_id: string;
         }[];
+      };
+      enroll_patient_at_clinic: {
+        Args: { p_display_name: string; p_organization_id: string };
+        Returns: string;
+      };
+      finish_clinical_encounter: {
+        Args: { p_encounter_id: string };
+        Returns: undefined;
+      };
+      get_current_practitioner: {
+        Args: { p_organization_id: string; p_roles: string[] };
+        Returns: string;
+      };
+      get_current_provider_role_id: {
+        Args: { p_organization_id: string };
+        Returns: string;
+      };
+      get_current_staff_organization: { Args: never; Returns: string };
+      get_current_staff_department: {
+        Args: { p_organization_id: string };
+        Returns: string | null;
+      };
+      get_portal_access: {
+        Args: { p_portal: string };
+        Returns: {
+          is_allowed: boolean;
+          is_superadmin: boolean;
+          organization_ids: string[];
+          role_codes: string[];
+        }[];
+      };
+      has_organization_permission: {
+        Args: { target_organization_id: string; target_permission: string };
+        Returns: boolean;
+      };
+      has_organization_role: {
+        Args: { allowed_roles: string[]; target_organization_id: string };
+        Returns: boolean;
+      };
+      is_active_staff: { Args: never; Returns: boolean };
+      is_any_owner: { Args: never; Returns: boolean };
+      is_patient_self: {
+        Args: { target_organization_id: string; target_patient_id: string };
+        Returns: boolean;
+      };
+      is_superadmin: { Args: never; Returns: boolean };
+      is_walk_in_patient: {
+        Args: { target_organization_id: string; target_patient_id: string };
+        Returns: boolean;
+      };
+      issue_medical_certificate: {
+        Args: { p_encounter_id: string; p_statement: string; p_title: string };
+        Returns: string;
+      };
+      issue_prescription: {
+        Args: {
+          p_dosage: string;
+          p_encounter_id: string;
+          p_medication: string;
+          p_note?: string;
+        };
+        Returns: string;
+      };
+      list_inventory_encounters: {
+        Args: { p_organization_id: string };
+        Returns: {
+          id: string;
+          period_start: string;
+          service_type: string;
+        }[];
+      };
+      list_clinic_staff: {
+        Args: { p_organization_id: string };
+        Returns: {
+          active: boolean;
+          department_id: string | null;
+          display_name: string;
+          email: string | null;
+          role_code: string;
+          user_id: string;
+        }[];
+      };
+      list_staff_departments: {
+        Args: { p_organization_id: string };
+        Returns: {
+          active: boolean;
+          code: string;
+          id: string;
+          name: string;
+        }[];
+      };
+      retire_provider_clinic_service: {
+        Args: { p_service_id: string };
+        Returns: undefined;
+      };
+      record_triage_vital_signs: {
+        Args: {
+          p_acuity?: string;
+          p_appointment_id: string;
+          p_chief_complaint?: string;
+          p_diastolic_bp: number;
+          p_height_cm?: number;
+          p_notes?: string;
+          p_oxygen_saturation: number;
+          p_pain_score?: number;
+          p_pulse_bpm: number;
+          p_respiratory_rate: number;
+          p_supersedes_id?: string;
+          p_systolic_bp: number;
+          p_temperature_c: number;
+          p_weight_kg?: number;
+        };
+        Returns: string;
+      };
+      list_clinic_role_definitions: {
+        Args: { p_organization_id: string };
+        Returns: {
+          code: string;
+          is_custom: boolean;
+          name: string;
+          permissions: string[];
+        }[];
+      };
+      save_provider_clinic_service: {
+        Args: {
+          p_base_price: number;
+          p_booking_enabled: boolean;
+          p_code: string;
+          p_description: string;
+          p_duration_minutes: number;
+          p_name: string;
+          p_organization_id: string;
+          p_service_id: string;
+        };
+        Returns: string;
+      };
+      save_clinic_role_definition: {
+        Args: {
+          p_code: string;
+          p_name: string;
+          p_organization_id: string;
+          p_permissions: string[];
+        };
+        Returns: undefined;
+      };
+      save_provider_weekly_availability: {
+        Args: { p_clinic_service_id: string; p_windows: Json };
+        Returns: number;
       };
       set_appointment_slot_unavailable: {
         Args: { p_slot_id: string; p_unavailable: boolean };
@@ -1713,6 +2180,25 @@ export type Database = {
         Args: { p_appointment_id: string };
         Returns: string;
       };
+      tag_inventory_usage: {
+        Args: {
+          p_department_id?: string | null;
+          p_encounter_id: string;
+          p_quantity: number;
+          p_stock_id: string;
+        };
+        Returns: string;
+      };
+      transfer_department_stock: {
+        Args: {
+          p_from_department_id: string;
+          p_item_id: string;
+          p_quantity: number;
+          p_reason: string;
+          p_to_department_id: string;
+        };
+        Returns: string;
+      };
       update_appointment_status: {
         Args: {
           p_appointment_id: string;
@@ -1720,45 +2206,16 @@ export type Database = {
         };
         Returns: undefined;
       };
-      enforce_clinical_tenant_integrity: {
-        Args: Record<PropertyKey, never>;
-        Returns: unknown;
-      };
-      get_current_staff_organization: {
-        Args: Record<PropertyKey, never>;
-        Returns: string | null;
-      };
-      get_current_provider_role_id: {
-        Args: { p_organization_id: string };
-        Returns: string | null;
-      };
-      get_portal_access: {
-        Args: { p_portal: string };
-        Returns: {
-          is_allowed: boolean;
-          is_superadmin: boolean;
-          organization_ids: string[];
-          role_codes: string[];
-        }[];
-      };
-      has_organization_role: {
-        Args: { allowed_roles: string[]; target_organization_id: string };
-        Returns: boolean;
-      };
-      is_active_staff: { Args: Record<PropertyKey, never>; Returns: boolean };
-      is_superadmin: { Args: Record<PropertyKey, never>; Returns: boolean };
-      is_any_owner: { Args: Record<PropertyKey, never>; Returns: boolean };
-      is_patient_self: {
-        Args: { target_organization_id: string; target_patient_id: string };
-        Returns: boolean;
-      };
-      is_walk_in_patient: {
-        Args: { target_organization_id: string; target_patient_id: string };
-        Returns: boolean;
-      };
-      protect_patient_identity: {
-        Args: Record<PropertyKey, never>;
-        Returns: unknown;
+      update_own_patient_profile: {
+        Args: {
+          p_address: string;
+          p_birth_date: string;
+          p_display_name: string;
+          p_gender: string;
+          p_patient_id: string;
+          p_phone: string;
+        };
+        Returns: undefined;
       };
       verify_walk_in_patient: {
         Args: {
@@ -2018,6 +2475,14 @@ export const Constants = {
         "busy_unavailable",
         "busy_tentative",
         "entered_in_error",
+      ],
+      waiting_queue_stage: [
+        "scheduled",
+        "waiting",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "noshow",
       ],
     },
   },

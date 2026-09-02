@@ -7,16 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const assignableRoles = [
+const builtInRoles = [
   "admin",
   "doctor",
   "nurse",
   "lab_staff",
   "specialist",
   "front_desk",
+  "inventory_staff",
 ] as const;
-
-type AssignableRole = (typeof assignableRoles)[number];
 
 type CreateClinicUserRequest = {
   display_name?: unknown;
@@ -33,8 +32,8 @@ function response(body: Record<string, unknown>, status: number): Response {
   });
 }
 
-function isAssignableRole(value: unknown): value is AssignableRole {
-  return typeof value === "string" && assignableRoles.includes(value as AssignableRole);
+function isRoleCode(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z][a-z0-9_]{1,39}$/.test(value);
 }
 
 Deno.serve(async (request) => {
@@ -55,7 +54,8 @@ Deno.serve(async (request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data: callerIdentity, error: callerError } = await admin.auth.getUser(token);
+  const { data: callerIdentity, error: callerError } =
+    await admin.auth.getUser(token);
   if (callerError || !callerIdentity.user)
     return response({ error: "Authentication is required." }, 401);
 
@@ -66,12 +66,14 @@ Deno.serve(async (request) => {
     return response({ error: "Invalid request." }, 400);
   }
 
-  const displayName = typeof body.display_name === "string" ? body.display_name.trim() : "";
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const displayName =
+    typeof body.display_name === "string" ? body.display_name.trim() : "";
+  const email =
+    typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
   if (
     typeof body.organization_id !== "string" ||
-    !isAssignableRole(body.role_code) ||
+    !isRoleCode(body.role_code) ||
     displayName.length < 2 ||
     displayName.length > 120 ||
     !/^\S+@\S+\.\S+$/.test(email) ||
@@ -91,34 +93,65 @@ Deno.serve(async (request) => {
     { p_organization_id: body.organization_id },
   );
   if (authorizationError || !canManage)
-    return response({ error: "You cannot manage accounts for this clinic." }, 403);
+    return response(
+      { error: "You cannot manage accounts for this clinic." },
+      403,
+    );
 
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { display_name: displayName },
-  });
+  const roleCode = body.role_code;
+  const isBuiltInRole = builtInRoles.includes(
+    roleCode as (typeof builtInRoles)[number],
+  );
+  if (!isBuiltInRole) {
+    const { data: roleDefinition, error: roleDefinitionError } = await admin
+      .from("clinic_role_definitions")
+      .select("code, active")
+      .eq("organization_id", body.organization_id)
+      .eq("code", roleCode)
+      .single();
+    if (roleDefinitionError || !roleDefinition?.active)
+      return response({ error: "Select an active role for this clinic." }, 400);
+  }
+
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: displayName },
+    });
   if (createError || !created.user) {
-    const status = createError?.message.toLowerCase().includes("already") ? 409 : 503;
-    return response({ error: status === 409 ? "An account with that email already exists." : "Unable to create the account." }, status);
+    const status = createError?.message.toLowerCase().includes("already")
+      ? 409
+      : 503;
+    return response(
+      {
+        error:
+          status === 409
+            ? "An account with that email already exists."
+            : "Unable to create the account.",
+      },
+      status,
+    );
   }
 
   let assignmentError: { message: string } | null = null;
-  if (body.role_code === "admin") {
+  if (roleCode === "admin") {
     const { data: role, error: roleError } = await admin
       .from("roles")
       .select("id")
       .eq("name", "admin")
       .single();
-    if (roleError || !role) assignmentError = { message: "Admin role is unavailable." };
+    if (roleError || !role)
+      assignmentError = { message: "Admin role is unavailable." };
     else {
       const { error } = await admin.from("user_roles").insert({
         organization_id: body.organization_id,
         role_id: role.id,
         user_id: created.user.id,
       });
-      if (error) assignmentError = { message: "Could not assign the admin role." };
+      if (error)
+        assignmentError = { message: "Could not assign the admin role." };
     }
   } else {
     const { data: practitioner, error: practitionerError } = await admin
@@ -130,14 +163,16 @@ Deno.serve(async (request) => {
       })
       .select("id")
       .single();
-    if (practitionerError || !practitioner) assignmentError = { message: "Could not create the staff profile." };
+    if (practitionerError || !practitioner)
+      assignmentError = { message: "Could not create the staff profile." };
     else {
       const { error } = await admin.from("practitioner_roles").insert({
         organization_id: body.organization_id,
         practitioner_id: practitioner.id,
-        role_code: body.role_code,
+        role_code: roleCode,
       });
-      if (error) assignmentError = { message: "Could not assign the staff role." };
+      if (error)
+        assignmentError = { message: "Could not assign the staff role." };
     }
   }
 
@@ -147,7 +182,11 @@ Deno.serve(async (request) => {
   }
 
   return response(
-    { id: created.user.id, email: created.user.email, role_code: body.role_code },
+    {
+      id: created.user.id,
+      email: created.user.email,
+      role_code: roleCode,
+    },
     201,
   );
 });

@@ -21,6 +21,14 @@ export type PlatformAdminRow = DatabaseRow<"platform_admins">;
 export type ProviderWeeklyAvailabilityRow =
   DatabaseRow<"provider_weekly_availability">;
 export type WaitingRoomQueueRow = DatabaseRow<"waiting_room_queue">;
+export type DepartmentRow = DatabaseRow<"departments">;
+export type InventoryItemRow = DatabaseRow<"inventory_items">;
+export type DepartmentStockRow = DatabaseRow<"department_stock">;
+export type InventoryUsageRow = DatabaseRow<"inventory_usages">;
+export type InventoryStockMovementRow =
+  DatabaseRow<"inventory_stock_movements">;
+export type StaffDepartmentAssignmentRow =
+  DatabaseRow<"staff_department_assignments">;
 
 export type AppointmentStatus =
   Database["public"]["Enums"]["appointment_status"];
@@ -145,8 +153,7 @@ export interface PortalAccess {
   roleCodes: string[];
 }
 
-export type AssignableClinicAccountRole =
-  "admin" | "doctor" | "nurse" | "lab_staff" | "specialist" | "front_desk";
+export type AssignableClinicAccountRole = string;
 
 export interface ClinicAccountInput {
   displayName: string;
@@ -162,9 +169,29 @@ export interface CreatedClinicAccount {
   roleCode: AssignableClinicAccountRole;
 }
 
+export type ClinicRolePermission =
+  | "can_access_admin_portal"
+  | "can_access_provider_portal"
+  | "can_manage_appointments"
+  | "can_record_triage"
+  | "can_start_consultation"
+  | "can_manage_provider_schedule"
+  | "can_manage_staff_roles"
+  | "can_view_inventory"
+  | "can_manage_inventory"
+  | "can_tag_inventory_usage";
+
+export interface ClinicRoleDefinition {
+  code: string;
+  name: string;
+  isCustom: boolean;
+  permissions: ClinicRolePermission[];
+}
+
 export interface AppointmentQueueItem extends AppointmentSummary {
   encounterStatus: EncounterStatus | null;
   patientName: string;
+  triageStatus: "pending" | "complete";
 }
 
 export type EncounterSummary = Pick<
@@ -238,6 +265,23 @@ export interface SoapNoteInput {
   supersedesId?: string | null;
 }
 
+export interface TriageVitalSignsInput {
+  appointmentId: string;
+  systolicBp: number;
+  diastolicBp: number;
+  pulseBpm: number;
+  respiratoryRate: number;
+  temperatureC: number;
+  oxygenSaturation: number;
+  weightKg?: number | null;
+  heightCm?: number | null;
+  painScore?: number | null;
+  acuity: "routine" | "urgent" | "emergency";
+  chiefComplaint?: string | null;
+  notes?: string | null;
+  supersedesId?: string | null;
+}
+
 export interface PrescriptionInput {
   encounterId: string;
   medication: string;
@@ -249,6 +293,139 @@ export interface MedicalCertificateInput {
   encounterId: string;
   title: string;
   statement: string;
+}
+
+export type DepartmentSummary = Pick<
+  DepartmentRow,
+  "id" | "organization_id" | "code" | "name" | "description" | "active"
+>;
+
+export type InventoryItemSummary = Pick<
+  InventoryItemRow,
+  | "id"
+  | "organization_id"
+  | "sku"
+  | "name"
+  | "description"
+  | "unit_of_measure"
+  | "unit_price"
+  | "currency"
+  | "active"
+>;
+
+export type DepartmentStockSummary = Pick<
+  DepartmentStockRow,
+  | "id"
+  | "organization_id"
+  | "item_id"
+  | "department_id"
+  | "quantity"
+  | "reorder_level"
+  | "updated_at"
+>;
+
+export type InventoryUsageSummary = Pick<
+  InventoryUsageRow,
+  | "id"
+  | "organization_id"
+  | "stock_id"
+  | "item_id"
+  | "department_id"
+  | "encounter_id"
+  | "patient_id"
+  | "quantity"
+  | "unit_price"
+  | "currency"
+  | "tagged_by"
+  | "used_at"
+> & {
+  actorName?: string | null;
+};
+
+export type InventoryStockMovementSummary = Pick<
+  InventoryStockMovementRow,
+  | "id"
+  | "organization_id"
+  | "stock_id"
+  | "item_id"
+  | "department_id"
+  | "movement_type"
+  | "quantity_delta"
+  | "reason"
+  | "usage_id"
+  | "transfer_group_id"
+  | "recorded_by"
+  | "occurred_at"
+> & {
+  actorName?: string | null;
+};
+
+export interface InventoryWorkspace {
+  departments: DepartmentSummary[];
+  items: InventoryItemSummary[];
+  stock: DepartmentStockSummary[];
+  usages: InventoryUsageSummary[];
+  movements: InventoryStockMovementSummary[];
+}
+
+export interface InventoryItemInput {
+  organizationId: string;
+  sku: string;
+  name: string;
+  description?: string;
+  unitOfMeasure: string;
+  unitPrice: number;
+  currency?: string;
+}
+
+export interface DepartmentInput {
+  organizationId: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export interface StockAdjustmentInput {
+  itemId: string;
+  departmentId: string;
+  quantityDelta: number;
+  reason: string;
+  movementType: "opening" | "receipt" | "adjustment";
+}
+
+export interface StockTransferInput {
+  itemId: string;
+  fromDepartmentId: string;
+  toDepartmentId: string;
+  quantity: number;
+  reason: string;
+}
+
+export interface InventoryUsageInput {
+  encounterId: string;
+  stockId: string;
+  quantity: number;
+  departmentId?: string | null;
+}
+
+export interface ClinicStaffMember {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  roleCode: string;
+  departmentId: string | null;
+  active: boolean;
+}
+
+export interface StaffAdministration {
+  departments: DepartmentSummary[];
+  staff: ClinicStaffMember[];
+}
+
+export interface InventoryEncounterOption {
+  id: string;
+  serviceType: string | null;
+  periodStart: string | null;
 }
 
 export interface PatientProfileInput {
@@ -362,6 +539,9 @@ export type FhirResourceType =
   | "ServiceRequest"
   | "DiagnosticReport"
   | "DocumentReference"
+  | "Location"
+  | "InventoryItem"
+  | "SupplyDelivery"
   | "Coverage"
   | "Claim";
 export interface AuditActor {

@@ -10,6 +10,7 @@ import {
   getDailyAppointmentQueue,
   getOrganizationPatients,
   getPortalAccess,
+  hasOrganizationPermission,
   signInWithPassword,
   signOut,
   subscribeToAppointmentQueue,
@@ -49,6 +50,7 @@ export default function Home() {
     PublicClinicSummary[]
   >([]);
   const [canManageAccounts, setCanManageAccounts] = useState(false);
+  const [canAccessInventory, setCanAccessInventory] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [appointments, setAppointments] = useState<AppointmentQueueItem[]>([]);
   const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
@@ -141,11 +143,7 @@ export default function Home() {
 
     setSignedInAs(emailAddress);
     setIsPlatformAdmin(accessResult.data.isSuperadmin);
-    setCanManageAccounts(
-      accessResult.data.roleCodes.some(
-        (role) => role === "admin" || role === "owner",
-      ),
-    );
+    setCanManageAccounts(false);
     if (accessResult.data.isSuperadmin) {
       setAccessibleClinics([]);
       setOrganizationId(null);
@@ -165,6 +163,33 @@ export default function Home() {
     }
     setAccessibleClinics(clinicResult.data);
     const firstClinicId = clinicResult.data[0].id;
+    const [inventoryPermission, schedulePermission, staffPermission] =
+      await Promise.all([
+        hasOrganizationPermission(client, firstClinicId, "can_view_inventory"),
+        hasOrganizationPermission(
+          client,
+          firstClinicId,
+          "can_manage_appointments",
+        ),
+        hasOrganizationPermission(
+          client,
+          firstClinicId,
+          "can_manage_staff_roles",
+        ),
+      ]);
+    const canUseSchedule = !schedulePermission.error && schedulePermission.data;
+    if (
+      !canUseSchedule &&
+      !inventoryPermission.error &&
+      inventoryPermission.data
+    ) {
+      window.location.assign("/inventory");
+      return;
+    }
+    setCanAccessInventory(
+      !inventoryPermission.error && inventoryPermission.data,
+    );
+    setCanManageAccounts(!staffPermission.error && staffPermission.data);
     setOrganizationId(firstClinicId);
     setStatus("Signed in. Loading your clinic schedule.");
     await loadSchedule(firstClinicId);
@@ -266,6 +291,7 @@ export default function Home() {
     setAccessibleClinics([]);
     setIsPlatformAdmin(false);
     setCanManageAccounts(false);
+    setCanAccessInventory(false);
     setAppointments([]);
     setSlots([]);
     setPatients([]);
@@ -343,6 +369,7 @@ export default function Home() {
                 </Link>
               )}
               {canManageAccounts && <Link href="/staff">Staff accounts</Link>}
+              {canAccessInventory && <Link href="/inventory">Inventory</Link>}
               <Button onClick={() => void loadSchedule()}>Refresh</Button>{" "}
               <Button variant="secondary" onClick={handleSignOut}>
                 Sign out

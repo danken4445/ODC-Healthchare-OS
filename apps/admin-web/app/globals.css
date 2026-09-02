@@ -1,1 +1,233 @@
 @import "@odyssey/ui/styles.css";
+
+/* ── Inventory Login ──────────────────────────────────────────── */
+.inv-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f6f8fc 0%, #e4ecf7 100%);
+}
+.inv-login__card {
+  width: 100%;
+  max-width: 28rem;
+  padding: 2.5rem;
+  background: var(--odyssey-card);
+  border-radius: calc(var(--odyssey-radius) * 2);
+  box-shadow: 0 12px 40px #15203a18;
+}
+.inv-login__header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.inv-login__icon {
+  display: block;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+.inv-login__header h1 {
+  font-size: 1.4rem;
+}
+.inv-login__status {
+  text-align: center;
+  margin-top: 1rem;
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.85rem;
+}
+
+/* ── Dashboard shell ──────────────────────────────────────────── */
+.inv-dashboard {
+  max-width: 72rem;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--odyssey-card);
+  border-radius: calc(var(--odyssey-radius) * 2);
+  box-shadow: 0 8px 30px #15203a14;
+}
+
+/* ── Header ───────────────────────────────────────────────────── */
+.inv-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.inv-header__left h1 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.inv-header__clinic {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--odyssey-muted-foreground);
+}
+.inv-header__right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.inv-header__user {
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.85rem;
+}
+
+/* ── Clinic picker ────────────────────────────────────────────── */
+.inv-clinic-picker {
+  margin-bottom: 1.5rem;
+}
+
+/* ── KPI cards ────────────────────────────────────────────────── */
+.inv-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.inv-kpi-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.2rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  background: var(--odyssey-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.inv-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--odyssey-primary) 30%, transparent);
+  box-shadow: 0 4px 12px #15203a0a;
+}
+.inv-kpi-card__icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.inv-kpi-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.inv-kpi-card__value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--odyssey-foreground);
+  line-height: 1.2;
+}
+.inv-kpi-card__label {
+  font-size: 0.78rem;
+  color: var(--odyssey-muted-foreground);
+  font-weight: 500;
+}
+.inv-kpi-card--alert .inv-kpi-card__value {
+  color: #b45309;
+}
+.inv-kpi-card--value .inv-kpi-card__value {
+  font-size: 1.15rem;
+}
+
+/* ── Stock table details ──────────────────────────────────────── */
+.inv-sku {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--odyssey-primary);
+  background: color-mix(in srgb, var(--odyssey-primary) 8%, transparent);
+}
+.inv-dept-badge {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.inv-quantity {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.inv-filter {
+  min-width: 12rem;
+}
+.inv-actor-name {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--odyssey-foreground);
+}
+
+/* ── Delta colors ─────────────────────────────────────────────── */
+.inv-delta--positive {
+  color: #166534;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.inv-delta--negative {
+  color: #991b1b;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tag form ─────────────────────────────────────────────────── */
+.inv-tag-form {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr 0.6fr auto;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+/* ── Status bar ───────────────────────────────────────────────── */
+.inv-status {
+  margin-top: 2rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--odyssey-radius);
+  background: var(--odyssey-muted);
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.85rem;
+}
+
+/* ── Inventory forms (legacy support) ─────────────────────────── */
+.inventory-forms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.inventory-forms h3 {
+  margin-top: 0;
+}
+.inventory-tag-form {
+  grid-template-columns: 1.2fr 1.5fr 0.6fr auto;
+  align-items: end;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  .inv-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .inv-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .inv-tag-form,
+  .inventory-forms,
+  .inventory-tag-form {
+    grid-template-columns: 1fr;
+  }
+  .inv-dashboard {
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .inv-header {
+    flex-direction: column;
+  }
+  .inv-header__right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

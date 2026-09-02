@@ -36,3 +36,9 @@
 - [ ] Apply `20260901000900_clinical_documentation_loop.sql` and regenerate database types from the linked project.
 - [ ] Run `supabase/validation/loop2_clinical_documentation.sql` and the two-clinic RLS suite.
 - [ ] Run the Playwright clinical flow and confirm SOAP notes, prescriptions, certificates, encounter completion, and profile changes arrive in the patient portal without refresh.
+
+## Loop 3 staging verification
+
+- [ ] Apply `20260902000100_inventory_consumables_loop.sql`, deploy the updated `create-clinic-user` function, and regenerate database types from staging.
+- [ ] Run `supabase/validation/loop3_inventory_consumables.sql` and confirm every inventory permission, atomic stock, and two-clinic isolation result is `true`.
+- [ ] Run the Playwright cross-role flow and confirm provider usage tagging decrements the inventory workspace without refresh.

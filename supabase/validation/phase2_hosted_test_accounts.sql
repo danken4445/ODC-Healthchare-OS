@@ -7,6 +7,7 @@
 --   frontdesk@odc.com
 --   admin@odc.com
 --   lab@odc.com
+--   inventory@odc.com
 --   patient@synthetic.odyssey.test
 --
 -- Then run this file in Dashboard > SQL Editor. It only links the already
@@ -25,7 +26,8 @@ with staff(email, role_code, display_name) as (
     ('nurse@odc.com', 'nurse', 'Synthetic Nurse'),
     ('frontdesk@odc.com', 'front_desk', 'Synthetic Front Desk'),
     ('admin@odc.com', 'admin', 'Synthetic Administrator'),
-    ('lab@odc.com', 'lab_staff', 'Synthetic Lab Staff')
+    ('lab@odc.com', 'lab_staff', 'Synthetic Lab Staff'),
+    ('inventory@odc.com', 'inventory_staff', 'Synthetic Inventory Staff')
 ), linked_practitioners as (
   insert into public.practitioners (organization_id, auth_user_id, name)
   select '10000000-0000-0000-0000-000000000001', user_account.id,

@@ -4,31 +4,103 @@ import {
   createBrowserSupabaseClient,
   createClinicAccount,
   getAccessibleOrganizations,
+  getClinicRoleDefinitions,
+  getStaffAdministration,
   getCurrentUserEmail,
   getPortalAccess,
+  hasOrganizationPermission,
+  assignStaffDepartment,
+  saveClinicRoleDefinition,
 } from "@odyssey/supabase-client";
 import type {
   AssignableClinicAccountRole,
+  ClinicRoleDefinition,
+  ClinicRolePermission,
+  ClinicStaffMember,
+  DepartmentSummary,
   PublicClinicSummary,
 } from "@odyssey/types";
 import { Button, Field, Input } from "@odyssey/ui";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
-const roles: Array<{ value: AssignableClinicAccountRole; label: string }> = [
-  { value: "admin", label: "Clinic administrator" },
-  { value: "front_desk", label: "Front desk" },
-  { value: "doctor", label: "Doctor" },
-  { value: "nurse", label: "Nurse" },
-  { value: "lab_staff", label: "Laboratory staff" },
-  { value: "specialist", label: "Specialist" },
+const permissionOptions: Array<{
+  value: ClinicRolePermission;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "can_access_admin_portal",
+    label: "Administrative workspace",
+    hint: "Open the clinic operations workspace.",
+  },
+  {
+    value: "can_manage_appointments",
+    label: "Appointments",
+    hint: "Schedule, check in, cancel, and mark no-shows.",
+  },
+  {
+    value: "can_access_provider_portal",
+    label: "Clinical workspace",
+    hint: "Open the provider and triage workspace.",
+  },
+  {
+    value: "can_record_triage",
+    label: "Triage",
+    hint: "Record vital signs and complete triage.",
+  },
+  {
+    value: "can_start_consultation",
+    label: "Consultations",
+    hint: "Start assigned, triage-complete consultations.",
+  },
+  {
+    value: "can_manage_provider_schedule",
+    label: "Provider schedule",
+    hint: "Maintain bookable availability and services.",
+  },
+  {
+    value: "can_manage_staff_roles",
+    label: "Staff and roles",
+    hint: "Create staff accounts and manage role access.",
+  },
+  {
+    value: "can_view_inventory",
+    label: "View inventory",
+    hint: "Open stock visibility screens.",
+  },
+  {
+    value: "can_manage_inventory",
+    label: "Manage inventory",
+    hint: "Adjust stock and departments.",
+  },
+  {
+    value: "can_tag_inventory_usage",
+    label: "Tag consumables",
+    hint: "Record consumables against encounters.",
+  },
 ];
+
+const portalPermissions = permissionOptions.filter((permission) =>
+  ["can_access_admin_portal", "can_access_provider_portal"].includes(
+    permission.value,
+  ),
+);
+const featurePermissions = permissionOptions.filter(
+  (permission) => !portalPermissions.includes(permission),
+);
 
 export default function StaffAdministrationPage() {
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [roles, setRoles] = useState<ClinicRoleDefinition[]>([]);
+  const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
+  const [staff, setStaff] = useState<ClinicStaffMember[]>([]);
+  const [editingRole, setEditingRole] = useState<ClinicRoleDefinition | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState("Checking administrative access.");
 
@@ -40,11 +112,7 @@ export default function StaffAdministrationPage() {
         getPortalAccess(client, "admin"),
       ]);
       const canManage = Boolean(
-        accessResult.data?.allowed &&
-        !accessResult.data.isSuperadmin &&
-        accessResult.data.roleCodes.some(
-          (role) => role === "admin" || role === "owner",
-        ),
+        accessResult.data?.allowed && !accessResult.data.isSuperadmin,
       );
       if (
         userResult.error ||
@@ -70,12 +138,75 @@ export default function StaffAdministrationPage() {
       }
       setSignedInAs(userResult.data);
       setClinics(clinicResult.data);
-      setOrganizationId(clinicResult.data[0].id);
+      const firstOrganizationId = clinicResult.data[0].id;
+      const permissionResult = await hasOrganizationPermission(
+        client,
+        firstOrganizationId,
+        "can_manage_staff_roles",
+      );
+      if (permissionResult.error || !permissionResult.data) {
+        setAuthorized(false);
+        setStatus("Your role does not have staff and role management access.");
+        return;
+      }
+      setOrganizationId(firstOrganizationId);
       setAuthorized(true);
-      setStatus("Create an account for one of your assigned clinics.");
+      await loadRoles(firstOrganizationId);
+      await loadStaffAdministration(firstOrganizationId);
+      setStatus("Manage staff accounts and clinic role access.");
     }
     void load();
   }, []);
+
+  async function loadRoles(clinicId = organizationId) {
+    if (!clinicId) return;
+    const result = await getClinicRoleDefinitions(
+      createBrowserSupabaseClient(),
+      clinicId,
+    );
+    if (result.error)
+      return setStatus(`Unable to load roles: ${result.error.message}`);
+    setRoles(result.data);
+  }
+
+  async function loadStaffAdministration(clinicId = organizationId) {
+    if (!clinicId) return;
+    const result = await getStaffAdministration(
+      createBrowserSupabaseClient(),
+      clinicId,
+    );
+    if (result.error)
+      return setStatus(`Unable to load staff assignments: ${result.error.message}`);
+    setDepartments(result.data.departments);
+    setStaff(result.data.staff);
+  }
+
+  async function handleClinicChange(clinicId: string) {
+    setOrganizationId(clinicId);
+    setEditingRole(null);
+    await Promise.all([loadRoles(clinicId), loadStaffAdministration(clinicId)]);
+  }
+
+  async function handleDepartmentAssignment(
+    userId: string,
+    departmentId: string | null,
+  ) {
+    if (!organizationId) return;
+    setSubmitting(true);
+    const result = await assignStaffDepartment(
+      createBrowserSupabaseClient(),
+      { organizationId, userId, departmentId },
+    );
+    setSubmitting(false);
+    if (result.error)
+      return setStatus(`Department assignment failed: ${result.error.message}`);
+    setStaff((current) =>
+      current.map((member) =>
+        member.userId === userId ? { ...member, departmentId } : member,
+      ),
+    );
+    setStatus("Staff department assignment saved.");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,6 +230,37 @@ export default function StaffAdministrationPage() {
     setStatus(
       `Created ${result.data.email} as ${result.data.roleCode.replace("_", " ")}.`,
     );
+    await loadStaffAdministration();
+  }
+
+  async function handleSaveRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!organizationId) return;
+    const fields = new FormData(event.currentTarget);
+    const code = String(fields.get("code") ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    const permissions = permissionOptions
+      .filter((permission) => fields.get(permission.value))
+      .map((permission) => permission.value);
+    setSubmitting(true);
+    const result = await saveClinicRoleDefinition(
+      createBrowserSupabaseClient(),
+      {
+        organizationId,
+        code,
+        name: String(fields.get("name") ?? "").trim(),
+        permissions,
+      },
+    );
+    setSubmitting(false);
+    if (result.error)
+      return setStatus(`Role save failed: ${result.error.message}`);
+    setStatus(`Saved ${String(fields.get("name"))} access.`);
+    setEditingRole(null);
+    await loadRoles();
   }
 
   return (
@@ -108,6 +270,185 @@ export default function StaffAdministrationPage() {
       {authorized ? (
         <>
           <p className="hint">Signed in as {signedInAs}</p>
+          <section>
+            <Field label="Clinic workspace">
+              <select
+                className="odyssey-input"
+                value={organizationId}
+                onChange={(event) =>
+                  void handleClinicChange(event.target.value)
+                }
+              >
+                {clinics.map((clinic) => (
+                  <option key={clinic.id} value={clinic.id}>
+                    {clinic.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </section>
+          <section aria-labelledby="department-assignments-heading">
+            <h2 id="department-assignments-heading">Staff department assignments</h2>
+            <p className="hint">
+              Assign a default department for inventory tagging. Staff without
+              an assignment will choose the department when tagging a supply.
+            </p>
+            <div className="record-list">
+              {staff.map((member) => (
+                <article key={`${member.userId}-${member.roleCode}`}>
+                  <strong>{member.displayName}</strong>
+                  <p>
+                    {member.email ?? "No email"} · {member.roleCode.replaceAll("_", " ")}
+                  </p>
+                  <Field label="Department">
+                    <select
+                      className="odyssey-input"
+                      value={member.departmentId ?? ""}
+                      onChange={(event) =>
+                        void handleDepartmentAssignment(
+                          member.userId,
+                          event.target.value || null,
+                        )
+                      }
+                    >
+                      <option value="">
+                        No default — choose when tagging
+                      </option>
+                      {departments
+                        .filter((department) => department.active)
+                        .map((department) => (
+                          <option key={department.id} value={department.id}>
+                            {department.name} ({department.code})
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                </article>
+              ))}
+              {!staff.length && <p className="hint">No clinic staff accounts found.</p>}
+            </div>
+          </section>
+          <section aria-labelledby="roles-heading">
+            <h2 id="roles-heading">Roles and access</h2>
+            <p className="hint">
+              Turning on permissions replaces that role’s default access for
+              this clinic.
+            </p>
+            <div className="two-column">
+              <div className="record-list">
+                {roles.map((role) => (
+                  <article key={role.code}>
+                    <strong>{role.name}</strong>
+                    {role.isCustom && <small> Custom role</small>}
+                    <p>
+                      {role.permissions.length
+                        ? role.permissions
+                            .map(
+                              (permission) =>
+                                permissionOptions.find(
+                                  (option) => option.value === permission,
+                                )?.label ?? permission,
+                            )
+                            .join(" · ")
+                        : "No access enabled"}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingRole(role)}
+                    >
+                      Edit access
+                    </Button>
+                  </article>
+                ))}
+              </div>
+              <form
+                className="stack"
+                onSubmit={handleSaveRole}
+                aria-busy={submitting}
+              >
+                <h3>
+                  {editingRole ? `Edit ${editingRole.name}` : "Create a role"}
+                </h3>
+                <Field label="Role name">
+                  <Input
+                    name="name"
+                    key={editingRole?.code ?? "new-name"}
+                    defaultValue={editingRole?.name ?? ""}
+                    required
+                    minLength={2}
+                    maxLength={80}
+                  />
+                </Field>
+                <Field
+                  label="Role code"
+                  hint="Used internally; lowercase letters, numbers, and underscores only."
+                >
+                  <Input
+                    name="code"
+                    key={editingRole?.code ?? "new-code"}
+                    defaultValue={editingRole?.code ?? ""}
+                    readOnly={Boolean(editingRole)}
+                    required
+                  />
+                </Field>
+                <fieldset className="stack">
+                  <legend>Portal access</legend>
+                  <p className="hint">
+                    Choose which workspaces this role can open. Feature access
+                    is configured separately below.
+                  </p>
+                  {portalPermissions.map((permission) => (
+                    <label key={permission.value}>
+                      <input
+                        type="checkbox"
+                        name={permission.value}
+                        key={`${editingRole?.code ?? "new"}-${permission.value}`}
+                        defaultChecked={
+                          editingRole?.permissions.includes(permission.value) ??
+                          false
+                        }
+                      />{" "}
+                      <strong>
+                        {permission.label.replace(" workspace", " portal")}
+                      </strong>
+                      <small className="hint"> — {permission.hint}</small>
+                    </label>
+                  ))}
+                </fieldset>
+                <fieldset className="stack">
+                  <legend>Feature permissions</legend>
+                  {featurePermissions.map((permission) => (
+                    <label key={permission.value}>
+                      <input
+                        type="checkbox"
+                        name={permission.value}
+                        key={`${editingRole?.code ?? "new"}-${permission.value}`}
+                        defaultChecked={
+                          editingRole?.permissions.includes(permission.value) ??
+                          false
+                        }
+                      />{" "}
+                      <strong>{permission.label}</strong>
+                      <small className="hint"> — {permission.hint}</small>
+                    </label>
+                  ))}
+                </fieldset>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Saving…" : "Save role access"}
+                </Button>
+                {editingRole && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setEditingRole(null)}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </form>
+            </div>
+          </section>
           <section>
             <h2>Create clinic account</h2>
             <p className="hint">
@@ -120,19 +461,6 @@ export default function StaffAdministrationPage() {
               onSubmit={handleSubmit}
               aria-busy={submitting}
             >
-              <Field label="Clinic">
-                <select
-                  className="odyssey-input"
-                  value={organizationId}
-                  onChange={(event) => setOrganizationId(event.target.value)}
-                >
-                  {clinics.map((clinic) => (
-                    <option key={clinic.id} value={clinic.id}>
-                      {clinic.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
               <Field label="Full name">
                 <Input
                   name="displayName"
@@ -153,11 +481,13 @@ export default function StaffAdministrationPage() {
                   name="roleCode"
                   defaultValue="front_desk"
                 >
-                  {roles.map((role) => (
-                    <option key={role.value} value={role.value}>
-                      {role.label}
-                    </option>
-                  ))}
+                  {roles
+                    .filter((role) => role.code !== "owner")
+                    .map((role) => (
+                      <option key={role.code} value={role.code}>
+                        {role.name}
+                      </option>
+                    ))}
                 </select>
               </Field>
               <Button type="submit" disabled={submitting}>

@@ -12,6 +12,7 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000105', 'authenticated', 'authenticated', 'front-desk@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000106', 'authenticated', 'authenticated', 'admin@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000107', 'authenticated', 'authenticated', 'lab@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000108', 'authenticated', 'authenticated', 'inventory@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000103', 'authenticated', 'authenticated', 'patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000104', 'authenticated', 'authenticated', 'other-patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now())
 on conflict (id) do nothing;
@@ -47,7 +48,8 @@ insert into public.practitioners (id, organization_id, auth_user_id, name) value
   ('20000000-0000-0000-0000-000000000102', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000102', '{"text":"Synthetic Nurse"}'::jsonb),
   ('20000000-0000-0000-0000-000000000105', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000105', '{"text":"Synthetic Front Desk"}'::jsonb),
   ('20000000-0000-0000-0000-000000000106', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000106', '{"text":"Synthetic Administrator"}'::jsonb),
-  ('20000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000107', '{"text":"Synthetic Lab Staff"}'::jsonb)
+  ('20000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000107', '{"text":"Synthetic Lab Staff"}'::jsonb),
+  ('20000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000108', '{"text":"Synthetic Inventory Staff"}'::jsonb)
 on conflict (id) do nothing;
 
 insert into public.practitioner_roles (id, organization_id, practitioner_id, role_code) values
@@ -55,7 +57,8 @@ insert into public.practitioner_roles (id, organization_id, practitioner_id, rol
   ('30000000-0000-0000-0000-000000000102', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000102', 'nurse'),
   ('30000000-0000-0000-0000-000000000105', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000105', 'front_desk'),
   ('30000000-0000-0000-0000-000000000106', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000106', 'admin'),
-  ('30000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000107', 'lab_staff')
+  ('30000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000107', 'lab_staff'),
+  ('30000000-0000-0000-0000-000000000108', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000108', 'inventory_staff')
 on conflict (id) do nothing;
 
 insert into public.patients (id, organization_id, auth_user_id, name) values
@@ -116,6 +119,39 @@ on conflict (id) do nothing;
 insert into public.observations (id, organization_id, patient_id, encounter_id, status, code, value) values
   ('70000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', 'final', 'synthetic-observation', '{"value":1}'::jsonb),
   ('70000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002', 'final', 'synthetic-observation', '{"value":2}'::jsonb)
+on conflict (id) do nothing;
+
+insert into public.departments (id, organization_id, code, name, description) values
+  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'OPD', 'Outpatient Department', 'Synthetic outpatient stock location.'),
+  ('90000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'ER', 'Emergency Room', 'Synthetic emergency stock location.'),
+  ('90000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'OPD', 'Other Clinic OPD', 'Tenant-isolation test location.')
+on conflict (id) do nothing;
+
+insert into public.inventory_items (
+  id, organization_id, sku, name, description, unit_of_measure, unit_price, currency
+) values
+  ('91000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'SYR-5ML', 'Syringe 5 mL', 'Single-use sterile syringe.', 'piece', 15.00, 'PHP'),
+  ('91000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'GAUZE-2X2', 'Gauze pad 2x2', 'Sterile gauze pad.', 'piece', 8.00, 'PHP'),
+  ('91000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'SYR-5ML', 'Other Clinic Syringe 5 mL', 'Tenant-isolation test item.', 'piece', 20.00, 'PHP')
+on conflict (id) do nothing;
+
+insert into public.department_stock (
+  id, organization_id, item_id, department_id, quantity, reorder_level
+) values
+  ('92000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 100, 20),
+  ('92000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000002', 40, 10),
+  ('92000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000001', 75, 15),
+  ('92000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000003', '90000000-0000-0000-0000-000000000003', 500, 25)
+on conflict (id) do nothing;
+
+insert into public.inventory_stock_movements (
+  id, organization_id, stock_id, item_id, department_id,
+  movement_type, quantity_delta, reason
+) values
+  ('93000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '92000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 'opening', 100, 'Synthetic opening stock'),
+  ('93000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '92000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000002', 'opening', 40, 'Synthetic opening stock'),
+  ('93000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '92000000-0000-0000-0000-000000000003', '91000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000001', 'opening', 75, 'Synthetic opening stock'),
+  ('93000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', '92000000-0000-0000-0000-000000000004', '91000000-0000-0000-0000-000000000003', '90000000-0000-0000-0000-000000000003', 'opening', 500, 'Synthetic opening stock')
 on conflict (id) do nothing;
 
 insert into public.medication_requests (id, organization_id, patient_id, encounter_id, status, medication_code) values

@@ -160,3 +160,84 @@ export function AppointmentStatusBadge({
     </span>
   );
 }
+
+export interface BadgeProps {
+  children: ReactNode;
+  className?: string;
+  variant?: "default" | "success" | "warning" | "danger" | "muted";
+}
+
+/** A small status indicator badge with semantic color variants. */
+export function Badge({
+  children,
+  className,
+  variant = "default",
+}: BadgeProps) {
+  return (
+    <span className={cn("odyssey-badge", `odyssey-badge--${variant}`, className)}>
+      {children}
+    </span>
+  );
+}
+
+export interface TabGroupProps {
+  activeTab: string;
+  children: ReactNode;
+  className?: string;
+  onTabChange: (tabId: string) => void;
+  tabs: Array<{ id: string; label: string; icon?: string }>;
+}
+
+/** A horizontal tab bar for switching between content panels. */
+export function TabGroup({
+  activeTab,
+  children,
+  className,
+  onTabChange,
+  tabs,
+}: TabGroupProps) {
+  return (
+    <div className={cn("odyssey-tabs", className)}>
+      <div className="odyssey-tabs__bar" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            type="button"
+            aria-selected={activeTab === tab.id}
+            className={cn(
+              "odyssey-tabs__trigger",
+              activeTab === tab.id && "odyssey-tabs__trigger--active",
+            )}
+            onClick={() => onTabChange(tab.id)}
+          >
+            {tab.icon ? <span className="odyssey-tabs__icon">{tab.icon}</span> : null}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="odyssey-tabs__content">{children}</div>
+    </div>
+  );
+}
+
+export interface TabPanelProps {
+  active: boolean;
+  children: ReactNode;
+  className?: string;
+  id: string;
+}
+
+/** A single tab content panel — only renders children when active. */
+export function TabPanel({ active, children, className, id }: TabPanelProps) {
+  if (!active) return null;
+  return (
+    <div
+      className={cn("odyssey-tabs__panel", className)}
+      id={`tabpanel-${id}`}
+      role="tabpanel"
+    >
+      {children}
+    </div>
+  );
+}

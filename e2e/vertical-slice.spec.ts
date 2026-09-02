@@ -7,9 +7,15 @@ const patientPassword = process.env.E2E_PATIENT_PASSWORD ?? localPassword;
 const providerEmail =
   process.env.E2E_PROVIDER_EMAIL ?? "doctor@synthetic.odyssey.test";
 const providerPassword = process.env.E2E_PROVIDER_PASSWORD ?? localPassword;
+const nurseEmail =
+  process.env.E2E_NURSE_EMAIL ?? "nurse@synthetic.odyssey.test";
+const nursePassword = process.env.E2E_NURSE_PASSWORD ?? localPassword;
 const frontDeskEmail =
   process.env.E2E_FRONT_DESK_EMAIL ?? "front-desk@synthetic.odyssey.test";
 const frontDeskPassword = process.env.E2E_FRONT_DESK_PASSWORD ?? localPassword;
+const inventoryEmail =
+  process.env.E2E_INVENTORY_EMAIL ?? "inventory@synthetic.odyssey.test";
+const inventoryPassword = process.env.E2E_INVENTORY_PASSWORD ?? localPassword;
 
 async function signIn(
   page: Page,
@@ -109,12 +115,27 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
     timeout: 15_000,
   });
 
+  const nurseContext = await browser.newContext();
+  const nursePage = await nurseContext.newPage();
+  await signIn(nursePage, "http://127.0.0.1:3001", nurseEmail, nursePassword);
+  await expect(nursePage.getByText("Live queue")).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const inventoryContext = await browser.newContext();
+  const inventoryPage = await inventoryContext.newPage();
+  await signIn(
+    inventoryPage,
+    "http://127.0.0.1:3002/inventory",
+    inventoryEmail,
+    inventoryPassword,
+  );
+  await expect(inventoryPage.getByText("Live stock")).toBeVisible({
+    timeout: 15_000,
+  });
+
   const patientContext = await browser.newContext();
   const patientPage = await patientContext.newPage();
-  const startButtons = providerPage.getByRole("button", {
-    name: `Start appointment for ${patientName}`,
-  });
-  const startButtonCount = await startButtons.count();
   await signIn(
     patientPage,
     "http://127.0.0.1:3000",
@@ -134,7 +155,9 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
     patientPage.getByRole("table").filter({ hasText: "Appointments visible" }),
   ).toContainText("Booked");
 
-  await expect(startButtons).toHaveCount(startButtonCount + 1, {
+  await expect(
+    providerPage.getByRole("row").filter({ hasText: patientName }).last(),
+  ).toContainText("Awaiting nurse triage", {
     timeout: 15_000,
   });
 
@@ -173,6 +196,34 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
     patientPage.getByRole("table").filter({ hasText: "Appointments visible" }),
   ).toContainText("Arrived", { timeout: 15_000 });
 
+  const nursePatientRow = nursePage
+    .getByRole("row")
+    .filter({ hasText: patientName })
+    .filter({
+      has: nursePage.getByRole("button", {
+        name: `Record triage for ${patientName}`,
+      }),
+    })
+    .last();
+  await expect(nursePatientRow).toBeVisible({ timeout: 15_000 });
+  await nursePatientRow
+    .getByRole("button", { name: `Record triage for ${patientName}` })
+    .click();
+  await expect(
+    nursePage.getByRole("heading", { name: "Triage assessment" }),
+  ).toBeVisible();
+  await nursePage.getByLabel("Systolic blood pressure (mmHg)").fill("120");
+  await nursePage.getByLabel("Diastolic blood pressure (mmHg)").fill("80");
+  await nursePage.getByLabel("Pulse (bpm)").fill("72");
+  await nursePage.getByLabel("Respiratory rate (breaths/min)").fill("16");
+  await nursePage.getByLabel("Temperature (°C)").fill("36.8");
+  await nursePage.getByLabel("Oxygen saturation (%)").fill("98");
+  await nursePage.getByLabel("Chief complaint").fill("Synthetic check-in");
+  await nursePage.getByRole("button", { name: "Complete triage" }).click();
+  await expect(nursePage.getByRole("status")).toContainText(
+    "Triage complete. The appointment is ready for the doctor.",
+  );
+
   const patientQueueRow = providerPage
     .getByRole("row")
     .filter({ hasText: patientName })
@@ -198,46 +249,120 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
   const soapText = `Synthetic subjective note ${runId}`;
   const medication = `Synthetic medication ${runId}`;
   const certificateStatement = `Synthetic certificate statement ${runId}`;
-  await expect(providerPage.getByRole("heading", { name: "Consultation chart" })).toBeVisible();
-  await expect(providerPage.getByRole("heading", { name: "Patient medical history" })).toBeVisible();
+  await expect(
+    providerPage.getByRole("heading", { name: "Consultation chart" }),
+  ).toBeVisible();
+  await expect(
+    providerPage.getByRole("heading", { name: "Patient medical history" }),
+  ).toBeVisible();
   await expect(providerPage.getByText("synthetic-observation")).toBeVisible();
+
+  const outpatientSyringeRow = inventoryPage
+    .getByRole("row")
+    .filter({ hasText: "Syringe 5 mL" })
+    .filter({ hasText: "Outpatient Department" });
+  const startingStockText = await outpatientSyringeRow
+    .getByRole("cell")
+    .nth(2)
+    .innerText();
+  const startingStock = Number(
+    startingStockText.match(/[\d,.]+/)?.[0].replaceAll(",", ""),
+  );
+  expect(Number.isFinite(startingStock)).toBe(true);
+  const syringeStockOption = providerPage
+    .getByLabel("Item and department")
+    .locator("option")
+    .filter({ hasText: "Syringe 5 mL" })
+    .filter({ hasText: "Outpatient Department" });
+  const syringeStockId = await syringeStockOption.getAttribute("value");
+  expect(syringeStockId).toBeTruthy();
+  await providerPage
+    .getByLabel("Item and department")
+    .selectOption(syringeStockId!);
+  await providerPage.getByLabel("Quantity used").fill("2");
+  await providerPage.getByRole("button", { name: "Tag consumable" }).click();
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Consumable tagged and department stock decremented",
+  );
+  await expect(outpatientSyringeRow.getByRole("cell").nth(2)).toContainText(
+    String(startingStock - 2),
+    { timeout: 15_000 },
+  );
+  await expect(
+    providerPage.getByText("PHP 30.00 billable usage"),
+  ).toBeVisible();
+
   await providerPage.getByLabel("Complete SOAP note").fill(soapText);
   await providerPage.getByRole("button", { name: "Save SOAP note" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("SOAP note saved");
+  await expect(providerPage.getByRole("status")).toContainText(
+    "SOAP note saved",
+  );
 
   const revisedSoapText = `${soapText} revised`;
   await providerPage.getByLabel("Complete SOAP note").fill(revisedSoapText);
   await providerPage.getByRole("button", { name: "Save SOAP note" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("SOAP note revision saved");
+  await expect(providerPage.getByRole("status")).toContainText(
+    "SOAP note revision saved",
+  );
 
   await providerPage.getByLabel("Medication").fill(medication);
-  await providerPage.getByLabel("Dosage and directions").fill("One synthetic unit daily for two days");
-  await providerPage.getByRole("button", { name: "Issue prescription" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("Prescription issued");
+  await providerPage
+    .getByLabel("Dosage and directions")
+    .fill("One synthetic unit daily for two days");
+  await providerPage
+    .getByRole("button", { name: "Issue prescription" })
+    .click();
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Prescription issued",
+  );
 
-  await providerPage.getByLabel("Certificate title").fill(`Synthetic certificate ${runId}`);
+  await providerPage
+    .getByLabel("Certificate title")
+    .fill(`Synthetic certificate ${runId}`);
   await providerPage.getByLabel("Statement").fill(certificateStatement);
   await providerPage.getByRole("button", { name: "Issue certificate" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("Medical certificate issued");
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Medical certificate issued",
+  );
 
   // No patient refresh: these assertions cover the clinical Realtime chain.
-  await expect(patientPage.getByText(revisedSoapText)).toBeVisible({ timeout: 15_000 });
-  await expect(patientPage.getByText(`Prescription: ${medication}`)).toBeVisible({ timeout: 15_000 });
-  await expect(patientPage.getByText(certificateStatement)).toBeVisible({ timeout: 15_000 });
-  const certificateBlock = patientPage.getByText(certificateStatement).locator("..");
+  await expect(patientPage.getByText(revisedSoapText)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    patientPage.getByText(`Prescription: ${medication}`),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(patientPage.getByText(certificateStatement)).toBeVisible({
+    timeout: 15_000,
+  });
+  const certificateBlock = patientPage
+    .getByText(certificateStatement)
+    .locator("..");
   const downloadPromise = patientPage.waitForEvent("download");
-  await certificateBlock.getByRole("button", { name: "Download certificate" }).click();
+  await certificateBlock
+    .getByRole("button", { name: "Download certificate" })
+    .click();
   const certificateDownload = await downloadPromise;
-  expect(certificateDownload.suggestedFilename()).toContain("Synthetic-certificate");
+  expect(certificateDownload.suggestedFilename()).toContain(
+    "Synthetic-certificate",
+  );
 
-  await providerPage.getByRole("button", { name: "Complete encounter" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("Encounter completed");
-  await expect(patientPage.getByText(/finished/i)).toBeVisible({ timeout: 15_000 });
+  await providerPage
+    .getByRole("button", { name: "Complete encounter" })
+    .click();
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Encounter completed",
+  );
+  await expect(patientPage.getByText(/finished/i)).toBeVisible({
+    timeout: 15_000,
+  });
 
   await patientPage.getByLabel("Phone").fill("+63 900 000 0000");
   await patientPage.getByLabel("Address").fill(`Synthetic address ${runId}`);
   await patientPage.getByRole("button", { name: "Save profile" }).click();
-  await expect(patientPage.getByRole("status")).toContainText("Profile updated");
+  await expect(patientPage.getByRole("status")).toContainText(
+    "Profile updated",
+  );
 
   const future = new Date();
   future.setDate(future.getDate() + 2);
@@ -281,6 +406,8 @@ test("patient booking → live doctor queue → encounter, plus walk-in booking"
   await Promise.all([
     patientContext.close(),
     adminContext.close(),
+    inventoryContext.close(),
+    nurseContext.close(),
     providerContext.close(),
   ]);
 });

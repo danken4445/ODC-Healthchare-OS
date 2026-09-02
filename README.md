@@ -45,16 +45,19 @@ The Phase 4 slice is extended into the complete scheduling loop:
   registration, booking, and a Realtime “My appointments” tracker.
 - Front desk sees a live daily schedule, schedules existing or walk-in
   patients, and records check-in, cancellation, and no-show transitions.
-- Doctors manage their own bookable availability and work an assignment-scoped
-  daily queue.
+- Nurses record an immutable triage assessment and vital signs after check-in.
+  An appointment cannot enter the doctor's consultation until triage is
+  complete; corrections are versioned rather than overwritten.
+- Doctors manage their own bookable availability and begin only triage-complete
+  appointments from their assignment-scoped daily queue.
 - `/waiting-room` on the admin app is an unauthenticated Realtime display backed
   by a privacy-safe projection containing queue numbers and workflow stages but
   no patient identity data.
 
 Apply `20260901000500_core_visit_loop.sql`, reset with synthetic seed data, and
 run `supabase/validation/loop1_core_visit.sql` for the direct RLS/RPC checks.
-The Playwright suite covers the live patient → front desk → waiting room →
-doctor handoff as well as administrative and walk-in scheduling.
+The Playwright suite covers the live patient → front desk → nurse triage →
+waiting room → doctor handoff as well as administrative and walk-in scheduling.
 
 ## Clinical documentation loop
 
@@ -86,10 +89,10 @@ two-clinic boundary.
 
 For staging, apply all migrations, deploy `get-walk-in-records`, create the
 synthetic users, and run `phase2_hosted_test_accounts.sql` to link their roles
-and create temporary synthetic slots. Set `E2E_PATIENT_*`, `E2E_PROVIDER_*`, and
-`E2E_FRONT_DESK_*` when the staging test credentials differ from the local
-defaults. The three apps' `NEXT_PUBLIC_SUPABASE_*` values must point to that same
-staging project.
+and create temporary synthetic slots. Set `E2E_PATIENT_*`, `E2E_PROVIDER_*`,
+`E2E_FRONT_DESK_*`, and `E2E_NURSE_*` when the staging test credentials differ
+from the local defaults. The three apps' `NEXT_PUBLIC_SUPABASE_*` values must
+point to that same staging project.
 
 ## Shared application packages
 
@@ -102,7 +105,7 @@ After a schema migration, start the local Supabase stack (Docker Desktop is requ
 
 ## Local auth and RLS verification
 
-After `pnpm.cmd supabase db reset`, local synthetic accounts are available for the Phase 2 check: `doctor@synthetic.odyssey.test`, `nurse@synthetic.odyssey.test`, `front-desk@synthetic.odyssey.test`, `admin@synthetic.odyssey.test`, `lab@synthetic.odyssey.test`, and `patient@synthetic.odyssey.test`. They share the deliberately public local-only password `LocalOnly-2026!`; it is never valid outside a reset local database. Run `supabase/validation/phase2_auth_rls.sql` as a database administrator to verify RLS directly.
+After `pnpm.cmd supabase db reset`, local synthetic accounts are available for the Phase 2 check: `doctor@synthetic.odyssey.test`, `nurse@synthetic.odyssey.test`, `front-desk@synthetic.odyssey.test`, `inventory@synthetic.odyssey.test`, `admin@synthetic.odyssey.test`, `lab@synthetic.odyssey.test`, and `patient@synthetic.odyssey.test`. They share the deliberately public local-only password `LocalOnly-2026!`; it is never valid outside a reset local database. Run `supabase/validation/phase2_auth_rls.sql` as a database administrator to verify RLS directly.
 
 Staff access requires an active `practitioners` record and active `practitioner_roles` record at the organization. Registered patients use normal Supabase email/password or magic-link Auth. Front desk staff must call `create_walk_in_patient`; it returns a human-friendly ID and four-digit PIN once, storing only a bcrypt hash. The `get-walk-in-records` Edge Function verifies those credentials, returns only that patient's records through a server-side scoped query, and writes a walk-in access audit record. It does not create an Auth session or mint a JWT. A registered patient claims their existing history with `claim_walk_in_patient`, which attaches `auth.uid()` to the existing patient row instead of creating another record.
 
