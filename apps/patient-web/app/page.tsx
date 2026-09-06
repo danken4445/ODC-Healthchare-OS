@@ -22,8 +22,11 @@ import {
   updateOwnPatientProfile,
   getPatientInvoices,
   subscribeToInvoiceUpdates,
+  getOrganizationBranding,
+  isOrganizationModuleEnabled,
 } from "@odyssey/supabase-client";
 import type {
+  AppointmentDeliveryMode,
   AppointmentSlotSummary,
   ClinicServiceSummary,
   PatientAccessRecords,
@@ -31,6 +34,7 @@ import type {
   WalkInAccessInput,
   WalkInAccessRecords,
   PatientInvoice,
+  OrganizationBranding,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -43,7 +47,7 @@ import {
   CurrencyDisplay,
   QrPaymentCode,
 } from "@odyssey/ui";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 
 const localTestPassword = "LocalOnly-2026!";
 
@@ -92,15 +96,18 @@ export default function Home() {
     "Choose a clinic, then register or sign in to book an appointment.",
   );
   const [liveStatus, setLiveStatus] = useState("Offline");
+  const [branding, setBranding] = useState<OrganizationBranding | null>(null);
 
   const selectedClinic = clinics.find((clinic) => clinic.id === organizationId);
   const patientAtSelectedClinic = Boolean(records?.patients.length);
 
   async function loadPublicPortal(clinicId: string) {
-    const client = createBrowserSupabaseClient();
-    const [serviceResult, slotResult] = await Promise.all([
+    const client = createPublicSupabaseClient();
+    const [serviceResult, slotResult, brandingResult, moduleResult] = await Promise.all([
       getClinicServices(client, clinicId),
       getAvailableAppointmentSlots(client, clinicId),
+      getOrganizationBranding(client, clinicId),
+      isOrganizationModuleEnabled(client, clinicId, "core_visit"),
     ]);
     if (serviceResult.error || slotResult.error) {
       setStatus(
@@ -108,8 +115,15 @@ export default function Home() {
       );
       return;
     }
-    setServices(serviceResult.data);
-    setSlots(slotResult.data);
+    if (!moduleResult.error && !moduleResult.data) {
+      setServices([]);
+      setSlots([]);
+      setStatus("Online booking is not currently enabled for this clinic.");
+    } else {
+      setServices(serviceResult.data);
+      setSlots(slotResult.data);
+    }
+    if (!brandingResult.error) setBranding(brandingResult.data);
   }
 
   async function loadPatientDashboard(clinicId: string) {
@@ -334,17 +348,26 @@ export default function Home() {
     await loadPatientDashboard(organizationId);
   }
 
-  async function handleBook(slotId: string) {
+  async function handleBook(
+    slotId: string,
+    deliveryMode: AppointmentDeliveryMode,
+  ) {
     if (!organizationId || !patientAtSelectedClinic) return;
     setBusySlotId(slotId);
     const result = await bookAppointmentSlot(
       createBrowserSupabaseClient(),
       slotId,
+      undefined,
+      deliveryMode,
     );
     setBusySlotId(null);
     if (result.error)
       return setStatus(`Booking failed: ${result.error.message}`);
-    setStatus("Appointment booked. It is now in the doctor's live queue.");
+    setStatus(
+      deliveryMode === "virtual"
+        ? "Virtual appointment booked. Your teleconsult room opens 30 minutes before the scheduled time."
+        : "Appointment booked. It is now in the doctor's live queue.",
+    );
     await loadPatientDashboard(organizationId);
   }
 
@@ -421,9 +444,23 @@ export default function Home() {
     walkInRecords?.appointments ?? records?.appointments ?? [];
 
   return (
-    <main>
+    <main
+      style={
+        branding
+          ? ({
+              "--odyssey-primary": branding.primaryColor,
+              "--odyssey-ring": branding.accentColor,
+            } as CSSProperties)
+          : undefined
+      }
+    >
       <p className="eyebrow">Patient portal</p>
-      <h1>Book a clinic appointment</h1>
+      {branding?.logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="clinic-brand-logo" src={branding.logoUrl} alt={`${branding.displayName} logo`} />
+      )}
+      <h1>{branding?.displayName ?? "Book a clinic appointment"}</h1>
+      {branding?.tagline && <p>{branding.tagline}</p>}
       <section aria-labelledby="clinic-heading">
         <h2 id="clinic-heading">Choose a clinic</h2>
         <div className="clinic-picker">
@@ -581,16 +618,36 @@ export default function Home() {
                   {
                     id: "action",
                     header: "",
-                    cell: (slot) => (
-                      <Button
-                        size="sm"
-                        disabled={busySlotId !== null}
-                        onClick={() => void handleBook(slot.id)}
-                        aria-label={`Book ${formatAppointmentTime(slot.start_at)}`}
-                      >
-                        {busySlotId === slot.id ? "Booking…" : "Book"}
-                      </Button>
-                    ),
+                    cell: (slot) => {
+                      const modes = services.find(
+                        (service) => service.id === slot.clinic_service_id,
+                      )?.delivery_modes ?? ["in_person"];
+                      return (
+                        <span className="session-actions">
+                          {modes.includes("in_person") && (
+                            <Button
+                              size="sm"
+                              disabled={busySlotId !== null}
+                              onClick={() => void handleBook(slot.id, "in_person")}
+                              aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
+                            >
+                              {busySlotId === slot.id ? "Booking…" : "Book clinic"}
+                            </Button>
+                          )}
+                          {modes.includes("virtual") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busySlotId !== null}
+                              onClick={() => void handleBook(slot.id, "virtual")}
+                              aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
+                            >
+                              {busySlotId === slot.id ? "Booking…" : "Book virtual"}
+                            </Button>
+                          )}
+                        </span>
+                      );
+                    },
                   },
                 ]}
               />

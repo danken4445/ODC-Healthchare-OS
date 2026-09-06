@@ -68,6 +68,22 @@ import {
   type PosCartItem,
   type PosCheckoutResult,
   type ClaimSummary,
+  type AppointmentDeliveryMode,
+  type DoctorPayoutSummary,
+  type TeleconsultAppointment,
+  type GovernanceDashboard,
+  type GovernancePatientSummary,
+  type GovernancePatientRecord,
+  type PatientAuditEvent,
+  type IdentifiedPatient,
+  type ImportedPatientCredential,
+  type GovernancePatientImportRow,
+  type OrganizationBranding,
+  type OrganizationBrandingInput,
+  type DocumentTemplate,
+  type DocumentTemplateInput,
+  type OrganizationModule,
+  type OrganizationModuleKey,
 } from "@odyssey/types";
 
 let browserClient: SupabaseClient<Database> | undefined;
@@ -88,11 +104,11 @@ export type SupabaseResult<T> =
 const patientSummaryColumns =
   "id, organization_id, active, name, birth_date, gender, telecom, address, walk_in_id, created_at, updated_at";
 const appointmentSummaryColumns =
-  "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction, clinic_service_id, queue_date, queue_number";
+  "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction, clinic_service_id, queue_date, queue_number, delivery_mode";
 const appointmentSlotSummaryColumns =
   "id, appointment_id, organization_id, practitioner_role_id, clinic_service_id, status, service_type, start_at, end_at";
 const clinicServiceSummaryColumns =
-  "id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, booking_enabled";
+  "id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, active, booking_enabled, delivery_modes";
 const waitingRoomQueueColumns =
   "appointment_id, organization_id, queue_date, queue_number, service_name, scheduled_at, stage";
 const publicClinicSummaryColumns = "id, name, telecom, address";
@@ -1215,7 +1231,7 @@ export async function createClinicService(
   input: ClinicServiceInput,
 ): Promise<SupabaseResult<ClinicServiceSummary>> {
   const { data: serviceId, error } = await client.rpc(
-    "save_provider_clinic_service",
+    "save_provider_clinic_service_with_delivery",
     {
       p_service_id: null as unknown as string,
       p_organization_id: organizationId,
@@ -1225,6 +1241,7 @@ export async function createClinicService(
       p_duration_minutes: input.durationMinutes,
       p_base_price: input.basePrice as number,
       p_booking_enabled: input.bookingEnabled,
+      p_delivery_modes: input.deliveryModes ?? ["in_person"],
     },
   );
   if (error) return failure(error);
@@ -1245,7 +1262,7 @@ export async function updateClinicService(
   input: ClinicServiceInput,
 ): Promise<SupabaseResult<ClinicServiceSummary>> {
   const { data: savedId, error } = await client.rpc(
-    "save_provider_clinic_service",
+    "save_provider_clinic_service_with_delivery",
     {
       p_service_id: serviceId,
       p_organization_id: organizationId,
@@ -1255,6 +1272,7 @@ export async function updateClinicService(
       p_duration_minutes: input.durationMinutes,
       p_base_price: input.basePrice as number,
       p_booking_enabled: input.bookingEnabled,
+      p_delivery_modes: input.deliveryModes ?? ["in_person"],
     },
   );
   if (error) return failure(error);
@@ -1539,13 +1557,77 @@ export async function bookAppointmentSlot(
   client: SupabaseClient<Database>,
   slotId: string,
   patientId?: string,
+  deliveryMode: AppointmentDeliveryMode = "in_person",
 ): Promise<SupabaseResult<string>> {
   const { data, error } = await client.rpc("book_appointment_slot", {
     p_slot_id: slotId,
     ...(patientId ? { p_patient_id: patientId } : {}),
+    p_delivery_mode: deliveryMode,
   });
   if (error) return failure(error);
   return success(data);
+}
+
+/** Virtual appointments visible only to their assigned patient or provider. */
+export async function getTeleconsultAppointments(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<TeleconsultAppointment[]>> {
+  const { data, error } = await client.rpc("list_teleconsult_appointments", {
+    p_organization_id: organizationId,
+  });
+  if (error) return failure(error);
+  return success((data ?? []) as TeleconsultAppointment[]);
+}
+
+export async function closeTeleconsultRoom(
+  client: SupabaseClient<Database>,
+  appointmentId: string,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc("close_teleconsult_room", {
+    p_appointment_id: appointmentId,
+  });
+  if (error) return failure(error);
+  return success(undefined);
+}
+
+export async function getDoctorPayouts(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<DoctorPayoutSummary[]>> {
+  const { data, error } = await client.rpc("list_doctor_payouts", {
+    p_organization_id: organizationId,
+  });
+  if (error) return failure(error);
+  return success((data ?? []) as DoctorPayoutSummary[]);
+}
+
+export async function setPractitionerPayoutRate(
+  client: SupabaseClient<Database>,
+  practitionerRoleId: string,
+  shareBasisPoints: number,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc("set_practitioner_payout_rate", {
+    p_practitioner_role_id: practitionerRoleId,
+    p_share_basis_points: shareBasisPoints,
+  });
+  if (error) return failure(error);
+  return success(undefined);
+}
+
+export async function settleDoctorPayouts(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  payoutIds: string[],
+  paymentReference: string,
+): Promise<SupabaseResult<number>> {
+  const { data, error } = await client.rpc("settle_doctor_payouts", {
+    p_organization_id: organizationId,
+    p_payout_ids: payoutIds,
+    p_payment_reference: paymentReference,
+  });
+  if (error) return failure(error);
+  return success(Number(data));
 }
 
 export interface DayRange {
@@ -1964,4 +2046,355 @@ export function subscribeToInvoiceUpdates(
   return () => {
     void client.removeChannel(channel);
   };
+}
+
+/* Loop 7: Platform and Governance */
+
+export async function getGovernanceDashboard(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<GovernanceDashboard>> {
+  const { data, error } = await client.rpc(
+    "get_governance_dashboard" as never,
+    { p_organization_id: organizationId } as never,
+  );
+  if (error) return failure(error);
+  const row = ((data as unknown as Array<Record<string, unknown>>) ?? [])[0];
+  if (!row) return failure({ message: "The analytics response was empty." });
+  return success({
+    activePatients: Number(row.active_patients),
+    appointmentsToday: Number(row.appointments_today),
+    waitingNow: Number(row.waiting_now),
+    completedEncounters30d: Number(row.completed_encounters_30d),
+    outstandingInvoices: Number(row.outstanding_invoices),
+    outstandingBalance: Number(row.outstanding_balance),
+    confirmedRevenue30d: Number(row.confirmed_revenue_30d),
+    activeStaff: Number(row.active_staff),
+    auditEvents24h: Number(row.audit_events_24h),
+  });
+}
+
+export async function getGovernancePatients(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  search = "",
+): Promise<SupabaseResult<GovernancePatientSummary[]>> {
+  const { data, error } = await client.rpc(
+    "list_governance_patients" as never,
+    { p_organization_id: organizationId, p_search: search } as never,
+  );
+  if (error) return failure(error);
+  return success(
+    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+      patientId: row.patient_id as string,
+      displayName: row.display_name as string,
+      walkInId: (row.walk_in_id as string) ?? null,
+      birthDate: (row.birth_date as string) ?? null,
+      gender: (row.gender as string) ?? null,
+      telecom: row.telecom as Json,
+      active: Boolean(row.active),
+      encounterCount: Number(row.encounter_count),
+      appointmentCount: Number(row.appointment_count),
+      lastActivityAt: row.last_activity_at as string,
+    }))),
+  );
+}
+
+export async function getGovernancePatientRecord(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  patientId: string,
+): Promise<SupabaseResult<GovernancePatientRecord>> {
+  const { data, error } = await client.rpc(
+    "get_governance_patient_record" as never,
+    { p_organization_id: organizationId, p_patient_id: patientId } as never,
+  );
+  if (error) return failure(error);
+  return success(data as unknown as GovernancePatientRecord);
+}
+
+export function createPatientQrPayload(
+  organizationId: string,
+  patientId: string,
+): string {
+  return `ODYSSEY|${organizationId}|${patientId}`;
+}
+
+export async function identifyPatientByQr(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  payload: string,
+): Promise<SupabaseResult<IdentifiedPatient>> {
+  const { data, error } = await client.rpc(
+    "identify_patient_by_qr" as never,
+    { p_organization_id: organizationId, p_payload: payload } as never,
+  );
+  if (error) return failure(error);
+  const row = ((data as unknown as Array<Record<string, unknown>>) ?? [])[0];
+  if (!row) return failure({ message: "No active patient matches this QR code." });
+  return success({
+    patientId: row.patient_id as string,
+    displayName: row.display_name as string,
+    walkInId: (row.walk_in_id as string) ?? null,
+    birthDate: (row.birth_date as string) ?? null,
+    gender: (row.gender as string) ?? null,
+  });
+}
+
+export async function importGovernancePatients(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  fileName: string,
+  rows: GovernancePatientImportRow[],
+): Promise<SupabaseResult<ImportedPatientCredential[]>> {
+  const { data, error } = await client.rpc(
+    "import_governance_patients" as never,
+    {
+      p_organization_id: organizationId,
+      p_file_name: fileName,
+      p_rows: rows as unknown as Json,
+    } as never,
+  );
+  if (error) return failure(error);
+  return success(
+    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+      patientId: (row.patient_id as string) ?? "",
+      rowNumber: Number(row.row_number),
+      displayName: row.display_name as string,
+      walkInId: (row.walk_in_id as string) ?? null,
+      pin: (row.pin as string) ?? null,
+      error: (row.error as string) ?? null,
+      birthDate: null,
+      gender: null,
+    }))),
+  );
+}
+
+export async function getPatientAuditTrail(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  patientId?: string,
+  limit = 100,
+): Promise<SupabaseResult<PatientAuditEvent[]>> {
+  const { data, error } = await client.rpc(
+    "list_patient_audit_trail" as never,
+    {
+      p_organization_id: organizationId,
+      p_patient_id: patientId ?? null,
+      p_limit: limit,
+    } as never,
+  );
+  if (error) return failure(error);
+  return success(
+    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+      id: row.id as string,
+      occurredAt: row.occurred_at as string,
+      actorName: row.actor_name as string,
+      actorType: row.actor_type as string,
+      action: row.action as string,
+      resourceType: row.resource_type as string,
+      recordId: row.record_id as string,
+      metadata: row.metadata as Json,
+    }))),
+  );
+}
+
+export async function getOrganizationBranding(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<OrganizationBranding>> {
+  const untyped = client as unknown as SupabaseClient;
+  const { data, error } = await untyped
+    .from("organization_branding")
+    .select("id, organization_id, display_name, tagline, logo_url, primary_color, accent_color, support_email, support_phone")
+    .eq("organization_id", organizationId)
+    .single();
+  if (error) return failure(error);
+  return success({
+    id: data.id as string,
+    organizationId: data.organization_id as string,
+    displayName: data.display_name as string,
+    tagline: (data.tagline as string) ?? null,
+    logoUrl: (data.logo_url as string) ?? null,
+    primaryColor: data.primary_color as string,
+    accentColor: data.accent_color as string,
+    supportEmail: (data.support_email as string) ?? null,
+    supportPhone: (data.support_phone as string) ?? null,
+  });
+}
+
+export async function saveOrganizationBranding(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  input: OrganizationBrandingInput,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc(
+    "save_organization_branding" as never,
+    {
+      p_organization_id: organizationId,
+      p_display_name: input.displayName,
+      p_tagline: input.tagline ?? "",
+      p_logo_url: input.logoUrl ?? "",
+      p_primary_color: input.primaryColor,
+      p_accent_color: input.accentColor,
+      p_support_email: input.supportEmail ?? "",
+      p_support_phone: input.supportPhone ?? "",
+    } as never,
+  );
+  return error ? failure(error) : success(data as unknown as string);
+}
+
+export async function getDocumentTemplates(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<DocumentTemplate[]>> {
+  const untyped = client as unknown as SupabaseClient;
+  const { data, error } = await untyped
+    .from("document_templates")
+    .select("id, organization_id, code, name, category, description, body, version, active, updated_at")
+    .eq("organization_id", organizationId)
+    .order("name");
+  if (error) return failure(error);
+  return success(
+    (data ?? []).map((row) => ({
+      id: row.id as string,
+      organizationId: row.organization_id as string,
+      code: row.code as string,
+      name: row.name as string,
+      category: row.category as DocumentTemplate["category"],
+      description: (row.description as string) ?? null,
+      body: row.body as string,
+      version: Number(row.version),
+      active: Boolean(row.active),
+      updatedAt: row.updated_at as string,
+    })),
+  );
+}
+
+export async function saveDocumentTemplate(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  input: DocumentTemplateInput,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc(
+    "save_document_template" as never,
+    {
+      p_organization_id: organizationId,
+      p_template_id: input.id ?? null,
+      p_name: input.name,
+      p_category: input.category,
+      p_description: input.description ?? "",
+      p_body: input.body,
+      p_active: input.active,
+    } as never,
+  );
+  return error ? failure(error) : success(data as unknown as string);
+}
+
+export async function getOrganizationModules(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<OrganizationModule[]>> {
+  const untyped = client as unknown as SupabaseClient;
+  const { data, error } = await untyped
+    .from("organization_modules")
+    .select("id, organization_id, module_key, enabled, updated_at")
+    .eq("organization_id", organizationId)
+    .order("module_key");
+  if (error) return failure(error);
+  return success(
+    (data ?? []).map((row) => ({
+      id: row.id as string,
+      organizationId: row.organization_id as string,
+      moduleKey: row.module_key as OrganizationModuleKey,
+      enabled: Boolean(row.enabled),
+      updatedAt: row.updated_at as string,
+    })),
+  );
+}
+
+export async function setOrganizationModule(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  moduleKey: OrganizationModuleKey,
+  enabled: boolean,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc(
+    "set_organization_module" as never,
+    {
+      p_organization_id: organizationId,
+      p_module_key: moduleKey,
+      p_enabled: enabled,
+    } as never,
+  );
+  return error ? failure(error) : success(undefined);
+}
+
+export async function isOrganizationModuleEnabled(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  moduleKey: OrganizationModuleKey,
+): Promise<SupabaseResult<boolean>> {
+  const { data, error } = await client.rpc(
+    "is_organization_module_enabled" as never,
+    {
+      p_organization_id: organizationId,
+      p_module_key: moduleKey,
+    } as never,
+  );
+  return error ? failure(error) : success(Boolean(data));
+}
+
+export async function getAllClinicServices(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<ClinicServiceSummary[]>> {
+  const { data, error } = await client
+    .from("clinic_services")
+    .select(clinicServiceSummaryColumns)
+    .eq("organization_id", organizationId)
+    .order("name");
+  return error
+    ? failure(error)
+    : success((data ?? []) as unknown as ClinicServiceSummary[]);
+}
+
+export async function saveAdminClinicService(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  input: ClinicServiceInput & { id?: string; currency: string; active: boolean },
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc(
+    "save_admin_clinic_service" as never,
+    {
+      p_organization_id: organizationId,
+      p_service_id: input.id ?? null,
+      p_name: input.name,
+      p_description: input.description ?? "",
+      p_duration_minutes: input.durationMinutes,
+      p_base_price: input.basePrice ?? 0,
+      p_currency: input.currency,
+      p_booking_enabled: input.bookingEnabled,
+      p_active: input.active,
+      p_delivery_modes: input.deliveryModes ?? ["in_person"],
+    } as never,
+  );
+  return error ? failure(error) : success(data as unknown as string);
+}
+
+export async function setClinicUserActive(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  userId: string,
+  active: boolean,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc(
+    "set_clinic_user_active" as never,
+    {
+      p_organization_id: organizationId,
+      p_user_id: userId,
+      p_active: active,
+    } as never,
+  );
+  return error ? failure(error) : success(undefined);
 }

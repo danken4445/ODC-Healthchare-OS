@@ -11,6 +11,7 @@ import {
   hasOrganizationPermission,
   assignStaffDepartment,
   saveClinicRoleDefinition,
+  setClinicUserActive,
 } from "@odyssey/supabase-client";
 import type {
   AssignableClinicAccountRole,
@@ -113,6 +114,81 @@ const permissionOptions: Array<{
     value: "can_manage_laboratory_services",
     label: "Laboratory services",
     hint: "Maintain the laboratory service catalog and lab costs.",
+  },
+  {
+    value: "can_view_billing",
+    label: "View billing",
+    hint: "Review billing events, invoices, payments, and POS sales.",
+  },
+  {
+    value: "can_manage_billing",
+    label: "Manage billing",
+    hint: "Generate and finalize bills and record invoice payments.",
+  },
+  {
+    value: "can_manage_pos",
+    label: "Point of sale",
+    hint: "Complete over-the-counter sales and issue receipts.",
+  },
+  {
+    value: "can_view_claims",
+    label: "View claims",
+    hint: "Review HMO and PhilHealth claims.",
+  },
+  {
+    value: "can_manage_claims",
+    label: "Manage claims",
+    hint: "Submit and adjudicate HMO and PhilHealth claims.",
+  },
+  {
+    value: "can_view_payouts",
+    label: "View doctor payouts",
+    hint: "Review clinic-scoped doctor payout entitlements.",
+  },
+  {
+    value: "can_manage_payouts",
+    label: "Manage doctor payouts",
+    hint: "Configure future shares and settle pending payouts.",
+  },
+  {
+    value: "can_view_analytics",
+    label: "Analytics",
+    hint: "View clinic-wide operational and financial summaries.",
+  },
+  {
+    value: "can_manage_patients",
+    label: "Patient administration",
+    hint: "Search consolidated charts and import patient records.",
+  },
+  {
+    value: "can_view_audit_log",
+    label: "Patient audit trail",
+    hint: "Review tenant-scoped patient activity events.",
+  },
+  {
+    value: "can_identify_patients",
+    label: "Patient QR identification",
+    hint: "Identify an active patient from a clinic QR code.",
+  },
+  {
+    value: "can_manage_clinic_branding",
+    label: "Clinic branding",
+    hint: "Maintain the clinic name, colors, logo, and support details.",
+  },
+  {
+    value: "can_manage_service_catalog",
+    label: "Services and pricing",
+    hint: "Maintain the clinic service catalog and public booking prices.",
+  },
+  {
+    value: "can_manage_document_templates",
+    label: "Document templates",
+    hint: "Maintain reusable clinic-wide document definitions.",
+  },
+  {
+    value: "can_manage_feature_modules",
+    label: "Feature modules",
+    hint: "Control staged module availability for the clinic.",
   },
 ];
 
@@ -246,6 +322,22 @@ export default function StaffAdministrationPage() {
     setStatus("Staff department assignment saved.");
   }
 
+  async function handleAccountStatus(userId: string, active: boolean) {
+    if (!organizationId) return;
+    setSubmitting(true);
+    const result = await setClinicUserActive(
+      createBrowserSupabaseClient(),
+      organizationId,
+      userId,
+      active,
+    );
+    setSubmitting(false);
+    if (result.error)
+      return setStatus(`Account status update failed: ${result.error.message}`);
+    await loadStaffAdministration();
+    setStatus(`Clinic access ${active ? "restored" : "deactivated"}.`);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!organizationId) return;
@@ -335,7 +427,8 @@ export default function StaffAdministrationPage() {
                   <strong>{member.displayName}</strong>
                   <p>
                     {member.email ?? "No email"} ·{" "}
-                    {member.roleCode.replaceAll("_", " ")}
+                    {member.roleCode.replaceAll("_", " ")} ·{" "}
+                    {member.active ? "Active" : "Inactive"}
                   </p>
                   <Field label="Department">
                     <select
@@ -358,6 +451,19 @@ export default function StaffAdministrationPage() {
                         ))}
                     </select>
                   </Field>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={member.active ? "outline" : "secondary"}
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleAccountStatus(member.userId, !member.active)
+                    }
+                  >
+                    {member.active
+                      ? "Deactivate clinic access"
+                      : "Restore clinic access"}
+                  </Button>
                 </article>
               ))}
               {!staff.length && (

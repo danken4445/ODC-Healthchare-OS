@@ -731,7 +731,7 @@ begin
   update public.invoices
   set amount_paid = v_new_paid,
       balance_due = v_new_balance,
-      status = case when v_new_balance <= 0 then 'paid' else 'partially_paid' end,
+      status = (case when v_new_balance <= 0 then 'paid' else 'partially_paid' end)::public.invoice_status,
       paid_at = case when v_new_balance <= 0 then now() else null end
   where id = p_invoice_id;
 

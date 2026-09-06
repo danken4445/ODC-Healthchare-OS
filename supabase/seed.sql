@@ -70,7 +70,7 @@ insert into public.patients (id, organization_id, auth_user_id, name) values
 on conflict (id) do nothing;
 
 insert into public.clinic_services (
-  id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency
+  id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, delivery_modes
 ) values
   (
     '52000000-0000-0000-0000-000000000001',
@@ -81,7 +81,8 @@ insert into public.clinic_services (
     'Primary care assessment with the clinic doctor.',
     30,
     650.00,
-    'PHP'
+    'PHP',
+    array['in_person', 'virtual']::public.appointment_delivery_mode[]
   ),
   (
     '52000000-0000-0000-0000-000000000002',
@@ -92,7 +93,8 @@ insert into public.clinic_services (
     'Review progress and next steps after a previous visit.',
     30,
     450.00,
-    'PHP'
+    'PHP',
+    array['in_person', 'virtual']::public.appointment_delivery_mode[]
   )
 on conflict (id) do nothing;
 

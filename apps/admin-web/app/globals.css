@@ -231,3 +231,257 @@
     justify-content: flex-start;
   }
 }
+
+/* Loop 7 governance workspace */
+.governance-shell,
+.patient-lookup-shell {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 2rem auto 5rem;
+}
+.governance-header,
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.governance-header {
+  margin-bottom: 1.5rem;
+}
+.governance-nav,
+.governance-inline {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.governance-nav a {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  text-decoration: none;
+}
+.governance-shell > section,
+.patient-lookup-shell > section {
+  margin-top: 1.5rem;
+  padding: 1.35rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: calc(var(--odyssey-radius) * 1.3);
+  background: var(--odyssey-card);
+}
+.governance-shell h2 {
+  margin-top: 0;
+}
+.governance-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+.governance-kpis article {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 6rem;
+  padding: 1rem;
+  border-radius: var(--odyssey-radius);
+  background: var(--odyssey-muted);
+}
+.governance-kpis strong {
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+.governance-kpis span,
+.governance-list span {
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.82rem;
+}
+.governance-split {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(20rem, 1.2fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.governance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 34rem;
+  overflow: auto;
+}
+.governance-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.8rem;
+  text-align: left;
+  color: inherit;
+  background: var(--odyssey-background);
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  cursor: pointer;
+}
+.governance-list button:hover,
+.governance-list button.selected {
+  border-color: var(--odyssey-primary);
+  background: color-mix(in srgb, var(--odyssey-primary) 6%, var(--odyssey-card));
+}
+.governance-detail,
+.governance-form,
+.brand-preview {
+  padding: 1rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+}
+.patient-qr {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.patient-qr canvas {
+  width: 180px;
+  height: 180px;
+  border: 1px solid var(--odyssey-border);
+}
+.record-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.record-counts span,
+.audit-action {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: var(--odyssey-muted);
+  font-size: 0.78rem;
+}
+.governance-details {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+}
+.governance-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table-scroll th,
+.table-scroll td {
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--odyssey-border);
+  text-align: left;
+}
+.template-body {
+  min-height: 13rem;
+  resize: vertical;
+}
+.brand-preview {
+  border-width: 2px;
+  min-height: 17rem;
+}
+.brand-preview img {
+  display: block;
+  max-width: 10rem;
+  max-height: 4rem;
+  object-fit: contain;
+  margin-bottom: 1.5rem;
+}
+.brand-preview button {
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: var(--odyssey-radius);
+  color: white;
+  font-weight: 700;
+}
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.module-grid article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+}
+.module-grid p {
+  margin: 0.25rem 0 0;
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.82rem;
+}
+.governance-status {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 2;
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  background: var(--odyssey-foreground);
+  color: var(--odyssey-background);
+  box-shadow: 0 8px 30px #15203a20;
+}
+.scanner-card {
+  display: grid;
+  grid-template-columns: 13rem 1fr;
+  align-items: center;
+  gap: 2rem;
+}
+.scanner-frame {
+  aspect-ratio: 1;
+  position: relative;
+  border: 2px solid var(--odyssey-primary);
+  border-radius: 1rem;
+  background: repeating-linear-gradient(45deg, transparent, transparent 8px, color-mix(in srgb, var(--odyssey-primary) 7%, transparent) 8px, color-mix(in srgb, var(--odyssey-primary) 7%, transparent) 16px);
+}
+.scanner-frame span {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 50%;
+  height: 2px;
+  background: var(--odyssey-primary);
+  box-shadow: 0 0 12px var(--odyssey-primary);
+}
+.identified-patient dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.identified-patient dt {
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.78rem;
+}
+.identified-patient dd {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+
+@media (max-width: 800px) {
+  .governance-kpis,
+  .module-grid,
+  .governance-split,
+  .scanner-card,
+  .identified-patient dl {
+    grid-template-columns: 1fr;
+  }
+  .governance-inline > * {
+    flex: 1 1 100%;
+  }
+  .patient-qr {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -59,6 +59,7 @@ import {
   Input,
 } from "@odyssey/ui";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -722,6 +723,10 @@ export default function Home() {
       basePrice,
       description: String(fields.get("description") ?? ""),
       bookingEnabled: fields.get("bookingEnabled") === "on",
+      deliveryModes: [
+        ...(fields.get("deliveryInPerson") === "on" ? ["in_person" as const] : []),
+        ...(fields.get("deliveryVirtual") === "on" ? ["virtual" as const] : []),
+      ],
     };
     const scheduleChanged = Boolean(
       editingService &&
@@ -898,6 +903,8 @@ export default function Home() {
           <div className="session">
             <span>Signed in as {signedInAs}</span>
             <span className="session-actions">
+              <Link href="/teleconsult">Meeting rooms</Link>
+              <Link href="/payouts">My payouts</Link>
               <span
                 className="live-indicator"
                 data-live={liveStatus === "Live"}
@@ -1061,7 +1068,13 @@ export default function Home() {
                 ? "Checked-in appointments awaiting nurse triage."
                 : "Clinical appointments visible to this provider today."
             }
-            data={queue}
+            data={
+              canTriage
+                ? queue.filter(
+                    (appointment) => appointment.delivery_mode === "in_person",
+                  )
+                : queue
+            }
             emptyMessage="Your queue is empty."
             getRowId={(appointment) => appointment.id}
             columns={[
@@ -1084,11 +1097,19 @@ export default function Home() {
                 cell: (appointment) => appointment.patientName,
               },
               {
+                id: "mode",
+                header: "Visit",
+                cell: (appointment) =>
+                  appointment.delivery_mode === "virtual" ? "Virtual" : "Clinic",
+              },
+              {
                 id: "status",
                 header: "Status",
                 cell: (appointment) =>
                   appointment.encounterStatus === "in_progress" ? (
                     <span className="encounter-status">In progress</span>
+                  ) : appointment.delivery_mode === "virtual" ? (
+                    <span className="encounter-status">Virtual visit</span>
                   ) : appointment.triageStatus === "complete" ? (
                     <span className="encounter-status">Triage complete</span>
                   ) : appointment.status !== "arrived" ? (
@@ -1107,7 +1128,31 @@ export default function Home() {
                 id: "action",
                 header: "",
                 cell: (appointment) =>
-                  canTriage &&
+                  appointment.delivery_mode === "virtual" ? (
+                    <span className="table-actions">
+                      <Link href={`/teleconsult/${appointment.id}`}>
+                        <Button size="sm">
+                          {appointment.encounterStatus === "in_progress"
+                            ? "Rejoin room"
+                            : "Open room"}
+                        </Button>
+                      </Link>
+                      {appointment.encounterStatus === "in_progress" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const encounter = clinicalRecords?.encounters.find(
+                              (item) => item.appointment_id === appointment.id,
+                            );
+                            setSelectedEncounterId(encounter?.id ?? null);
+                          }}
+                        >
+                          Open chart
+                        </Button>
+                      )}
+                    </span>
+                  ) : canTriage &&
                   appointment.status === "arrived" &&
                   appointment.encounterStatus !== "in_progress" ? (
                     <Button
@@ -1881,6 +1926,27 @@ export default function Home() {
                       />{" "}
                       Available for online booking
                     </label>
+                    <fieldset className="stack">
+                      <legend>Delivery modes</legend>
+                      <label className="booking-toggle">
+                        <input
+                          name="deliveryInPerson"
+                          key={`in-person-${editingService?.id ?? "new"}`}
+                          type="checkbox"
+                          defaultChecked={editingService?.delivery_modes.includes("in_person") ?? true}
+                        />{" "}
+                        In-person clinic visit
+                      </label>
+                      <label className="booking-toggle">
+                        <input
+                          name="deliveryVirtual"
+                          key={`virtual-${editingService?.id ?? "new"}`}
+                          type="checkbox"
+                          defaultChecked={editingService?.delivery_modes.includes("virtual") ?? false}
+                        />{" "}
+                        Virtual teleconsultation
+                      </label>
+                    </fieldset>
                     <Button type="submit" disabled={serviceBusy}>
                       {serviceBusy
                         ? "Saving…"
@@ -1902,6 +1968,7 @@ export default function Home() {
                             {service.base_price === null
                               ? "Fee on consultation"
                               : `PHP ${service.base_price.toLocaleString()}`}
+                            {" · "}{service.delivery_modes.map((mode) => mode === "virtual" ? "Virtual" : "Clinic").join(" + ")}
                           </small>
                         </div>
                         <div className="service-actions">

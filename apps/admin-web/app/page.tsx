@@ -19,6 +19,7 @@ import {
   getSpecialistOptions,
   getLaboratoryServices,
   listDiagnosticEncounters,
+  getOrganizationModules,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
@@ -29,6 +30,7 @@ import type {
   DiagnosticEncounterOption,
   SpecialistOption,
   LaboratoryServiceSummary,
+  OrganizationModuleKey,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -58,6 +60,9 @@ export default function Home() {
   >([]);
   const [canManageAccounts, setCanManageAccounts] = useState(false);
   const [canAccessInventory, setCanAccessInventory] = useState(false);
+  const [canAccessGovernance, setCanAccessGovernance] = useState(false);
+  const [canIdentifyPatients, setCanIdentifyPatients] = useState(false);
+  const [disabledModules, setDisabledModules] = useState<OrganizationModuleKey[]>([]);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [appointments, setAppointments] = useState<AppointmentQueueItem[]>([]);
   const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
@@ -196,7 +201,7 @@ export default function Home() {
     }
     setAccessibleClinics(clinicResult.data);
     const firstClinicId = clinicResult.data[0].id;
-    const [inventoryPermission, schedulePermission, staffPermission] =
+    const [inventoryPermission, schedulePermission, staffPermission, governancePermission, identificationPermission, moduleResult] =
       await Promise.all([
         hasOrganizationPermission(client, firstClinicId, "can_view_inventory"),
         hasOrganizationPermission(
@@ -209,6 +214,9 @@ export default function Home() {
           firstClinicId,
           "can_manage_staff_roles",
         ),
+        hasOrganizationPermission(client, firstClinicId, "can_view_analytics"),
+        hasOrganizationPermission(client, firstClinicId, "can_identify_patients"),
+        getOrganizationModules(client, firstClinicId),
       ]);
     const canUseSchedule = !schedulePermission.error && schedulePermission.data;
     if (
@@ -223,6 +231,17 @@ export default function Home() {
       !inventoryPermission.error && inventoryPermission.data,
     );
     setCanManageAccounts(!staffPermission.error && staffPermission.data);
+    setCanAccessGovernance(
+      !governancePermission.error && governancePermission.data,
+    );
+    setCanIdentifyPatients(
+      !identificationPermission.error && identificationPermission.data,
+    );
+    setDisabledModules(
+      moduleResult.error
+        ? []
+        : moduleResult.data.filter((module) => !module.enabled).map((module) => module.moduleKey),
+    );
     setOrganizationId(firstClinicId);
     setStatus("Signed in. Loading your clinic schedule.");
     await loadSchedule(firstClinicId);
@@ -292,6 +311,7 @@ export default function Home() {
       createBrowserSupabaseClient(),
       String(fields.get("existingSlotId") ?? ""),
       String(fields.get("patientId") ?? ""),
+      fields.get("deliveryMode") === "virtual" ? "virtual" : "in_person",
     );
     setSubmitting(false);
     if (result.error)
@@ -441,8 +461,11 @@ export default function Home() {
                 </Link>
               )}
               {canManageAccounts && <Link href="/staff">Staff accounts</Link>}
-              {canAccessInventory && <Link href="/inventory">Inventory</Link>}
-              {canManageAccounts && <Link href="/laboratory-services">Laboratory services</Link>}
+              {canAccessGovernance && <Link href="/governance">Governance</Link>}
+              {canIdentifyPatients && <Link href="/patient-lookup">Patient QR</Link>}
+              {canAccessInventory && !disabledModules.includes("inventory") && <Link href="/inventory">Inventory</Link>}
+              {canManageAccounts && !disabledModules.includes("diagnostics") && <Link href="/laboratory-services">Laboratory services</Link>}
+              {canManageAccounts && !disabledModules.includes("remote_care") && <Link href="/payouts">Doctor payouts</Link>}
               <Button onClick={() => void loadSchedule()}>Refresh</Button>{" "}
               <Button variant="secondary" onClick={handleSignOut}>
                 Sign out
@@ -495,6 +518,12 @@ export default function Home() {
                 cell: (appointment) => appointment.patientName,
               },
               {
+                id: "mode",
+                header: "Visit",
+                cell: (appointment) =>
+                  appointment.delivery_mode === "virtual" ? "Virtual" : "Clinic",
+              },
+              {
                 id: "status",
                 header: "Status",
                 cell: (appointment) => (
@@ -506,7 +535,8 @@ export default function Home() {
                 header: "Actions",
                 cell: (appointment) => (
                   <span className="table-actions">
-                    {appointment.status === "booked" && (
+                    {appointment.status === "booked" &&
+                      appointment.delivery_mode === "in_person" && (
                       <Button
                         size="sm"
                         disabled={updatingId !== null}
@@ -665,6 +695,16 @@ export default function Home() {
                       {slot.service_type ?? "Consultation"}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field label="Delivery mode">
+                <select
+                  className="odyssey-input"
+                  name="deliveryMode"
+                  defaultValue="in_person"
+                >
+                  <option value="in_person">In-person clinic visit</option>
+                  <option value="virtual">Virtual teleconsultation</option>
                 </select>
               </Field>
               <Button

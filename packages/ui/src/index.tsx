@@ -6,6 +6,9 @@ import type {
 } from "react";
 import type { AppointmentStatus, InvoiceStatus, PayorType } from "@odyssey/types";
 
+export { TeleconsultWebRtcRoom } from "./teleconsult-video-room";
+export type { TeleconsultWebRtcRoomProps } from "./teleconsult-video-room";
+
 export function cn(
   ...values: Array<string | false | null | undefined>
 ): string {

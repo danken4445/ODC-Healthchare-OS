@@ -112,6 +112,7 @@ export type Database = {
           clinic_service_id: string | null;
           created_at: string;
           description: string | null;
+          delivery_mode: Database["public"]["Enums"]["appointment_delivery_mode"];
           end_at: string | null;
           id: string;
           minutes_duration: number | null;
@@ -135,6 +136,7 @@ export type Database = {
           clinic_service_id?: string | null;
           created_at?: string;
           description?: string | null;
+          delivery_mode?: Database["public"]["Enums"]["appointment_delivery_mode"];
           end_at?: string | null;
           id?: string;
           minutes_duration?: number | null;
@@ -158,6 +160,7 @@ export type Database = {
           clinic_service_id?: string | null;
           created_at?: string;
           description?: string | null;
+          delivery_mode?: Database["public"]["Enums"]["appointment_delivery_mode"];
           end_at?: string | null;
           id?: string;
           minutes_duration?: number | null;
@@ -358,6 +361,7 @@ export type Database = {
           created_at: string;
           currency: string;
           description: string | null;
+          delivery_modes: Database["public"]["Enums"]["appointment_delivery_mode"][];
           duration_minutes: number;
           id: string;
           name: string;
@@ -373,6 +377,7 @@ export type Database = {
           created_at?: string;
           currency?: string;
           description?: string | null;
+          delivery_modes?: Database["public"]["Enums"]["appointment_delivery_mode"][];
           duration_minutes?: number;
           id?: string;
           name: string;
@@ -388,6 +393,7 @@ export type Database = {
           created_at?: string;
           currency?: string;
           description?: string | null;
+          delivery_modes?: Database["public"]["Enums"]["appointment_delivery_mode"][];
           duration_minutes?: number;
           id?: string;
           name?: string;
@@ -2045,8 +2051,82 @@ export type Database = {
         Returns: string;
       };
       book_appointment_slot: {
-        Args: { p_patient_id?: string; p_slot_id: string };
+        Args: {
+          p_delivery_mode?: Database["public"]["Enums"]["appointment_delivery_mode"];
+          p_patient_id?: string;
+          p_slot_id: string;
+        };
         Returns: string;
+      };
+      close_teleconsult_room: {
+        Args: { p_appointment_id: string };
+        Returns: undefined;
+      };
+      save_provider_clinic_service_with_delivery: {
+        Args: {
+          p_base_price: number;
+          p_booking_enabled: boolean;
+          p_code: string;
+          p_delivery_modes: Database["public"]["Enums"]["appointment_delivery_mode"][];
+          p_description: string;
+          p_duration_minutes: number;
+          p_name: string;
+          p_organization_id: string;
+          p_service_id: string;
+        };
+        Returns: string;
+      };
+      list_teleconsult_appointments: {
+        Args: { p_organization_id: string };
+        Returns: {
+          appointment_id: string;
+          appointment_status: Database["public"]["Enums"]["appointment_status"];
+          can_join: boolean;
+          encounter_id: string | null;
+          encounter_status: Database["public"]["Enums"]["encounter_status"] | null;
+          end_at: string;
+          organization_id: string;
+          patient_name: string;
+          practitioner_name: string;
+          provider: Database["public"]["Enums"]["teleconsult_provider"];
+          room_name: string | null;
+          room_status: Database["public"]["Enums"]["teleconsult_room_status"];
+          service_type: string | null;
+          start_at: string;
+        }[];
+      };
+      list_doctor_payouts: {
+        Args: { p_organization_id: string };
+        Returns: {
+          billing_event_id: string;
+          created_at: string;
+          currency: string;
+          delivery_mode: Database["public"]["Enums"]["appointment_delivery_mode"];
+          encounter_finished_at: string | null;
+          encounter_id: string;
+          gross_service_amount: number;
+          id: string;
+          paid_at: string | null;
+          payout_amount: number;
+          payment_reference: string | null;
+          practitioner_name: string;
+          practitioner_role_id: string;
+          service_type: string | null;
+          share_basis_points: number;
+          status: Database["public"]["Enums"]["doctor_payout_status"];
+        }[];
+      };
+      set_practitioner_payout_rate: {
+        Args: { p_practitioner_role_id: string; p_share_basis_points: number };
+        Returns: undefined;
+      };
+      settle_doctor_payouts: {
+        Args: {
+          p_organization_id: string;
+          p_payment_reference: string;
+          p_payout_ids: string[];
+        };
+        Returns: number;
       };
       can_access_organization: {
         Args: { target_organization_id: string };
@@ -2435,6 +2515,7 @@ export type Database = {
       };
     };
     Enums: {
+      appointment_delivery_mode: "in_person" | "virtual";
       appointment_status:
         | "proposed"
         | "pending"
@@ -2443,6 +2524,9 @@ export type Database = {
         | "fulfilled"
         | "cancelled"
         | "noshow";
+      doctor_payout_status: "pending" | "paid" | "void";
+      teleconsult_provider: "jitsi" | "daily" | "twilio" | "custom_webrtc";
+      teleconsult_room_status: "scheduled" | "open" | "closed" | "cancelled";
       claim_status: "active" | "cancelled" | "draft" | "entered_in_error";
       diagnostic_report_status:
         | "registered"

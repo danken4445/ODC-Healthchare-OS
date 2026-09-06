@@ -34,6 +34,10 @@ interface CartItem {
   quantity: number;
 }
 
+interface PosInventoryItem extends InventoryItemSummary {
+  currentStock: number;
+}
+
 export default function PosPage() {
   const [email, setEmail] = useState("front-desk@synthetic.odyssey.test");
   const [password, setPassword] = useState("");
@@ -45,7 +49,7 @@ export default function PosPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Inventory items for POS
-  const [items, setItems] = useState<InventoryItemSummary[]>([]);
+  const [items, setItems] = useState<PosInventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Cart
@@ -83,15 +87,38 @@ export default function PosPage() {
     const canPos = await hasOrganizationPermission(client, organizationId, "can_manage_pos");
     setCanManagePos(!!canPos.data);
 
-    // Load inventory items directly for POS
-    const { data, error } = await client
-      .from("inventory_items")
-      .select("id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active")
-      .eq("organization_id", organizationId)
-      .eq("active", true)
-      .order("name");
-    if (data) setItems(data);
-    else if (error) setStatus(`Error loading items: ${error.message}`);
+    // Load active catalog items and aggregate their stock across departments.
+    const [itemsResult, stockResult] = await Promise.all([
+      client
+        .from("inventory_items")
+        .select("id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active")
+        .eq("organization_id", organizationId)
+        .eq("active", true)
+        .order("name"),
+      client
+        .from("department_stock")
+        .select("item_id, quantity")
+        .eq("organization_id", organizationId),
+    ]);
+    if (itemsResult.error) {
+      setStatus(`Error loading items: ${itemsResult.error.message}`);
+    } else if (stockResult.error) {
+      setStatus(`Error loading stock: ${stockResult.error.message}`);
+    } else if (itemsResult.data) {
+      const stockByItem = new Map<string, number>();
+      for (const stock of stockResult.data ?? []) {
+        stockByItem.set(
+          stock.item_id,
+          (stockByItem.get(stock.item_id) ?? 0) + Number(stock.quantity),
+        );
+      }
+      setItems(
+        itemsResult.data.map((item) => ({
+          ...item,
+          currentStock: stockByItem.get(item.id) ?? 0,
+        })),
+      );
+    }
 
     // Load recent POS sales
     const ws = await getBillingWorkspace(client, organizationId);
@@ -125,7 +152,7 @@ export default function PosPage() {
     setStatus("Signed out.");
   }
 
-  function addToCart(item: InventoryItemSummary) {
+  function addToCart(item: PosInventoryItem) {
     setCart((prev) => {
       const existing = prev.find((c) => c.item.id === item.id);
       if (existing) {
@@ -259,19 +286,41 @@ export default function PosPage() {
                 placeholder="Name or SKU…"
               />
             </Field>
-            <DataTable<InventoryItemSummary>
-              caption="Available items"
+            <DataTable<PosInventoryItem>
+              caption="Active inventory items with current stock across all departments"
               data={filteredItems}
               getRowId={(row) => row.id}
               columns={[
-                { id: "name", header: "Item", cell: (r) => r.name },
+                {
+                  id: "item",
+                  header: "Item details",
+                  cell: (r) => (
+                    <div>
+                      <strong>{r.name}</strong>
+                      <div style={{ color: "var(--odyssey-muted-foreground)", fontSize: "0.875rem" }}>
+                        {r.description || "No description"}
+                      </div>
+                    </div>
+                  ),
+                },
                 { id: "sku", header: "SKU", cell: (r) => <Badge variant="muted">{r.sku}</Badge> },
-                { id: "price", header: "Price", cell: (r) => <CurrencyDisplay amount={Number(r.selling_price)} /> },
+                { id: "unit", header: "Unit", cell: (r) => r.unit_of_measure },
+                {
+                  id: "stock",
+                  header: "Current stock",
+                  cell: (r) => (
+                    <Badge variant={r.currentStock > 0 ? "success" : "danger"}>
+                      {r.currentStock.toLocaleString()} {r.unit_of_measure}
+                    </Badge>
+                  ),
+                },
+                { id: "cost", header: "Unit cost", cell: (r) => <CurrencyDisplay amount={Number(r.unit_cost)} currency={r.currency} /> },
+                { id: "price", header: "Selling price", cell: (r) => <CurrencyDisplay amount={Number(r.selling_price)} currency={r.currency} /> },
                 {
                   id: "add",
                   header: "",
                   cell: (r) => (
-                    <Button size="sm" onClick={() => addToCart(r)}>
+                    <Button size="sm" disabled={r.currentStock <= 0} onClick={() => addToCart(r)}>
                       + Add
                     </Button>
                   ),

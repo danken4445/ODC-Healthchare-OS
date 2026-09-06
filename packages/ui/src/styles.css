@@ -469,3 +469,95 @@ textarea.odyssey-input {
   letter-spacing: 0.08em;
   font-weight: 600;
 }
+
+.odyssey-teleconsult-video {
+  min-height: 32rem;
+  overflow: hidden;
+  border: 1px solid var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  background: #111827;
+  color: #ffffff;
+}
+
+.odyssey-teleconsult-video__header,
+.odyssey-teleconsult-video__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+}
+.odyssey-teleconsult-video__header {
+  border-bottom: 1px solid rgb(255 255 255 / 18%);
+}
+.odyssey-teleconsult-video__header p {
+  margin: 0.25rem 0 0;
+  color: #d1d5db;
+  font-size: 0.8rem;
+}
+.odyssey-teleconsult-video__header > span,
+.odyssey-teleconsult-video__tile small {
+  color: #d1d5db;
+  font-size: 0.75rem;
+}
+.odyssey-teleconsult-video__streams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-height: 28rem;
+  padding: 0.75rem;
+}
+.odyssey-teleconsult-video__tile {
+  position: relative;
+  display: grid;
+  min-height: 12rem;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: calc(var(--odyssey-radius) - 2px);
+  background: #030712;
+}
+.odyssey-teleconsult-video__tile p {
+  color: #d1d5db;
+  font-size: 0.875rem;
+  text-align: center;
+}
+.odyssey-teleconsult-video__tile small {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 60%);
+}
+.odyssey-teleconsult-video__stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.odyssey-teleconsult-video__controls {
+  justify-content: center;
+  flex-wrap: wrap;
+  border-top: 1px solid rgb(255 255 255 / 18%);
+}
+.odyssey-teleconsult-video__controls button {
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.odyssey-teleconsult-video__controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.odyssey-teleconsult-video__controls .odyssey-teleconsult-video__leave {
+  border-color: #fecaca;
+  color: #fecaca;
+}
+@media (max-width: 44rem) {
+  .odyssey-teleconsult-video__streams { grid-template-columns: 1fr; }
+}

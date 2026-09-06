@@ -113,6 +113,8 @@ export type ClaimRow = DatabaseRow<"claims">;
 
 export type AppointmentStatus =
   Database["public"]["Enums"]["appointment_status"];
+export type AppointmentDeliveryMode =
+  Database["public"]["Enums"]["appointment_delivery_mode"];
 export type EncounterStatus = Database["public"]["Enums"]["encounter_status"];
 export type SlotStatus = Database["public"]["Enums"]["slot_status"];
 export type ObservationStatus =
@@ -168,6 +170,7 @@ export type AppointmentSummary = Pick<
   | "clinic_service_id"
   | "queue_date"
   | "queue_number"
+  | "delivery_mode"
 >;
 
 /** FHIR Slot fields exposed by the scheduling UI. */
@@ -196,7 +199,9 @@ export type ClinicServiceSummary = Pick<
   | "duration_minutes"
   | "base_price"
   | "currency"
+  | "active"
   | "booking_enabled"
+  | "delivery_modes"
 >;
 
 /** Values a provider can maintain for a service offered from their clinic. */
@@ -206,6 +211,7 @@ export interface ClinicServiceInput {
   durationMinutes: number;
   basePrice?: number | null;
   bookingEnabled: boolean;
+  deliveryModes?: AppointmentDeliveryMode[];
 }
 
 export interface WeeklyAvailabilityWindow {
@@ -279,7 +285,17 @@ export type ClinicRolePermission =
   | "can_view_billing"
   | "can_manage_pos"
   | "can_manage_claims"
-  | "can_view_claims";
+  | "can_view_claims"
+  | "can_view_payouts"
+  | "can_manage_payouts"
+  | "can_view_analytics"
+  | "can_manage_patients"
+  | "can_view_audit_log"
+  | "can_identify_patients"
+  | "can_manage_clinic_branding"
+  | "can_manage_service_catalog"
+  | "can_manage_document_templates"
+  | "can_manage_feature_modules";
 
 export interface ClinicRoleDefinition {
   code: string;
@@ -909,4 +925,189 @@ export interface PosCheckoutResult {
   payment_id: string;
   receipt_number: string;
   total: number;
+}
+
+/* Loop 6: Remote Care */
+
+export type TeleconsultProvider =
+  Database["public"]["Enums"]["teleconsult_provider"];
+export type TeleconsultRoomStatus =
+  Database["public"]["Enums"]["teleconsult_room_status"];
+export type DoctorPayoutStatus =
+  Database["public"]["Enums"]["doctor_payout_status"];
+
+export interface TeleconsultAppointment {
+  appointment_id: string;
+  organization_id: string;
+  provider: TeleconsultProvider;
+  room_name: string | null;
+  room_status: TeleconsultRoomStatus;
+  appointment_status: AppointmentStatus;
+  start_at: string;
+  end_at: string;
+  service_type: string | null;
+  patient_name: string;
+  practitioner_name: string;
+  can_join: boolean;
+  encounter_id: string | null;
+  encounter_status: EncounterStatus | null;
+}
+
+export interface DoctorPayoutSummary {
+  id: string;
+  encounter_id: string;
+  billing_event_id: string;
+  practitioner_role_id: string;
+  practitioner_name: string;
+  delivery_mode: AppointmentDeliveryMode;
+  service_type: string | null;
+  encounter_finished_at: string | null;
+  gross_service_amount: number;
+  share_basis_points: number;
+  payout_amount: number;
+  currency: string;
+  status: DoctorPayoutStatus;
+  paid_at: string | null;
+  payment_reference: string | null;
+  created_at: string;
+}
+
+/* Loop 7: Platform and Governance */
+
+export interface GovernanceDashboard {
+  activePatients: number;
+  appointmentsToday: number;
+  waitingNow: number;
+  completedEncounters30d: number;
+  outstandingInvoices: number;
+  outstandingBalance: number;
+  confirmedRevenue30d: number;
+  activeStaff: number;
+  auditEvents24h: number;
+}
+
+export interface GovernancePatientSummary {
+  patientId: string;
+  displayName: string;
+  walkInId: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  telecom: Json;
+  active: boolean;
+  encounterCount: number;
+  appointmentCount: number;
+  lastActivityAt: string;
+}
+
+export interface GovernancePatientRecord {
+  patient: Record<string, unknown>;
+  appointments: Array<Record<string, unknown>>;
+  encounters: Array<Record<string, unknown>>;
+  observations: Array<Record<string, unknown>>;
+  medications: Array<Record<string, unknown>>;
+  documents: Array<Record<string, unknown>>;
+  service_requests: Array<Record<string, unknown>>;
+  diagnostic_reports: Array<Record<string, unknown>>;
+  invoices: Array<Record<string, unknown>>;
+}
+
+export interface PatientAuditEvent {
+  id: string;
+  occurredAt: string;
+  actorName: string;
+  actorType: string;
+  action: string;
+  resourceType: string;
+  recordId: string;
+  metadata: Json;
+}
+
+export interface IdentifiedPatient {
+  patientId: string;
+  displayName: string;
+  walkInId: string | null;
+  birthDate: string | null;
+  gender: string | null;
+}
+
+export interface ImportedPatientCredential extends IdentifiedPatient {
+  rowNumber: number;
+  pin: string | null;
+  error: string | null;
+}
+
+export interface OrganizationBranding {
+  id: string;
+  organizationId: string;
+  displayName: string;
+  tagline: string | null;
+  logoUrl: string | null;
+  primaryColor: string;
+  accentColor: string;
+  supportEmail: string | null;
+  supportPhone: string | null;
+}
+
+export interface OrganizationBrandingInput {
+  displayName: string;
+  tagline?: string;
+  logoUrl?: string;
+  primaryColor: string;
+  accentColor: string;
+  supportEmail?: string;
+  supportPhone?: string;
+}
+
+export type DocumentTemplateCategory =
+  | "medical_certificate"
+  | "prescription"
+  | "referral"
+  | "laboratory"
+  | "invoice"
+  | "general";
+
+export interface DocumentTemplate {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  category: DocumentTemplateCategory;
+  description: string | null;
+  body: string;
+  version: number;
+  active: boolean;
+  updatedAt: string;
+}
+
+export interface DocumentTemplateInput {
+  id?: string;
+  name: string;
+  category: DocumentTemplateCategory;
+  description?: string;
+  body: string;
+  active: boolean;
+}
+
+export type OrganizationModuleKey =
+  | "core_visit"
+  | "clinical_documentation"
+  | "inventory"
+  | "diagnostics"
+  | "financial"
+  | "remote_care"
+  | "governance";
+
+export interface OrganizationModule {
+  id: string;
+  organizationId: string;
+  moduleKey: OrganizationModuleKey;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export interface GovernancePatientImportRow {
+  name: string;
+  birth_date?: string;
+  gender?: string;
+  phone?: string;
 }
