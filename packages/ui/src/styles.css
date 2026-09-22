@@ -253,6 +253,41 @@ h2 {
   border: 1px solid var(--odyssey-border);
   border-radius: var(--odyssey-radius);
 }
+.odyssey-card--queue-card {
+  margin: 0;
+  padding: 0.875rem;
+}
+.odyssey-card--data-row {
+  margin: 0;
+  padding: 0.75rem 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+.odyssey-department-tag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--odyssey-muted);
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.odyssey-department-tag--cardiology { border-left: 3px solid #b45309; }
+.odyssey-department-tag--pediatrics { border-left: 3px solid #7c3aed; }
+.odyssey-department-tag--laboratory { border-left: 3px solid #1769aa; }
+.odyssey-empty-state,
+.odyssey-error-state {
+  padding: 1.5rem;
+  border: 1px dashed var(--odyssey-border);
+  border-radius: var(--odyssey-radius);
+  color: var(--odyssey-muted-foreground);
+  text-align: center;
+}
+.odyssey-empty-state p,
+.odyssey-error-state p { margin: 0.35rem 0 0; }
+.odyssey-error-state { color: var(--odyssey-destructive); border-style: solid; }
 .odyssey-table-scroll {
   overflow-x: auto;
 }

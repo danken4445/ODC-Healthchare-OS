@@ -19,6 +19,82 @@
   --odyssey-slate-blocked-text: #475569;
 }
 
+/* Clinical workspace: flat, token-led provider surfaces. */
+:root {
+  --odyssey-background: #f5f7f8;
+  --odyssey-card: #ffffff;
+  --odyssey-foreground: #172b32;
+  --odyssey-muted: #edf1f2;
+  --odyssey-muted-foreground: #52656c;
+  --odyssey-primary: #087b79;
+  --odyssey-primary-foreground: #ffffff;
+  --odyssey-destructive: #b42318;
+  --odyssey-border: #ced8db;
+  --odyssey-focus: #087b79;
+}
+
+.workspace-shell {
+  width: min(100% - 2rem, 88rem);
+  max-width: 88rem !important;
+  margin: 1rem auto !important;
+  padding: 1.5rem !important;
+  border: 1px solid var(--odyssey-border);
+  border-radius: 0.5rem;
+  box-shadow: none !important;
+}
+.workspace-header-bar { align-items: flex-start; }
+.workspace-title-group h1 { margin: 0; font-size: 1.5rem; }
+.workspace-meta-badges { color: var(--odyssey-muted-foreground); font-size: 0.8125rem; }
+.realtime-status { padding-left: 0.75rem; border-left: 1px solid var(--odyssey-border); }
+.session-actions a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--odyssey-primary); font-weight: 600; text-decoration: none; }
+.workspace-nav-tabs { padding: 0 0 0.75rem; background: transparent; border-bottom: 1px solid var(--odyssey-border); border-radius: 0; }
+.workspace-nav-tabs .odyssey-button { box-shadow: none; }
+.live-pulse-badge, .pulse-dot { animation: none !important; box-shadow: none !important; }
+
+.queue-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.queue-board + .odyssey-table-scroll { display: none; }
+.queue-column { min-width: 0; padding: 0.75rem; background: var(--odyssey-background); border: 1px solid var(--odyssey-border); border-radius: 0.5rem; }
+.queue-column__header, .queue-patient__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.queue-column__header { margin-bottom: 0.75rem; }
+.queue-column__header h2 { margin: 0; font-size: 0.9375rem; }
+.queue-column__header > span { color: var(--odyssey-muted-foreground); font-variant-numeric: tabular-nums; }
+.queue-column__items { display: grid; gap: 0.75rem; }
+.queue-patient__heading strong { font-size: 0.9375rem; }
+.queue-patient__heading time { color: var(--odyssey-muted-foreground); font-size: 0.8125rem; white-space: nowrap; }
+.queue-column .odyssey-card p { margin: 0.5rem 0; color: var(--odyssey-muted-foreground); font-size: 0.875rem; }
+.queue-patient__action { margin-top: 0.75rem; }
+
+.consultation-layout { grid-template-columns: minmax(14rem, 0.7fr) minmax(28rem, 1.8fr); align-items: start; }
+.soap-panel { grid-column: 2; grid-row: span 2; }
+.soap-panel textarea { min-height: 24rem; line-height: 1.6; }
+.form-actions { display: flex; align-items: center; gap: 0.75rem; }
+.save-status { color: var(--odyssey-muted-foreground); font-size: 0.8125rem; }
+.prescription-panel, .certificate-document { grid-column: 1 / -1; }
+.prescription-primary input { min-height: 3.25rem; font-size: 1.125rem; font-weight: 700; }
+.prescription-panel textarea { font-size: 1rem; font-weight: 600; }
+.certificate-document { max-width: 48rem; padding: 2rem; }
+.certificate-document form { max-width: 40rem; }
+.certificate-document textarea { min-height: 10rem; line-height: 1.6; }
+.floating-toast { display: none !important; }
+main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground); font-size: 0.8125rem; }
+
+.capacity-card, .slot-tile { transform: none !important; box-shadow: none !important; transition: background-color 0.15s ease, border-color 0.15s ease !important; }
+.slot-tile--free { background: color-mix(in srgb, var(--odyssey-primary) 9%, var(--odyssey-card)); border-color: var(--odyssey-primary); color: var(--odyssey-foreground); }
+.slot-tile--blocked { background: var(--odyssey-muted); border-color: var(--odyssey-border); color: var(--odyssey-muted-foreground); }
+.slot-tile--booked { background: var(--odyssey-card); border-color: var(--odyssey-border); color: var(--odyssey-foreground); }
+.weekly-day { transition: none !important; }
+
+@media (max-width: 800px) {
+  .workspace-shell { width: 100%; margin: 0 !important; border-width: 0; }
+  .queue-board, .consultation-layout { grid-template-columns: 1fr; }
+  .soap-panel { grid-column: auto; grid-row: auto; }
+  .workspace-header-bar { display: grid; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}
+
 .cms-grid {
   margin: 1rem 0 1.5rem;
   align-items: start;
@@ -1103,3 +1179,26 @@
     transition: none;
   }
 }
+
+/* Provider clinical surface overrides intentionally remain last. */
+.workspace-shell { width: min(100% - 2rem, 88rem); max-width: 88rem !important; margin: 1rem auto !important; padding: 1.5rem !important; border: 1px solid var(--odyssey-border); border-radius: .5rem; box-shadow: none !important; }
+.workspace-title-group h1 { margin: 0; font-size: 1.5rem; }
+.workspace-nav-tabs { padding: 0 0 .75rem; background: transparent; border-bottom: 1px solid var(--odyssey-border); border-radius: 0; }
+.queue-board { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; }
+.queue-board + .odyssey-table-scroll { display: none; }
+.queue-column { min-width: 0; padding: .75rem; background: var(--odyssey-background); border: 1px solid var(--odyssey-border); border-radius: .5rem; }
+.queue-column__header,.queue-patient__heading { display:flex; align-items:baseline; justify-content:space-between; gap:.75rem; }
+.queue-column__header { margin-bottom:.75rem; }
+.queue-column__header h2 { margin:0; font-size:.9375rem; }
+.queue-column__items { display:grid; gap:.75rem; }
+.queue-patient__action { margin-top:.75rem; }
+.consultation-layout { grid-template-columns:minmax(14rem,.7fr) minmax(28rem,1.8fr); align-items:start; }
+.soap-panel { grid-column:2; grid-row:span 2; }
+.soap-panel textarea { min-height:24rem; line-height:1.6; }
+.prescription-panel,.certificate-document { grid-column:1/-1; }
+.prescription-primary input { min-height:3.25rem; font-size:1.125rem; font-weight:700; }
+.certificate-document { max-width:48rem; padding:2rem; }
+.certificate-document textarea { min-height:10rem; line-height:1.6; }
+.floating-toast { display:none !important; }
+.capacity-card,.slot-tile { transform:none !important; box-shadow:none !important; }
+@media(max-width:800px){.workspace-shell{width:100%;margin:0!important;border-width:0}.queue-board,.consultation-layout{grid-template-columns:1fr}.soap-panel{grid-column:auto;grid-row:auto}}

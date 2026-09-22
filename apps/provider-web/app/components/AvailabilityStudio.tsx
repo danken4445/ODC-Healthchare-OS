@@ -143,7 +143,7 @@ export function AvailabilityStudio({
         </div>
 
         <div className="capacity-card">
-          <span className="capacity-card__label">🟢 Bookable (Free)</span>
+          <span className="capacity-card__label">Available</span>
           <span className="capacity-card__value" style={{ color: "var(--odyssey-emerald)" }}>
             {freeSlots}
           </span>
@@ -153,7 +153,7 @@ export function AvailabilityStudio({
         </div>
 
         <div className="capacity-card">
-          <span className="capacity-card__label">🔵 Confirmed Bookings</span>
+          <span className="capacity-card__label">Booked</span>
           <span className="capacity-card__value" style={{ color: "var(--odyssey-blue-booked)" }}>
             {bookedSlots}
           </span>
@@ -163,7 +163,7 @@ export function AvailabilityStudio({
         </div>
 
         <div className="capacity-card">
-          <span className="capacity-card__label">⚪ Blocked by Doctor</span>
+          <span className="capacity-card__label">Unavailable</span>
           <span className="capacity-card__value" style={{ color: "var(--odyssey-slate-blocked)" }}>
             {blockedSlots}
           </span>
@@ -212,61 +212,61 @@ export function AvailabilityStudio({
             View:
           </span>
           <div className="view-btn-group" role="group" aria-label="Schedule layout view">
-            <button
+            <Button
               type="button"
               className={`view-btn ${viewMode === "matrix" ? "active" : ""}`}
               onClick={() => setViewMode("matrix")}
             >
-              📊 Weekly Matrix
-            </button>
-            <button
+              Weekly schedule
+            </Button>
+            <Button
               type="button"
               className={`view-btn ${viewMode === "agenda" ? "active" : ""}`}
               onClick={() => setViewMode("agenda")}
             >
               📅 Day Agenda
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               className={`view-btn ${viewMode === "table" ? "active" : ""}`}
               onClick={() => setViewMode("table")}
             >
-              📋 Classic Table
-            </button>
+              Table
+            </Button>
           </div>
 
           <div style={{ width: "1px", height: "1.5rem", background: "var(--odyssey-border)", margin: "0 0.25rem" }} />
 
           {/* Status Filter */}
           <div className="toolbar-group">
-            <button
+            <Button
               type="button"
               className={`filter-pill ${statusFilter === "all" ? "active" : ""}`}
               onClick={() => setStatusFilter("all")}
             >
               All ({totalSlots})
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               className={`filter-pill ${statusFilter === "free" ? "active" : ""}`}
               onClick={() => setStatusFilter("free")}
             >
-              🟢 Bookable ({freeSlots})
-            </button>
-            <button
+              Available ({freeSlots})
+            </Button>
+            <Button
               type="button"
               className={`filter-pill ${statusFilter === "booked" ? "active" : ""}`}
               onClick={() => setStatusFilter("booked")}
             >
-              🔵 Booked ({bookedSlots})
-            </button>
-            <button
+              Booked ({bookedSlots})
+            </Button>
+            <Button
               type="button"
               className={`filter-pill ${statusFilter === "blocked" ? "active" : ""}`}
               onClick={() => setStatusFilter("blocked")}
             >
-              ⚪ Blocked ({blockedSlots})
-            </button>
+              Unavailable ({blockedSlots})
+            </Button>
           </div>
         </div>
 
@@ -301,7 +301,7 @@ export function AvailabilityStudio({
             onClick={() => void onRefresh()}
             title="Refresh availability"
           >
-            🔄
+            Refresh
           </Button>
         </div>
       </div>
@@ -332,13 +332,13 @@ export function AvailabilityStudio({
                   className="matrix-day-column"
                   style={{
                     borderColor: isToday ? "var(--odyssey-primary)" : "var(--odyssey-border)",
-                    background: isToday ? "#f0f9ff" : "#f8fafc",
+                    background: isToday ? "var(--odyssey-muted)" : "var(--odyssey-background)",
                   }}
                 >
                   <div
                     className="matrix-day-header"
                     style={{
-                      background: isToday ? "#e0f2fe" : "#ffffff",
+                      background: isToday ? "var(--odyssey-muted)" : "var(--odyssey-card)",
                       borderBottom: isToday ? "2px solid var(--odyssey-primary)" : "1px solid var(--odyssey-border)",
                     }}
                   >
@@ -374,20 +374,20 @@ export function AvailabilityStudio({
                         const isToggling = togglingSlotId === slot.id;
 
                         let modifierClass = "slot-tile--free";
-                        let statusText = "🟢 Bookable";
+                        let statusText = "Available";
                         let actionPrompt = "Click to block";
                         if (isBooked) {
                           modifierClass = "slot-tile--booked";
-                          statusText = "🔵 Booked";
+                          statusText = "Booked";
                           actionPrompt = "Patient assigned";
                         } else if (isBlocked) {
                           modifierClass = "slot-tile--blocked";
-                          statusText = "⚪ Blocked";
+                          statusText = "Unavailable";
                           actionPrompt = "Click to reopen";
                         }
 
                         return (
-                          <button
+            <Button
                             key={slot.id}
                             type="button"
                             className={`slot-tile ${modifierClass}`}
@@ -411,7 +411,7 @@ export function AvailabilityStudio({
                                 </span>
                               )}
                             </div>
-                          </button>
+            </Button>
                         );
                       })
                     )}
@@ -434,7 +434,7 @@ export function AvailabilityStudio({
                 <div
                   key={dateStr}
                   style={{
-                    background: "#ffffff",
+                    background: "var(--odyssey-card)",
                     border: "1px solid var(--odyssey-border)",
                     borderRadius: "0.75rem",
                     padding: "1rem 1.25rem",
@@ -472,20 +472,20 @@ export function AvailabilityStudio({
                       const isToggling = togglingSlotId === slot.id;
 
                       let modifierClass = "slot-tile--free";
-                      let statusText = "🟢 Bookable";
+                      let statusText = "Available";
                       let actionPrompt = "Click to block";
                       if (isBooked) {
                         modifierClass = "slot-tile--booked";
-                        statusText = "🔵 Booked";
+                        statusText = "Booked";
                         actionPrompt = "Patient assigned";
                       } else if (isBlocked) {
                         modifierClass = "slot-tile--blocked";
-                        statusText = "⚪ Blocked";
+                        statusText = "Unavailable";
                         actionPrompt = "Click to reopen";
                       }
 
                       return (
-                        <button
+            <Button
                           key={slot.id}
                           type="button"
                           className={`slot-tile ${modifierClass}`}
@@ -504,7 +504,7 @@ export function AvailabilityStudio({
                               <span className="slot-tile__action-hint">{actionPrompt}</span>
                             )}
                           </div>
-                        </button>
+            </Button>
                       );
                     })}
                   </div>
@@ -553,7 +553,7 @@ export function AvailabilityStudio({
                         fontSize: "0.8rem",
                       }}
                     >
-                      🟢 Bookable
+                      Available
                     </span>
                   );
                 }
@@ -569,7 +569,7 @@ export function AvailabilityStudio({
                         fontSize: "0.8rem",
                       }}
                     >
-                      ⚪ Unavailable
+                      Unavailable
                     </span>
                   );
                 }
@@ -584,7 +584,7 @@ export function AvailabilityStudio({
                       fontSize: "0.8rem",
                     }}
                   >
-                    🔵 Booked
+                    Booked
                   </span>
                 );
               },

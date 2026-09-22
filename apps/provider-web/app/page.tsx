@@ -69,6 +69,7 @@ import {
 } from "./components/WorkspaceHeader";
 import { WeeklyScheduleBuilder } from "./components/WeeklyScheduleBuilder";
 import { AvailabilityStudio } from "./components/AvailabilityStudio";
+import { QueueBoard } from "./components/QueueBoard";
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -1056,6 +1057,25 @@ export default function Home() {
           {canUpdateReferrals && (
             <section aria-labelledby="referrals-heading">
               <h2 id="referrals-heading">My specialist referrals</h2>
+              <QueueBoard
+                appointments={queue}
+                renderAction={(appointment) =>
+                  appointment.encounterStatus === "in_progress" ? (
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const encounter = clinicalRecords?.encounters.find((item) => item.appointment_id === appointment.id);
+                      setSelectedEncounterId(encounter?.id ?? null);
+                    }}>Open chart</Button>
+                  ) : appointment.delivery_mode === "virtual" ? (
+                    <Link href={`/teleconsult/${appointment.id}`}><Button size="sm">Open room</Button></Link>
+                  ) : appointment.status === "arrived" && appointment.triageStatus === "complete" ? (
+                    <Button size="sm" disabled={startingId !== null} onClick={() => void handleStart(appointment.id)}>
+                      {startingId === appointment.id ? "Starting…" : "Start consultation"}
+                    </Button>
+                  ) : canTriage && appointment.status === "arrived" ? (
+                    <Button size="sm" onClick={() => setSelectedTriageAppointmentId(appointment.id)}>Record triage</Button>
+                  ) : <span className="hint">Awaiting check-in</span>
+                }
+              />
               <DataTable
                 caption="Referrals routed specifically to your specialist role."
                 data={
@@ -1548,8 +1568,8 @@ export default function Home() {
                   </Button>
                 )}
               </div>
-              <div className="clinical-grid">
-                <Card>
+              <div className="clinical-grid consultation-layout">
+                <Card className="vitals-panel">
                   <h3>Triage vital signs</h3>
                   {currentEncounterTriage ? (
                     <>
@@ -1620,7 +1640,7 @@ export default function Home() {
                     <p className="hint">No triage assessment is recorded.</p>
                   )}
                 </Card>
-                <Card>
+                <Card className="soap-panel">
                   <h3>SOAP note</h3>
                   <form className="stack" onSubmit={handleSoap}>
                     <Field
@@ -1643,9 +1663,10 @@ export default function Home() {
                         required
                       />
                     </Field>
-                    <Button type="submit" disabled={clinicalBusy}>
-                      Save SOAP note
-                    </Button>
+                    <div className="form-actions">
+                      <Button type="submit" disabled={clinicalBusy}>Save SOAP note</Button>
+                      {currentSoapNote ? <span className="save-status">Saved</span> : null}
+                    </div>
                   </form>
                   <div className="record-list">
                     {clinicalRecords?.observations
@@ -1669,11 +1690,11 @@ export default function Home() {
                   </div>
                 </Card>
                 {canPrescribe && (
-                  <Card>
+                  <Card className="prescription-panel">
                     <h3>Prescription</h3>
                     <form className="stack" onSubmit={handlePrescription}>
-                      <Field label="Medication">
-                        <Input name="medication" maxLength={240} required />
+                      <Field label="Medication" className="prescription-primary">
+                        <Input name="medication" maxLength={240} required autoComplete="off" />
                       </Field>
                       <Field label="Dosage and directions">
                         <textarea
@@ -1773,7 +1794,7 @@ export default function Home() {
                   </Card>
                 )}
                 {canPrescribe && (
-                  <Card>
+                  <Card className="certificate-document">
                     <h3>Medical certificate</h3>
                     <form className="stack" onSubmit={handleCertificate}>
                       <Field label="Certificate title">
@@ -2142,10 +2163,10 @@ export default function Home() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
                   <div>
                     <h3 className="schedule-heading" style={{ fontSize: "1.25rem", margin: 0 }}>
-                      Interactive Availability Studio
+                      Availability schedule
                     </h3>
                     <p className="hint" style={{ marginTop: "0.2rem" }}>
-                      Graphical weekly calendar matrix with 1-click slot toggling. Direct toggle between bookable and blocked hours.
+                      Select an open time to make it unavailable. Booked appointments cannot be changed here.
                     </p>
                   </div>
                 </div>

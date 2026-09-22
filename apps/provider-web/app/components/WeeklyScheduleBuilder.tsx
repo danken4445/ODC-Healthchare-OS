@@ -104,7 +104,7 @@ export function WeeklyScheduleBuilder({
   }
 
   return (
-    <div style={{ background: "#ffffff", padding: "1.25rem", borderRadius: "0.75rem", border: "1px solid var(--odyssey-border)" }}>
+    <div style={{ background: "var(--odyssey-card)", padding: "1.25rem", borderRadius: "0.5rem", border: "1px solid var(--odyssey-border)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
         <div>
           <h3 className="schedule-heading" style={{ margin: 0, fontSize: "1.25rem" }}>
@@ -119,45 +119,40 @@ export function WeeklyScheduleBuilder({
       {/* Preset Quick Chips */}
       <div style={{ marginBottom: "1rem" }}>
         <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", fontWeight: 700, color: "var(--odyssey-muted-foreground)", textTransform: "uppercase" }}>
-          ⚡ Fast Shift Templates
+          Schedule templates
         </p>
         <div className="preset-chips-group">
-          <button
-            type="button"
+          <Button
             className="preset-chip"
             onClick={() => applyPreset("weekdays")}
           >
-            🏢 Standard Weekdays (Mon–Fri 9am–5pm)
-          </button>
-          <button
-            type="button"
+            Weekdays, 9:00 AM–5:00 PM
+          </Button>
+          <Button
             className="preset-chip"
             onClick={() => applyPreset("morning")}
           >
-            🌅 Morning Rounds (Mon–Sat 8am–12pm)
-          </button>
-          <button
-            type="button"
+            Morning, Mon–Sat
+          </Button>
+          <Button
             className="preset-chip"
             onClick={() => applyPreset("afternoon")}
           >
-            🌇 Afternoon Clinic (Mon–Fri 1pm–5pm)
-          </button>
-          <button
-            type="button"
+            Afternoon, Mon–Fri
+          </Button>
+          <Button
             className="preset-chip"
             onClick={() => applyPreset("weekend")}
           >
-            🏥 Weekend On-Call (Sat–Sun 10am–2pm)
-          </button>
-          <button
-            type="button"
+            Weekend, 10:00 AM–2:00 PM
+          </Button>
+          <Button
             className="preset-chip"
             style={{ color: "var(--odyssey-destructive)" }}
             onClick={() => applyPreset("clear")}
           >
-            ✕ Reset All
-          </button>
+            Clear schedule
+          </Button>
         </div>
       </div>
 
@@ -206,7 +201,7 @@ export function WeeklyScheduleBuilder({
                 style={{
                   padding: "0.6rem 0.85rem",
                   borderRadius: "0.5rem",
-                  background: isEnabled ? "var(--odyssey-emerald-bg)" : "#f8fafc",
+                  background: isEnabled ? "var(--odyssey-muted)" : "var(--odyssey-background)",
                   border: isEnabled ? "1px solid var(--odyssey-emerald-border)" : "1px solid var(--odyssey-border)",
                   transition: "all 0.15s ease",
                 }}
