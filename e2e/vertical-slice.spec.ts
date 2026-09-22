@@ -21,7 +21,8 @@ const labPassword = process.env.E2E_LAB_PASSWORD ?? localPassword;
 const specialistEmail =
   process.env.E2E_SPECIALIST_EMAIL ?? "specialist@synthetic.odyssey.test";
 const specialistPassword = process.env.E2E_SPECIALIST_PASSWORD ?? localPassword;
-const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@synthetic.odyssey.test";
+const adminEmail =
+  process.env.E2E_ADMIN_EMAIL ?? "admin@synthetic.odyssey.test";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? localPassword;
 
 async function signIn(
@@ -520,7 +521,10 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     patientEmail,
     patientPassword,
   );
-  await patientPage.getByRole("button", { name: /^Book virtual / }).first().click();
+  await patientPage
+    .getByRole("button", { name: /^Book virtual / })
+    .first()
+    .click();
   await expect(patientPage.getByRole("status")).toContainText(
     "Virtual appointment booked",
   );
@@ -543,11 +547,40 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     providerPassword,
   );
   await providerPage.goto("http://127.0.0.1:3001/teleconsult");
-  const roomRow = providerPage.getByRole("row").filter({ hasText: patientName }).last();
+  const roomRow = providerPage
+    .getByRole("row")
+    .filter({ hasText: patientName })
+    .last();
   await expect(roomRow).toContainText("scheduled");
   await roomRow.getByRole("button", { name: /room$/ }).click();
   await providerPage.getByRole("button", { name: "Start encounter" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("Encounter started");
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Encounter started",
+  );
+  await expect(
+    providerPage.getByRole("heading", { name: "Patient chart" }),
+  ).toBeVisible();
+  await providerPage
+    .getByLabel("SOAP documentation")
+    .fill(
+      "Subjective:\nSynthetic teleconsult follow-up.\n\nObjective:\nPatient appears comfortable.\n\nAssessment:\nStable.\n\nPlan:\nContinue follow-up.",
+    );
+  await providerPage.getByRole("button", { name: "Save note" }).click();
+  await expect(providerPage.getByRole("status")).toContainText(
+    /Consultation note (revision )?saved/,
+  );
+  await providerPage
+    .getByRole("button", { name: "Hide patient chart" })
+    .click();
+  await expect(
+    providerPage.getByRole("heading", { name: "Patient chart" }),
+  ).toHaveCount(0);
+  await providerPage
+    .getByRole("button", { name: "Open patient chart" })
+    .click();
+  await expect(
+    providerPage.getByRole("heading", { name: "Patient chart" }),
+  ).toBeVisible();
 
   await providerPage.goto("http://127.0.0.1:3001");
   const providerVirtualRow = providerPage
@@ -559,8 +592,12 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
   await expect(
     providerPage.getByRole("heading", { name: "Consultation chart" }),
   ).toBeVisible();
-  await providerPage.getByRole("button", { name: "Complete encounter" }).click();
-  await expect(providerPage.getByRole("status")).toContainText("Encounter completed");
+  await providerPage
+    .getByRole("button", { name: "Complete encounter" })
+    .click();
+  await expect(providerPage.getByRole("status")).toContainText(
+    "Encounter completed",
+  );
 
   const adminContext = await browser.newContext();
   const billingPage = await adminContext.newPage();
@@ -575,7 +612,9 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     .filter({ hasText: patientName })
     .first();
   await billableRow.getByRole("button", { name: "Generate Billing" }).click();
-  await expect(billingPage.getByRole("status")).toContainText("Billing event created");
+  await expect(billingPage.getByRole("status")).toContainText(
+    "Billing event created",
+  );
   await billingPage.getByRole("tab", { name: /Billing Events/ }).click();
   await billingPage
     .getByRole("row")
@@ -593,7 +632,9 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     .first();
   await expect(payoutRow).toContainText("Virtual");
   await payoutRow.getByRole("checkbox").check();
-  await billingPage.getByLabel("Bank/payment reference").fill("SYNTHETIC-E2E-TRANSFER");
+  await billingPage
+    .getByLabel("Bank/payment reference")
+    .fill("SYNTHETIC-E2E-TRANSFER");
   await billingPage.getByRole("button", { name: /Settle selected/ }).click();
   await expect(billingPage.getByRole("status")).toContainText("marked paid");
 
