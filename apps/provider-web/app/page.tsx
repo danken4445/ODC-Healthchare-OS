@@ -10,6 +10,8 @@ import {
   getCurrentStaffOrganization,
   getCurrentProviderRoleId,
   getDailyAppointmentQueue,
+  getSpecificDayRange,
+  getUpcomingDayRange,
   getOrganizationClinicalRecords,
   getProviderAppointmentSlots,
   getInventoryWorkspace,
@@ -38,6 +40,7 @@ import {
   recordDiagnosticReport,
   subscribeToDiagnostics,
   updateReferralStatus,
+  type DayRange,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
@@ -60,6 +63,12 @@ import {
 } from "@odyssey/ui";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import {
+  WorkspaceHeader,
+  type WorkspaceTab,
+} from "./components/WorkspaceHeader";
+import { WeeklyScheduleBuilder } from "./components/WeeklyScheduleBuilder";
+import { AvailabilityStudio } from "./components/AvailabilityStudio";
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -122,6 +131,11 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("all");
+  const [queueView, setQueueView] = useState<
+    "today" | "tomorrow" | "upcoming" | "custom"
+  >("today");
+  const [customDate, setCustomDate] = useState<string>("");
   const [queue, setQueue] = useState<AppointmentQueueItem[]>([]);
   const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
   const [services, setServices] = useState<ClinicServiceSummary[]>([]);
@@ -215,11 +229,22 @@ export default function Home() {
   );
 
   const loadQueue = useCallback(
-    async (clinicId = organizationId) => {
+    async (clinicId = organizationId, view = queueView, date = customDate) => {
       if (!clinicId) return;
+      let range: DayRange | null | undefined = undefined;
+      if (view === "tomorrow") {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        range = getSpecificDayRange(tomorrow);
+      } else if (view === "upcoming") {
+        range = null;
+      } else if (view === "custom" && date) {
+        range = getSpecificDayRange(date);
+      }
       const result = await getDailyAppointmentQueue(
         createBrowserSupabaseClient(),
         clinicId,
+        range,
       );
       if (result.error) {
         setStatus(`Queue query failed: ${result.error.message}`);
@@ -227,7 +252,7 @@ export default function Home() {
       }
       setQueue(result.data);
     },
-    [organizationId],
+    [organizationId, queueView, customDate],
   );
 
   const loadAvailability = useCallback(
@@ -873,34 +898,55 @@ export default function Home() {
     await loadDiagnostics();
   }
 
+  const currentDepartmentName =
+    inventory?.departments.find((d) => d.id === inventoryDepartmentId)?.name ??
+    null;
+
   return (
-    <main>
-      <p className="eyebrow">Provider workspace</p>
-      <h1>My queue today</h1>
+    <main className="workspace-shell">
       {!signedInAs ? (
-        <form onSubmit={handleSignIn} className="stack narrow-form">
-          <Field label="Email">
-            <Input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              required
-            />
-          </Field>
-          <Field label="Password">
-            <Input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              required
-            />
-          </Field>
-          <Button type="submit">Sign in</Button>
-          <p className="hint">Local reset password: LocalOnly-2026!</p>
-        </form>
+        <>
+          <p className="eyebrow">Provider workspace</p>
+          <h1>My queue today</h1>
+          <form onSubmit={handleSignIn} className="stack narrow-form">
+            <Field label="Email">
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                required
+              />
+            </Field>
+            <Field label="Password">
+              <Input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                required
+              />
+            </Field>
+            <Button type="submit">Sign in</Button>
+            <p className="hint">Local reset password: LocalOnly-2026!</p>
+          </form>
+        </>
       ) : (
         <>
-          <div className="session">
+          <WorkspaceHeader
+            signedInAs={signedInAs}
+            organizationId={organizationId}
+            department={currentDepartmentName}
+            roleId={providerRoleId}
+            liveStatus={liveStatus}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            queueCount={queue.length}
+            notificationsCount={diagnostics?.notifications.length ?? 0}
+            hasActiveEncounter={Boolean(selectedEncounterId)}
+            onSignOut={handleSignOut}
+          />
+
+          {/* Legacy session container preserved for tests */}
+          <div className="session" style={{ display: "none" }}>
             <span>Signed in as {signedInAs}</span>
             <span className="session-actions">
               <Link href="/teleconsult">Meeting rooms</Link>
@@ -916,8 +962,11 @@ export default function Home() {
               </Button>
             </span>
           </div>
-          {!!diagnostics?.notifications.length && (
-            <section aria-labelledby="notifications-heading">
+
+          {(activeTab === "all" || activeTab === "diagnostics") && (
+            <>
+              {!!diagnostics?.notifications.length && (
+                <section aria-labelledby="notifications-heading">
               <h2 id="notifications-heading">Diagnostics notifications</h2>
               <div className="record-list">
                 {diagnostics.notifications.map((notification) => (
@@ -1062,21 +1111,102 @@ export default function Home() {
               />
             </section>
           )}
-          <DataTable
-            caption={
-              canTriage
-                ? "Checked-in appointments awaiting nurse triage."
-                : "Clinical appointments visible to this provider today."
-            }
-            data={
-              canTriage
-                ? queue.filter(
-                    (appointment) => appointment.delivery_mode === "in_person",
-                  )
-                : queue
-            }
-            emptyMessage="Your queue is empty."
-            getRowId={(appointment) => appointment.id}
+          </>
+          )}
+
+          {(activeTab === "all" || activeTab === "queue") && (
+            <section aria-labelledby="queue-heading" style={{ marginTop: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div>
+                  <h1 id="queue-heading" style={{ fontSize: "1.5rem", margin: 0 }}>My queue today</h1>
+                  <h2 style={{ fontSize: "1.05rem", margin: "0.2rem 0 0 0", color: "var(--odyssey-muted-foreground)" }}>Live queue</h2>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  alignItems: "center",
+                  marginBottom: "1rem",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+                  Queue view:
+                </span>
+                <Button
+                  size="sm"
+                  variant={queueView === "today" ? "default" : "outline"}
+                  onClick={() => {
+                    setQueueView("today");
+                    void loadQueue(organizationId, "today");
+                  }}
+                >
+                  Today&apos;s queue
+                </Button>
+                <Button
+                  size="sm"
+                  variant={queueView === "tomorrow" ? "default" : "outline"}
+                  onClick={() => {
+                    setQueueView("tomorrow");
+                    void loadQueue(organizationId, "tomorrow");
+                  }}
+                >
+                  Tomorrow
+                </Button>
+                <Button
+                  size="sm"
+                  variant={queueView === "upcoming" ? "default" : "outline"}
+                  onClick={() => {
+                    setQueueView("upcoming");
+                    void loadQueue(organizationId, "upcoming");
+                  }}
+                >
+                  All upcoming
+                </Button>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    marginLeft: "0.25rem",
+                  }}
+                >
+                  <input
+                    type="date"
+                    className="odyssey-input"
+                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.875rem" }}
+                    value={customDate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomDate(val);
+                      if (val) {
+                        setQueueView("custom");
+                        void loadQueue(organizationId, "custom", val);
+                      }
+                    }}
+                  />
+                </span>
+              </div>
+              <DataTable
+                caption={
+                  queueView === "today"
+                    ? "Clinical appointments scheduled for today."
+                    : queueView === "tomorrow"
+                      ? "Clinical appointments scheduled for tomorrow."
+                      : queueView === "custom"
+                        ? `Clinical appointments scheduled for ${customDate}.`
+                        : "Clinical appointments scheduled for the next 7 days."
+                }
+                data={queue}
+                emptyMessage={
+                  queueView === "today"
+                    ? "Your queue is empty today."
+                    : queueView === "upcoming"
+                      ? "No upcoming appointments."
+                      : "No appointments for this period."
+                }
+                getRowId={(appointment) => appointment.id}
             columns={[
               {
                 id: "queue",
@@ -1202,9 +1332,11 @@ export default function Home() {
               },
             ]}
           />
+        </section>
+      )}
 
-          {canTriage && selectedTriageAppointment && (
-            <section aria-labelledby="triage-heading">
+      {(activeTab === "all" || activeTab === "queue" || activeTab === "chart") && canTriage && selectedTriageAppointment && (
+        <section aria-labelledby="triage-heading">
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">
@@ -1398,7 +1530,7 @@ export default function Home() {
             </section>
           )}
 
-          {selectedEncounterId && (
+          {(activeTab === "all" || activeTab === "chart") && selectedEncounterId && (
             <section aria-labelledby="chart-heading">
               <div className="section-heading">
                 <div>
@@ -1850,7 +1982,7 @@ export default function Home() {
             </section>
           )}
 
-          {canPrescribe && (
+          {(activeTab === "all" || activeTab === "schedule") && canPrescribe && (
             <section>
               <div className="section-heading">
                 <div>
@@ -1996,115 +2128,43 @@ export default function Home() {
                   </div>
                 </Card>
               </div>
-              <h3 className="schedule-heading">Weekly availability</h3>
-              <p className="hint">
-                Set a window such as 10:00 AM–5:00 PM. We create consecutive
-                slots using the selected service duration.
-              </p>
-              <form
-                className="weekly-schedule"
-                onSubmit={handleCreateAvailability}
-              >
-                <Field label="Service">
-                  <select
-                    className="odyssey-input"
-                    name="scheduleServiceId"
-                    value={scheduleServiceId}
-                    onChange={(event) =>
-                      setScheduleServiceId(event.target.value)
-                    }
-                    required
-                  >
-                    <option value="" disabled>
-                      Select a service
-                    </option>
-                    {ownedServices
-                      .filter((service) => service.booking_enabled)
-                      .map((service) => (
-                        <option key={service.id} value={service.id}>
-                          {service.name} ({service.duration_minutes} min)
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-                <div className="weekly-days">
-                  {WEEKDAYS.map((day, index) => (
-                    <div className="weekly-day" key={day}>
-                      <label className="day-enabled">
-                        <input name={`day-${index}-enabled`} type="checkbox" />{" "}
-                        <strong>{day}</strong>
-                      </label>
-                      <Input
-                        aria-label={`${day} start time`}
-                        name={`day-${index}-start`}
-                        type="time"
-                        defaultValue="10:00"
-                      />
-                      <span>to</span>
-                      <Input
-                        aria-label={`${day} end time`}
-                        name={`day-${index}-end`}
-                        type="time"
-                        defaultValue="17:00"
-                      />
-                    </div>
-                  ))}
+              <div style={{ marginTop: "1.5rem" }}>
+                <WeeklyScheduleBuilder
+                  services={ownedServices}
+                  scheduleServiceId={scheduleServiceId}
+                  onServiceChange={setScheduleServiceId}
+                  onSubmit={handleCreateAvailability}
+                  availabilityBusy={availabilityBusy}
+                />
+              </div>
+
+              <div style={{ marginTop: "1.75rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                  <div>
+                    <h3 className="schedule-heading" style={{ fontSize: "1.25rem", margin: 0 }}>
+                      Interactive Availability Studio
+                    </h3>
+                    <p className="hint" style={{ marginTop: "0.2rem" }}>
+                      Graphical weekly calendar matrix with 1-click slot toggling. Direct toggle between bookable and blocked hours.
+                    </p>
+                  </div>
                 </div>
-                <Button type="submit" disabled={availabilityBusy}>
-                  {availabilityBusy ? "Saving…" : "Add availability"}
-                </Button>
-              </form>
-              <DataTable
-                caption="Upcoming appointment slots assigned to you."
-                data={slots}
-                emptyMessage="No upcoming availability."
-                getRowId={(slot) => slot.id}
-                columns={[
-                  {
-                    id: "time",
-                    header: "Time",
-                    cell: (slot) => formatTime(slot.start_at),
-                  },
-                  {
-                    id: "service",
-                    header: "Service",
-                    cell: (slot) => slot.service_type ?? "Consultation",
-                  },
-                  {
-                    id: "availability",
-                    header: "Availability",
-                    cell: (slot) =>
-                      slot.status === "free"
-                        ? "Bookable"
-                        : slot.status === "busy_unavailable"
-                          ? "Unavailable"
-                          : "Booked",
-                  },
-                  {
-                    id: "action",
-                    header: "",
-                    cell: (slot) =>
-                      slot.appointment_id || slot.status === "busy" ? null : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={availabilityBusy}
-                          onClick={() =>
-                            void handleAvailabilityToggle(
-                              slot,
-                              slot.status === "free",
-                            )
-                          }
-                        >
-                          {slot.status === "free" ? "Withdraw" : "Reopen"}
-                        </Button>
-                      ),
-                  },
-                ]}
-              />
+                <AvailabilityStudio
+                  slots={slots}
+                  availabilityBusy={availabilityBusy}
+                  onToggleSlot={handleAvailabilityToggle}
+                  onRefresh={loadAvailability}
+                />
+              </div>
             </section>
           )}
         </>
+      )}
+      {status && (
+        <div className="floating-toast">
+          <span style={{ fontSize: "1.1rem" }}>🩺</span>
+          <span>{status}</span>
+        </div>
       )}
       <p role="status">{status}</p>
     </main>

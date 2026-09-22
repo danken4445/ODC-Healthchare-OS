@@ -2,6 +2,7 @@
 
 import {
   bookAppointmentSlot,
+  cancelAppointment,
   createBrowserSupabaseClient,
   createWalkInPatient,
   getAccessibleOrganizations,
@@ -10,6 +11,8 @@ import {
   getDailyAppointmentQueue,
   getOrganizationPatients,
   getPortalAccess,
+  getSpecificDayRange,
+  getUpcomingDayRange,
   hasOrganizationPermission,
   signInWithPassword,
   signOut,
@@ -20,6 +23,7 @@ import {
   getLaboratoryServices,
   listDiagnosticEncounters,
   getOrganizationModules,
+  type DayRange,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentQueueItem,
@@ -64,6 +68,10 @@ export default function Home() {
   const [canIdentifyPatients, setCanIdentifyPatients] = useState(false);
   const [disabledModules, setDisabledModules] = useState<OrganizationModuleKey[]>([]);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [scheduleView, setScheduleView] = useState<
+    "today" | "tomorrow" | "upcoming" | "custom"
+  >("today");
+  const [customDate, setCustomDate] = useState<string>("");
   const [appointments, setAppointments] = useState<AppointmentQueueItem[]>([]);
   const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
   const [patients, setPatients] = useState<PatientSummary[]>([]);
@@ -102,11 +110,25 @@ export default function Home() {
     if (!laboratoryServiceResult.error) setLaboratoryServices(laboratoryServiceResult.data);
   }
 
-  async function loadSchedule(clinicId = organizationId) {
+  async function loadSchedule(
+    clinicId = organizationId,
+    view = scheduleView,
+    date = customDate,
+  ) {
     if (!clinicId) return;
     const client = createBrowserSupabaseClient();
+    let range: DayRange | null | undefined = undefined;
+    if (view === "tomorrow") {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      range = getSpecificDayRange(tomorrow);
+    } else if (view === "upcoming") {
+      range = null;
+    } else if (view === "custom" && date) {
+      range = getSpecificDayRange(date);
+    }
     const [appointmentResult, slotResult, patientResult] = await Promise.all([
-      getDailyAppointmentQueue(client, clinicId, undefined, [
+      getDailyAppointmentQueue(client, clinicId, range, [
         "booked",
         "arrived",
         "fulfilled",
@@ -140,14 +162,14 @@ export default function Home() {
     const unsubscribe = subscribeToAppointmentQueue(
       createBrowserSupabaseClient(),
       organizationId,
-      () => void loadSchedule(),
+      () => void loadSchedule(organizationId, scheduleView, customDate),
       (connectionStatus) =>
         setLiveStatus(
           connectionStatus === "SUBSCRIBED" ? "Live" : connectionStatus,
         ),
     );
     return unsubscribe;
-  }, [organizationId, signedInAs]);
+  }, [organizationId, signedInAs, scheduleView, customDate]);
 
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -340,6 +362,27 @@ export default function Home() {
     await loadSchedule();
   }
 
+  async function handleCancelAppointment(
+    appointmentId: string,
+    blockSlot: boolean,
+  ) {
+    setUpdatingId(appointmentId);
+    const result = await cancelAppointment(
+      createBrowserSupabaseClient(),
+      appointmentId,
+      blockSlot,
+    );
+    setUpdatingId(null);
+    if (result.error)
+      return setStatus(`Cancellation failed: ${result.error.message}`);
+    setStatus(
+      blockSlot
+        ? "Appointment cancelled and timeslot blocked."
+        : "Appointment cancelled. Timeslot is retained and available for booking.",
+    );
+    await loadSchedule();
+  }
+
   async function handleSignOut() {
     const result = await signOut(createBrowserSupabaseClient());
     if (result.error)
@@ -493,10 +536,93 @@ export default function Home() {
             </section>
           )}
 
+          <div
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
+              marginBottom: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+              Schedule view:
+            </span>
+            <Button
+              size="sm"
+              variant={scheduleView === "today" ? "default" : "outline"}
+              onClick={() => {
+                setScheduleView("today");
+                void loadSchedule(organizationId, "today", customDate);
+              }}
+            >
+              Today
+            </Button>
+            <Button
+              size="sm"
+              variant={scheduleView === "tomorrow" ? "default" : "outline"}
+              onClick={() => {
+                setScheduleView("tomorrow");
+                void loadSchedule(organizationId, "tomorrow", customDate);
+              }}
+            >
+              Tomorrow
+            </Button>
+            <Button
+              size="sm"
+              variant={scheduleView === "upcoming" ? "default" : "outline"}
+              onClick={() => {
+                setScheduleView("upcoming");
+                void loadSchedule(organizationId, "upcoming", customDate);
+              }}
+            >
+              All upcoming
+            </Button>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                marginLeft: "0.25rem",
+              }}
+            >
+              <input
+                type="date"
+                className="odyssey-input"
+                style={{ padding: "0.25rem 0.5rem", fontSize: "0.875rem" }}
+                value={customDate}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomDate(val);
+                  if (val) {
+                    setScheduleView("custom");
+                    void loadSchedule(organizationId, "custom", val);
+                  }
+                }}
+              />
+            </span>
+          </div>
+
           <DataTable
-            caption="Booked and arrived appointments for the clinic today."
+            caption={
+              scheduleView === "today"
+                ? "Booked and arrived appointments for the clinic today."
+                : scheduleView === "tomorrow"
+                  ? "Appointments scheduled for tomorrow."
+                  : scheduleView === "upcoming"
+                    ? "All upcoming appointments for this clinic."
+                    : customDate
+                      ? `Appointments scheduled for ${customDate}.`
+                      : "Appointments for selected date."
+            }
             data={appointments}
-            emptyMessage="No appointments today."
+            emptyMessage={
+              scheduleView === "today"
+                ? "No appointments today."
+                : scheduleView === "upcoming"
+                  ? "No upcoming appointments."
+                  : "No appointments for this period."
+            }
             getRowId={(appointment) => appointment.id}
             columns={[
               {
@@ -561,13 +687,25 @@ export default function Home() {
                         </Button>
                         <Button
                           size="sm"
+                          variant="outline"
+                          disabled={updatingId !== null}
+                          onClick={() =>
+                            void handleCancelAppointment(appointment.id, false)
+                          }
+                          title="Cancels this booking and returns the slot to available slots"
+                        >
+                          Cancel (retain slot)
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
                           disabled={updatingId !== null}
                           onClick={() =>
-                            void handleStatusChange(appointment.id, "cancelled")
+                            void handleCancelAppointment(appointment.id, true)
                           }
+                          title="Cancels this booking and blocks the slot from being booked again"
                         >
-                          Cancel
+                          Cancel & block
                         </Button>
                       </>
                     )}

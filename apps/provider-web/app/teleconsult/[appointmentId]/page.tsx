@@ -23,6 +23,11 @@ export default function ProviderTeleconsultRoomPage() {
 
   async function loadRoom() {
     const client = createBrowserSupabaseClient();
+    const { data: sessionData } = await client.auth.getSession();
+    if (!sessionData.session) {
+      setStatus("Your sign-in session is unavailable. Please sign in again to access this room.");
+      return;
+    }
     const access = await getPortalAccess(client, "provider");
     const clinicId = access.data?.organizationIds[0];
     if (access.error || !access.data?.allowed || !clinicId) {

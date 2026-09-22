@@ -48,6 +48,8 @@ import {
   QrPaymentCode,
 } from "@odyssey/ui";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { PatientHeader, type PatientTab } from "./components/PatientHeader";
+import { PatientBookingsView } from "./components/PatientBookingsView";
 
 const localTestPassword = "LocalOnly-2026!";
 
@@ -79,6 +81,7 @@ export default function Home() {
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<PatientTab>("all");
   const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
   const [services, setServices] = useState<ClinicServiceSummary[]>([]);
   const [records, setRecords] = useState<PatientAccessRecords | null>(null);
@@ -146,14 +149,18 @@ export default function Home() {
       getAvailableAppointmentSlots(client, clinicId),
       getPatientAccessRecords(client, clinicId),
     ]);
+    if (!slotResult.error && slotResult.data) {
+      setSlots(slotResult.data);
+    }
+    if (!recordResult.error && recordResult.data) {
+      setRecords(recordResult.data);
+    }
     if (slotResult.error || recordResult.error) {
       setStatus(
-        `Unable to load appointments: ${slotResult.error?.message ?? recordResult.error?.message}`,
+        `Notice: ${slotResult.error?.message ?? recordResult.error?.message}`,
       );
       return;
     }
-    setSlots(slotResult.data);
-    setRecords(recordResult.data);
     await loadInvoices(clinicId);
   }
 
@@ -213,11 +220,17 @@ export default function Home() {
   }, [organizationId, signedInAs]);
 
   useEffect(() => {
-    if (!signedInAs || !organizationId) return;
+    if (!organizationId) return;
     return subscribeToAppointmentQueue(
       createBrowserSupabaseClient(),
       organizationId,
-      () => void loadPatientDashboard(organizationId),
+      () => {
+        if (signedInAs) {
+          void loadPatientDashboard(organizationId);
+        } else {
+          void loadPublicPortal(organizationId);
+        }
+      },
       (connectionStatus) =>
         setLiveStatus(
           connectionStatus === "SUBSCRIBED" ? "Live" : connectionStatus,
@@ -363,6 +376,8 @@ export default function Home() {
     setBusySlotId(null);
     if (result.error)
       return setStatus(`Booking failed: ${result.error.message}`);
+    // Optimistically remove the booked slot immediately so it disappears with zero refresh needed
+    setSlots((current) => current.filter((slot) => slot.id !== slotId));
     setStatus(
       deliveryMode === "virtual"
         ? "Virtual appointment booked. Your teleconsult room opens 30 minutes before the scheduled time."
@@ -445,6 +460,7 @@ export default function Home() {
 
   return (
     <main
+      className="patient-portal-shell"
       style={
         branding
           ? ({
@@ -454,6 +470,31 @@ export default function Home() {
           : undefined
       }
     >
+      {signedInAs && (
+        <PatientHeader
+          patientName={records?.patients[0]?.displayName ?? signedInAs}
+          selectedClinicName={selectedClinic?.name}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          bookingCount={displayedAppointments.length}
+          virtualBookingCount={
+            displayedAppointments.filter(
+              (a) =>
+                a.delivery_mode === "virtual" ||
+                a.service_type?.toLowerCase().includes("virtual"),
+            ).length
+          }
+          hasActiveVirtual={displayedAppointments.some(
+            (a) =>
+              (a.delivery_mode === "virtual" ||
+                a.service_type?.toLowerCase().includes("virtual")) &&
+              (a.status === "booked" || a.status === "arrived"),
+          )}
+          liveStatus={liveStatus}
+          onSignOut={handleSignOut}
+        />
+      )}
+
       <p className="eyebrow">Patient portal</p>
       {branding?.logoUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -461,23 +502,26 @@ export default function Home() {
       )}
       <h1>{branding?.displayName ?? "Book a clinic appointment"}</h1>
       {branding?.tagline && <p>{branding.tagline}</p>}
-      <section aria-labelledby="clinic-heading">
-        <h2 id="clinic-heading">Choose a clinic</h2>
-        <div className="clinic-picker">
-          {clinics.map((clinic) => (
-            <Button
-              key={clinic.id}
-              variant={clinic.id === organizationId ? "default" : "outline"}
-              aria-pressed={clinic.id === organizationId}
-              onClick={() => selectClinic(clinic.id)}
-            >
-              {clinic.name}
-            </Button>
-          ))}
-        </div>
-      </section>
 
-      {organizationId && (
+      {(!signedInAs || activeTab === "all" || activeTab === "book") && (
+        <section aria-labelledby="clinic-heading">
+          <h2 id="clinic-heading">Choose a clinic</h2>
+          <div className="clinic-picker">
+            {clinics.map((clinic) => (
+              <Button
+                key={clinic.id}
+                variant={clinic.id === organizationId ? "default" : "outline"}
+                aria-pressed={clinic.id === organizationId}
+                onClick={() => selectClinic(clinic.id)}
+              >
+                {clinic.name}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {organizationId && (!signedInAs || activeTab === "all" || activeTab === "book") && (
         <>
           <p className="hint">{selectedClinic?.name}</p>
           <section aria-labelledby="services-heading">
@@ -597,61 +641,121 @@ export default function Home() {
               </form>
             </section>
           ) : (
-            <section>
-              <h2>Available slots</h2>
-              <DataTable
-                caption="Available appointments for the selected clinic."
-                data={slots}
-                emptyMessage="No appointment slots are available."
-                getRowId={(slot) => slot.id}
-                columns={[
-                  {
-                    id: "time",
-                    header: "Date and time",
-                    cell: (slot) => formatAppointmentTime(slot.start_at),
-                  },
-                  {
-                    id: "service",
-                    header: "Service",
-                    cell: (slot) => slot.service_type ?? "Consultation",
-                  },
-                  {
-                    id: "action",
-                    header: "",
-                    cell: (slot) => {
+            (activeTab === "all" || activeTab === "book") && (
+              <section aria-labelledby="available-slots-heading">
+                <h2 id="available-slots-heading">Available slots</h2>
+
+                {/* Mobile Slot Cards (Visible on <= 768px) */}
+                <div className="mobile-slots-grid">
+                  {!slots.length ? (
+                    <p>No appointment slots are available.</p>
+                  ) : (
+                    slots.map((slot) => {
                       const modes = services.find(
                         (service) => service.id === slot.clinic_service_id,
                       )?.delivery_modes ?? ["in_person"];
+
                       return (
-                        <span className="session-actions">
-                          {modes.includes("in_person") && (
-                            <Button
-                              size="sm"
-                              disabled={busySlotId !== null}
-                              onClick={() => void handleBook(slot.id, "in_person")}
-                              aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
-                            >
-                              {busySlotId === slot.id ? "Booking…" : "Book clinic"}
-                            </Button>
-                          )}
-                          {modes.includes("virtual") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={busySlotId !== null}
-                              onClick={() => void handleBook(slot.id, "virtual")}
-                              aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
-                            >
-                              {busySlotId === slot.id ? "Booking…" : "Book virtual"}
-                            </Button>
-                          )}
-                        </span>
+                        <div key={slot.id} className="mobile-slot-card">
+                          <div className="mobile-slot-card__top">
+                            <div>
+                              <div className="mobile-slot-card__time">
+                                🗓️ {formatAppointmentTime(slot.start_at)}
+                              </div>
+                              <div className="mobile-slot-card__service">
+                                {slot.service_type ?? "General Consultation"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mobile-slot-card__actions">
+                            {modes.includes("in_person") && (
+                              <Button
+                                size="default"
+                                className="mobile-slot-card__btn"
+                                disabled={busySlotId !== null}
+                                onClick={() => void handleBook(slot.id, "in_person")}
+                                aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
+                              >
+                                {busySlotId === slot.id ? "Booking…" : "🏥 Clinic Visit"}
+                              </Button>
+                            )}
+                            {modes.includes("virtual") && (
+                              <Button
+                                size="default"
+                                variant="outline"
+                                className="mobile-slot-card__btn"
+                                disabled={busySlotId !== null}
+                                onClick={() => void handleBook(slot.id, "virtual")}
+                                aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
+                              >
+                                {busySlotId === slot.id ? "Booking…" : "📹 Virtual Call"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       );
-                    },
-                  },
-                ]}
-              />
-            </section>
+                    })
+                  )}
+                </div>
+
+                {/* Desktop Data Table (Visible on > 768px) */}
+                <div className="desktop-slots-table">
+                  <DataTable
+                    caption="Available appointments for the selected clinic."
+                    data={slots}
+                    emptyMessage="No appointment slots are available."
+                    getRowId={(slot) => slot.id}
+                    columns={[
+                      {
+                        id: "time",
+                        header: "Date and time",
+                        cell: (slot) => formatAppointmentTime(slot.start_at),
+                      },
+                      {
+                        id: "service",
+                        header: "Service",
+                        cell: (slot) => slot.service_type ?? "Consultation",
+                      },
+                      {
+                        id: "action",
+                        header: "",
+                        cell: (slot) => {
+                          const modes = services.find(
+                            (service) => service.id === slot.clinic_service_id,
+                          )?.delivery_modes ?? ["in_person"];
+                          return (
+                            <span className="session-actions">
+                              {modes.includes("in_person") && (
+                                <Button
+                                  size="sm"
+                                  disabled={busySlotId !== null}
+                                  onClick={() => void handleBook(slot.id, "in_person")}
+                                  aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
+                                >
+                                  {busySlotId === slot.id ? "Booking…" : "Book clinic"}
+                                </Button>
+                              )}
+                              {modes.includes("virtual") && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busySlotId !== null}
+                                  onClick={() => void handleBook(slot.id, "virtual")}
+                                  aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
+                                >
+                                  {busySlotId === slot.id ? "Booking…" : "Book virtual"}
+                                </Button>
+                              )}
+                            </span>
+                          );
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+              </section>
+            )
           )}
         </>
       )}
@@ -684,53 +788,27 @@ export default function Home() {
 
       <p role="status">{status}</p>
 
-      {(records || walkInRecords) && (
-        <section>
-          <div className="section-heading">
-            <h2>My appointments</h2>
+      {(activeTab === "all" || activeTab === "bookings") && (records || walkInRecords) && (
+        <section aria-labelledby="bookings-heading" style={{ marginTop: "1.5rem" }}>
+          <div className="section-heading" style={{ marginBottom: "1rem" }}>
+            <div>
+              <h2 id="bookings-heading" style={{ margin: 0, fontSize: "1.5rem" }}>My appointments</h2>
+              <p className="hint" style={{ marginTop: "0.25rem" }}>
+                Track your active clinic visits and join virtual teleconsultation meeting rooms.
+              </p>
+            </div>
             <span className="live-indicator" data-live={liveStatus === "Live"}>
               {liveStatus} status
             </span>
           </div>
-          <DataTable
-            caption="Appointments visible at the selected clinic only."
-            data={displayedAppointments}
-            emptyMessage="No appointments booked yet."
-            getRowId={(appointment) => appointment.id}
-            columns={[
-              {
-                id: "queue",
-                header: "Queue",
-                cell: (appointment) =>
-                  appointment.queue_number
-                    ? `A-${String(appointment.queue_number).padStart(3, "0")}`
-                    : "—",
-              },
-              {
-                id: "time",
-                header: "Date and time",
-                cell: (appointment) =>
-                  formatAppointmentTime(appointment.start_at),
-              },
-              {
-                id: "service",
-                header: "Service",
-                cell: (appointment) =>
-                  appointment.service_type ?? "Consultation",
-              },
-              {
-                id: "status",
-                header: "Status",
-                cell: (appointment) => (
-                  <AppointmentStatusBadge status={appointment.status} />
-                ),
-              },
-            ]}
+          <PatientBookingsView
+            appointments={displayedAppointments}
+            liveStatus={liveStatus}
           />
         </section>
       )}
 
-      {records?.patients[0] && (
+      {(activeTab === "all" || activeTab === "profile") && records?.patients[0] && (
         <section aria-labelledby="profile-heading">
           <h2 id="profile-heading">My profile</h2>
           <form className="inline-form" onSubmit={handleProfileUpdate}>
@@ -798,7 +876,7 @@ export default function Home() {
         </section>
       )}
 
-      {records && (
+      {(activeTab === "all" || activeTab === "records") && records && (
         <section aria-labelledby="history-heading">
           <div className="section-heading">
             <h2 id="history-heading">Medical history</h2>
@@ -936,7 +1014,7 @@ export default function Home() {
         </section>
       )}
 
-      {signedInAs && patientAtSelectedClinic && (
+      {(activeTab === "all" || activeTab === "billing") && signedInAs && patientAtSelectedClinic && (
         <section aria-labelledby="billing-heading" style={{ marginTop: "2rem" }}>
           <div className="section-heading">
             <h2 id="billing-heading">💳 My Bills &amp; Invoices</h2>

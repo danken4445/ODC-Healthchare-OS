@@ -1,9 +1,1162 @@
 @import "@odyssey/ui/styles.css";
 
+:root {
+  --odyssey-emerald: #059669;
+  --odyssey-emerald-bg: #ecfdf5;
+  --odyssey-emerald-border: #a7f3d0;
+  --odyssey-emerald-text: #065f46;
+  --odyssey-indigo: #4f46e5;
+  --odyssey-indigo-bg: #eef2ff;
+  --odyssey-indigo-border: #c7d2fe;
+  --odyssey-indigo-text: #3730a3;
+  --odyssey-amber: #d97706;
+  --odyssey-amber-bg: #fffbeb;
+  --odyssey-amber-border: #fde68a;
+  --odyssey-amber-text: #92400e;
+  --odyssey-slate-blocked: #64748b;
+  --odyssey-slate-blocked-bg: #f8fafc;
+  --odyssey-slate-blocked-border: #cbd5e1;
+  --odyssey-slate-blocked-text: #475569;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #f1f5f9;
+  color: var(--odyssey-foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
 .clinic-brand-logo {
   display: block;
   max-width: 12rem;
   max-height: 4.5rem;
   object-fit: contain;
   margin: 0.5rem 0 1rem;
+}
+
+/* ── Patient Portal Shell ── */
+.patient-portal-shell {
+  max-width: 82rem !important;
+  margin: 1.5rem auto !important;
+  padding: 1.75rem !important;
+  background: var(--odyssey-card);
+  border-radius: 1rem;
+  box-shadow: 0 10px 35px -5px rgba(21, 32, 58, 0.08);
+  min-height: calc(100vh - 3rem);
+  box-sizing: border-box;
+}
+
+.patient-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--odyssey-border);
+  margin-bottom: 1.5rem;
+}
+
+.patient-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.patient-brand-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.patient-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.patient-portal-title {
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--odyssey-foreground);
+  letter-spacing: -0.02em;
+}
+
+.patient-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+
+.patient-greeting {
+  font-size: 0.875rem;
+  color: var(--odyssey-muted-foreground);
+}
+
+.patient-greeting strong {
+  color: var(--odyssey-foreground);
+}
+
+.patient-clinic-chip {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(23, 105, 170, 0.1);
+  color: var(--odyssey-primary);
+  font-weight: 600;
+}
+
+.patient-signout-btn {
+  font-weight: 600;
+  color: var(--odyssey-muted-foreground);
+}
+
+.live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.live-pulse-badge.offline {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-ring 1.8s infinite;
+}
+
+.pulse-dot.offline {
+  background: #94a3b8;
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* ── Desktop Navigation Tabs ── */
+.patient-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--odyssey-muted);
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.patient-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--odyssey-muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  min-height: 2.5rem;
+}
+
+.patient-nav-tab:hover {
+  color: var(--odyssey-foreground);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.patient-nav-tab.active {
+  color: var(--odyssey-primary-foreground);
+  background: var(--odyssey-primary);
+  box-shadow: 0 2px 8px rgba(23, 105, 170, 0.25);
+}
+
+.nav-virtual-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  animation: pulse-ring 2s infinite;
+}
+
+.virtual-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+}
+
+.patient-nav-tab:not(.active) .tab-badge {
+  background: rgba(21, 32, 58, 0.08);
+  color: var(--odyssey-foreground);
+}
+
+/* ── Mobile Fixed Bottom Navigation Bar ── */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0.4rem 0.75rem max(0.45rem, env(safe-area-inset-bottom, 0.45rem));
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.5rem;
+  min-width: 56px;
+  min-height: 48px;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.mobile-nav-item:active {
+  transform: scale(0.92);
+}
+
+.mobile-nav-item.active {
+  color: var(--odyssey-primary);
+}
+
+.mobile-nav-icon-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-nav-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.mobile-nav-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+  line-height: 1;
+}
+
+.mobile-nav-badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  background: var(--odyssey-primary);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 9999px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.mobile-nav-live-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #ffffff;
+  animation: pulse-ring 1.5s infinite;
+}
+
+/* Highlighted "Book" Center Floating Circle */
+.mobile-nav-item--book .mobile-nav-highlight-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--odyssey-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(23, 105, 170, 0.35);
+  margin-top: -6px;
+}
+
+.mobile-nav-item--book .mobile-nav-icon {
+  font-size: 1.15rem;
+}
+
+.mobile-nav-item--book.active .mobile-nav-highlight-circle {
+  background: #059669;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+}
+
+/* ── My Bookings Studio Styles ── */
+.bookings-studio-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.bookings-metrics-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.85rem;
+}
+
+.booking-metric-card {
+  padding: 0.85rem 1.1rem;
+  background: #ffffff;
+  border: 1px solid var(--odyssey-border);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.booking-metric-card__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--odyssey-muted-foreground);
+}
+
+.booking-metric-card__value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.booking-metric-card__hint {
+  font-size: 0.75rem;
+  color: var(--odyssey-muted-foreground);
+}
+
+/* Filter Bar */
+.bookings-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--odyssey-muted);
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.75rem;
+}
+
+.filter-pills-scrollable {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.filter-pills-scrollable::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-pill {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--odyssey-border);
+  background: #ffffff;
+  cursor: pointer;
+  color: var(--odyssey-foreground);
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-pill.active {
+  background: var(--odyssey-foreground);
+  color: #ffffff;
+  border-color: var(--odyssey-foreground);
+}
+
+.bookings-viewmode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.viewmode-pill-group {
+  display: inline-flex;
+  background: #ffffff;
+  padding: 0.2rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--odyssey-border);
+}
+
+.viewmode-btn {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  background: transparent;
+  color: var(--odyssey-muted-foreground);
+}
+
+.viewmode-btn.active {
+  background: var(--odyssey-primary);
+  color: #ffffff;
+}
+
+/* Booking Cards */
+.booking-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.15rem;
+}
+
+.booking-card {
+  background: #ffffff;
+  border: 1px solid var(--odyssey-border);
+  border-radius: 0.85rem;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.booking-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.booking-card--virtual {
+  border-left: 4px solid var(--odyssey-indigo);
+}
+
+.booking-card--in-person {
+  border-left: 4px solid var(--odyssey-primary);
+}
+
+.booking-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.delivery-badge--virtual {
+  background: var(--odyssey-indigo-bg);
+  color: var(--odyssey-indigo-text);
+  border: 1px solid var(--odyssey-indigo-border);
+}
+
+.delivery-badge--in-person {
+  background: rgba(23, 105, 170, 0.1);
+  color: var(--odyssey-primary);
+  border: 1px solid rgba(23, 105, 170, 0.2);
+}
+
+.booking-card__details {
+  margin-top: 0.75rem;
+}
+
+.booking-card__service-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--odyssey-foreground);
+}
+
+.booking-card__time {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  color: var(--odyssey-muted-foreground);
+  font-weight: 500;
+}
+
+.booking-card__queue-row {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.queue-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
+.queue-label {
+  font-size: 0.8rem;
+  color: var(--odyssey-muted-foreground);
+}
+
+.teleconsult-cta-box {
+  background: var(--odyssey-indigo-bg);
+  border: 1px solid var(--odyssey-indigo-border);
+  border-radius: 0.65rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.teleconsult-cta-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.teleconsult-cta-status {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--odyssey-indigo-text);
+}
+
+.teleconsult-cta-tag {
+  font-size: 0.725rem;
+  color: var(--odyssey-muted-foreground);
+}
+
+.teleconsult-cta-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--odyssey-muted-foreground);
+  line-height: 1.4;
+}
+
+.teleconsult-cta-btn-wrap {
+  margin-top: 0.35rem;
+}
+
+.teleconsult-card-btn {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  font-weight: 700;
+}
+
+/* ── Active Virtual Banner (Top Highlight on Mobile) ── */
+.active-virtual-banner {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.09) 0%, rgba(16, 185, 129, 0.09) 100%);
+  border: 2px solid var(--odyssey-indigo);
+  border-radius: 1rem;
+  padding: 1.25rem 1.4rem;
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.active-virtual-banner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: var(--odyssey-indigo);
+}
+
+.active-virtual-banner__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.active-virtual-banner__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.live-call-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: pulse-ring 1.5s infinite;
+}
+
+.active-virtual-banner__subtext {
+  font-size: 0.85rem;
+  color: var(--odyssey-indigo-text);
+  font-weight: 700;
+}
+
+.active-virtual-banner__body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.active-virtual-banner__content {
+  flex: 1;
+  min-width: 260px;
+}
+
+.active-virtual-banner__title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--odyssey-foreground);
+}
+
+.active-virtual-banner__time {
+  margin: 0.3rem 0 0;
+  font-size: 0.95rem;
+  color: var(--odyssey-muted-foreground);
+}
+
+.active-virtual-banner__features {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--odyssey-indigo-text);
+  font-weight: 600;
+}
+
+.active-virtual-banner__cta-container {
+  display: flex;
+  align-items: center;
+}
+
+.active-virtual-banner__cta-btn {
+  background: var(--odyssey-indigo) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 0.85rem 1.75rem;
+  font-size: 1rem;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.active-virtual-banner__cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+}
+
+/* Empty Bookings State */
+.empty-appointments-box {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 0.85rem;
+  border: 1px dashed var(--odyssey-border);
+}
+
+.empty-appointments-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--odyssey-foreground);
+}
+
+/* ── Mobile Slot Cards Grid (Responsive Alternative to Desktop Table) ── */
+.mobile-slots-grid {
+  display: none;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.mobile-slot-card {
+  background: #ffffff;
+  border: 1px solid var(--odyssey-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.mobile-slot-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.mobile-slot-card__time {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--odyssey-foreground);
+}
+
+.mobile-slot-card__service {
+  font-size: 0.85rem;
+  color: var(--odyssey-muted-foreground);
+  margin-top: 0.15rem;
+}
+
+.mobile-slot-card__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mobile-slot-card__btn {
+  flex: 1;
+  min-height: 44px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  justify-content: center;
+}
+
+/* ── Dedicated Mobile Teleconsultation Screen ── */
+.teleconsult-mobile-screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #090d16;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.teleconsult-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-top, 0.75rem));
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 50;
+}
+
+.teleconsult-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+  transition: color 0.15s ease;
+}
+
+.teleconsult-back-link:hover {
+  color: #ffffff;
+}
+
+.teleconsult-back-arrow {
+  font-size: 1.15rem;
+}
+
+.teleconsult-header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.teleconsult-room-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.teleconsult-sub-heading {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.teleconsult-info-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.teleconsult-stage-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 60px);
+  position: relative;
+}
+
+.teleconsult-video-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.teleconsult-waiting-card,
+.teleconsult-error-card,
+.teleconsult-loading-box {
+  margin: auto;
+  max-width: 420px;
+  padding: 2rem 1.5rem;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1.25rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+}
+
+.waiting-card-icon {
+  font-size: 3rem;
+}
+
+.waiting-time-highlight {
+  font-size: 1rem;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.waiting-instructions {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.waiting-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.waiting-card-actions button {
+  width: 100%;
+  min-height: 48px;
+}
+
+.teleconsult-spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Slide-up Drawer Details Sheet ── */
+.teleconsult-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  animation: fade-in 0.2s ease-out;
+}
+
+.teleconsult-drawer {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  background: #0f172a;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 1.25rem 1.25rem 0 0;
+  padding: 1.25rem 1.5rem max(1.5rem, env(safe-area-inset-bottom, 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+  animation: slide-up-drawer 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 0 auto 0.5rem;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawer-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.drawer-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.drawer-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.9rem;
+}
+
+.drawer-label {
+  color: #94a3b8;
+}
+
+.drawer-value {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.drawer-notice {
+  background: rgba(79, 70, 229, 0.15);
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  border-radius: 0.65rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.825rem;
+  color: #c7d2fe;
+}
+
+.drawer-notice p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.drawer-actions {
+  margin-top: 0.5rem;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up-drawer {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ── Responsive Mobile Overrides ── */
+@media (max-width: 768px) {
+  /* Hide desktop tab bar on mobile */
+  .patient-nav-tabs-desktop {
+    display: none !important;
+  }
+
+  /* Show fixed mobile bottom nav on mobile */
+  .mobile-bottom-nav {
+    display: flex !important;
+  }
+
+  /* Full screen edge-to-edge portal shell */
+  .patient-portal-shell {
+    margin: 0 !important;
+    padding: 1rem 0.85rem calc(5.5rem + env(safe-area-inset-bottom, 1rem)) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .patient-header-bar {
+    padding-bottom: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .patient-portal-title {
+    font-size: 1.35rem;
+  }
+
+  /* Show mobile slot cards instead of table on mobile */
+  .mobile-slots-grid {
+    display: grid !important;
+  }
+  .desktop-slots-table {
+    display: none !important;
+  }
+
+  /* 2x2 grid for metrics ribbon on mobile */
+  .bookings-metrics-ribbon {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.65rem;
+  }
+
+  .booking-metric-card {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .booking-metric-card__value {
+    font-size: 1.35rem;
+  }
+
+  .booking-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .bookings-viewmode-toggle {
+    display: none !important;
+  }
+
+  .active-virtual-banner {
+    padding: 1rem 1.15rem;
+  }
+
+  .active-virtual-banner__title {
+    font-size: 1.15rem;
+  }
+
+  .active-virtual-banner__cta-btn {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .active-virtual-banner__cta-container {
+    width: 100%;
+  }
+
+  .active-virtual-banner__cta-link {
+    width: 100%;
+    text-decoration: none;
+  }
+
+  /* Mobile form controls: 16px to prevent iOS auto-zoom, 44px min tap target */
+  input, select, textarea, button {
+    font-size: 16px !important;
+  }
+
+  .odyssey-input, input, select {
+    min-height: 46px !important;
+  }
 }

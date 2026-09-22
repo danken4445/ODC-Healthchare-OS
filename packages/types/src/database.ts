@@ -2095,6 +2095,10 @@ export type Database = {
           start_at: string;
         }[];
       };
+      resolve_patient_teleconsult_clinic: {
+        Args: { p_appointment_id: string };
+        Returns: string | null;
+      };
       list_doctor_payouts: {
         Args: { p_organization_id: string };
         Returns: {
@@ -2387,6 +2391,13 @@ export type Database = {
         Args: {
           p_appointment_id: string;
           p_status: Database["public"]["Enums"]["appointment_status"];
+        };
+        Returns: undefined;
+      };
+      cancel_appointment: {
+        Args: {
+          p_appointment_id: string;
+          p_block_slot?: boolean;
         };
         Returns: undefined;
       };

@@ -1580,6 +1580,17 @@ export async function getTeleconsultAppointments(
   return success((data ?? []) as TeleconsultAppointment[]);
 }
 
+/** Resolves the assigned clinic for a patient's own teleconsult deep link. */
+export async function resolvePatientTeleconsultClinic(
+  client: SupabaseClient<Database>,
+  appointmentId: string,
+): Promise<SupabaseResult<string | null>> {
+  const { data, error } = await client.rpc("resolve_patient_teleconsult_clinic", {
+    p_appointment_id: appointmentId,
+  });
+  return error ? failure(error) : success(data);
+}
+
 export async function closeTeleconsultRoom(
   client: SupabaseClient<Database>,
   appointmentId: string,
@@ -1644,19 +1655,45 @@ export function getLocalDayRange(date: Date = new Date()): DayRange {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+export function getSpecificDayRange(dateInput: Date | string): DayRange {
+  const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+export function getUpcomingDayRange(from: Date = new Date(), daysAhead = 60): DayRange {
+  const start = new Date(from);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + daysAhead);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 /** Appointment queue visible through actor-specific Appointment RLS. */
 export async function getDailyAppointmentQueue(
   client: SupabaseClient<Database>,
   organizationId: string,
-  range: DayRange = getLocalDayRange(),
+  range?: DayRange | null,
   statuses: AppointmentStatus[] = ["booked", "arrived"],
 ): Promise<SupabaseResult<AppointmentQueueItem[]>> {
-  const { data: appointments, error: appointmentError } = await client
+  let query = client
     .from("appointments")
     .select(appointmentSummaryColumns)
-    .eq("organization_id", organizationId)
-    .gte("start_at", range.start)
-    .lt("start_at", range.end)
+    .eq("organization_id", organizationId);
+
+  if (range) {
+    query = query.gte("start_at", range.start).lt("start_at", range.end);
+  } else if (range === null) {
+    query = query.gte("start_at", new Date().toISOString());
+  } else {
+    const defaultRange = getLocalDayRange();
+    query = query.gte("start_at", defaultRange.start).lt("start_at", defaultRange.end);
+  }
+
+  const { data: appointments, error: appointmentError } = await query
     .in("status", statuses)
     .order("start_at", { ascending: true });
   if (appointmentError) return failure(appointmentError);
@@ -1734,6 +1771,26 @@ export async function updateAppointmentStatus(
     p_status: status,
   });
   if (error) return failure(error);
+  return success(undefined);
+}
+
+/** Cancels an appointment, with the option to retain/free the slot or block it. */
+export async function cancelAppointment(
+  client: SupabaseClient<Database>,
+  appointmentId: string,
+  blockSlot: boolean = false,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc("cancel_appointment", {
+    p_appointment_id: appointmentId,
+    p_block_slot: blockSlot,
+  });
+  if (error) {
+    const fallback = await client.rpc("update_appointment_status", {
+      p_appointment_id: appointmentId,
+      p_status: "cancelled",
+    });
+    if (fallback.error) return failure(fallback.error);
+  }
   return success(undefined);
 }
 
