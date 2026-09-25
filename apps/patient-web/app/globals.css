@@ -209,6 +209,12 @@ section > .stack, section > .inline-form { display: grid; gap: 1rem; }
 .history-card__details { padding:0 1rem 1rem; }
 .history-card__details > div { padding:.9rem 0; border-top:1px solid var(--border); }
 .history-card__details p { margin:.3rem 0; overflow-wrap:anywhere; }
+.patient-musculoskeletal-workspace { display:grid; gap:1rem; }
+.patient-musculoskeletal-heading h2 { margin:.2rem 0 0; }
+.patient-musculoskeletal-layout { display:grid; min-width:0; grid-template-columns:minmax(14rem,.7fr) minmax(20rem,1.35fr) minmax(15rem,.8fr); align-items:start; gap:1rem; }
+.patient-musculoskeletal-context { display:grid; min-width:0; gap:1rem; }
+.patient-musculoskeletal-layout > .odyssey-anatomy,
+.patient-musculoskeletal-layout > .odyssey-region-panel { min-width:0; }
 .empty-appointments-box { padding:2rem 1rem; text-align:center; border:1px dashed var(--border); border-radius:1rem; }
 
 .odyssey-table-scroll { max-width:100%; overflow-x:auto; }
@@ -271,5 +277,577 @@ section > .stack, section > .inline-form { display: grid; gap: 1rem; }
   .service-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .patient-hero { padding-inline:4rem; }
 }
-
+@media (max-width:1023px) {
+  .patient-musculoskeletal-layout { grid-template-columns:1fr; }
+}
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
+
+/* Patient Profile Redesign & Full Details Editor */
+.patient-profile-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 54rem;
+  margin: 0 auto;
+}
+
+.patient-profile-hero-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(8, 127, 117, 0.08) 0%, rgba(255, 255, 255, 0.95) 60%);
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: var(--odyssey-radius, 1rem);
+  box-shadow: 0 4px 16px -4px rgba(8, 127, 117, 0.08);
+}
+
+.patient-profile-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.patient-avatar-frame {
+  position: relative;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 3px solid #ffffff;
+  background: var(--muted);
+  overflow: hidden;
+}
+
+.patient-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.patient-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, #ffffff);
+}
+
+.patient-avatar-status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2px solid #ffffff;
+}
+
+.patient-profile-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.patient-profile-name {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1.2;
+}
+
+.patient-profile-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.patient-profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.profile-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  letter-spacing: 0.01em;
+}
+
+.profile-pill-badge--blood {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.profile-pill-badge--gender {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.profile-pill-badge--verified {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.profile-pill-badge--neutral {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+
+.patient-profile-subtext {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted-foreground);
+}
+
+.profile-feedback-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1.15rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  position: relative;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.profile-feedback-alert--success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.profile-feedback-alert--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.profile-feedback-icon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.profile-feedback-text {
+  flex: 1;
+}
+
+.profile-feedback-text strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.profile-feedback-text p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.profile-feedback-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0.2rem;
+  color: inherit;
+}
+.profile-feedback-close:hover {
+  opacity: 1;
+}
+
+.patient-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.profile-card-section {
+  background: var(--card, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: var(--odyssey-radius, 1rem);
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.profile-card-section--readonly {
+  background: #fafaf9;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-card-icon-bubble {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--primary) 12%, #ffffff);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.profile-card-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.profile-card-header .hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+
+.profile-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.15rem;
+}
+
+@media (min-width: 640px) {
+  .profile-inputs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-field-col-span-2 {
+    grid-column: span 2;
+  }
+}
+
+.profile-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+}
+
+.profile-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+}
+
+.profile-summary-label {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.profile-summary-val {
+  font-size: 0.95rem;
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.profile-insurance-note {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+  line-height: 1.45;
+}
+
+.patient-profile-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.patient-profile-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.patient-profile-session-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.patient-save-button {
+  min-width: 11rem;
+}
+
+.spinner-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Time Slot Action Buttons */
+.time-slot-card__actions {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+  gap: 0.5rem !important;
+}
+
+.time-slot-card__actions .odyssey-button {
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 2.5rem !important;
+  padding: 0.5rem 0.65rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 650 !important;
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Booking Confirmation Modal */
+.booking-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 30, 28, 0.68);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.booking-modal-container {
+  width: 100%;
+  max-width: 32rem;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--card);
+  box-shadow: 0 20px 45px rgba(10, 25, 23, 0.2);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.booking-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.booking-modal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.booking-modal-badge[data-mode="in_person"] {
+  background: #e8f5f0;
+  color: #087f75;
+  border: 1px solid #c2e7dc;
+}
+
+.booking-modal-badge[data-mode="virtual"] {
+  background: #eff2ff;
+  color: #4e5ba6;
+  border: 1px solid #d3dbfe;
+}
+
+.booking-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.booking-modal-close:hover {
+  background: var(--border);
+  color: var(--foreground);
+}
+
+.booking-modal-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--foreground);
+  font-family: Fraunces, Georgia, serif;
+}
+
+.booking-modal-subtitle {
+  margin: 0 0 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.booking-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.85rem;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.booking-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.booking-summary-icon {
+  margin-top: 0.15rem;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.booking-summary-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  font-weight: 700;
+}
+
+.booking-summary-row strong {
+  font-size: 0.95rem;
+  color: var(--foreground);
+}
+
+/* CMS Notice Box */
+.booking-cms-card {
+  padding: 1rem;
+  border-radius: 0.85rem;
+  background: #fffaf0;
+  border: 1px solid #fed7aa;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.booking-cms-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #9a3412;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.booking-cms-icon {
+  color: #c2410c;
+  flex-shrink: 0;
+}
+
+.booking-cms-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #7c2d12;
+}
+
+.booking-cms-secondary-text {
+  margin: 0.35rem 0 0;
+  padding-top: 0.35rem;
+  border-top: 1px dashed #fed7aa;
+  color: #9a3412;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.booking-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.booking-modal-actions .odyssey-button {
+  min-height: 2.75rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .booking-modal-container {
+    padding: 1.15rem;
+    gap: 1rem;
+  }
+  .booking-modal-actions {
+    grid-template-columns: 1fr;
+  }
+}

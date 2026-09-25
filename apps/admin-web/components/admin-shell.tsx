@@ -38,6 +38,11 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { canAccessAdminDestination, getAdminRouteRule, type AdminDestination } from "../lib/admin-access";
 import { OrgContextBar } from "./org-context-bar";
 import { AdminDataProvider, useAdminData } from "./admin-data-context";
+import {
+  AppointmentNotificationProvider,
+  AppointmentNotificationToast,
+  AppointmentNotificationControl,
+} from "@odyssey/ui";
 
 interface NavItem extends AdminDestination {
   icon: LucideIcon;
@@ -230,17 +235,20 @@ function AdminShellContent({ children }: { children: ReactNode }) {
             </button>
             <strong>Odyssey Healthcare OS</strong>
           </div>
-          {email && (
-            <button
-              className="mobile-header__logout"
-              type="button"
-              onClick={() => void handleLogOut()}
-              aria-label="Log out"
-              title="Log out"
-            >
-              <LogOut aria-hidden="true" size={15} />
-            </button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <AppointmentNotificationControl />
+            {email && (
+              <button
+                className="mobile-header__logout"
+                type="button"
+                onClick={() => void handleLogOut()}
+                aria-label="Log out"
+                title="Log out"
+              >
+                <LogOut aria-hidden="true" size={15} />
+              </button>
+            )}
+          </div>
         </header>
 
         {pathname !== "/" && <OrgContextBar />}
@@ -255,6 +263,32 @@ function AdminShellContent({ children }: { children: ReactNode }) {
   );
 }
 
+function AdminNotificationWrapper({ children }: { children: ReactNode }) {
+  const { client, organization } = useAdminData();
+  const router = useRouter();
+
+  return (
+    <AppointmentNotificationProvider
+      client={client}
+      organizationId={organization?.id}
+      appName="Odyssey Administration"
+    >
+      <AppointmentNotificationToast
+        onViewAppointment={() => {
+          router.push("/appointments");
+        }}
+      />
+      {children}
+    </AppointmentNotificationProvider>
+  );
+}
+
 export function AdminShell({ children }: { children: ReactNode }) {
-  return <AdminDataProvider><AdminShellContent>{children}</AdminShellContent></AdminDataProvider>;
+  return (
+    <AdminDataProvider>
+      <AdminNotificationWrapper>
+        <AdminShellContent>{children}</AdminShellContent>
+      </AdminNotificationWrapper>
+    </AdminDataProvider>
+  );
 }

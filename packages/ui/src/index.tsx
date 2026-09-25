@@ -9,6 +9,25 @@ import type { AppointmentStatus, InvoiceStatus, PayorType } from "@odyssey/types
 
 export { TeleconsultWebRtcRoom } from "./teleconsult-video-room";
 export type { TeleconsultWebRtcRoomProps } from "./teleconsult-video-room";
+export {
+  AppointmentNotificationControl,
+  AppointmentNotificationProvider,
+  AppointmentNotificationToast,
+  useAppointmentNotifications,
+} from "./appointment-notifications";
+export type {
+  AppointmentNotificationItem,
+  AppointmentNotificationProviderProps,
+} from "./appointment-notifications";
+export { PatientQrCode } from "./patient-qr-code";
+export { ClinicalPatientCard } from "./clinical-patient-card";
+export { ClinicalVitalsPanel, buildClinicalVitalReadings } from "./clinical-vitals-panel";
+export type { ClinicalVitalReading } from "./clinical-vitals-panel";
+export { MusculoskeletalFigure, MUSCULOSKELETAL_REGIONS } from "./musculoskeletal-figure";
+export type { BodyRegionDefinition } from "./musculoskeletal-figure";
+export { MusculoskeletalRegionPanel } from "./musculoskeletal-region-panel";
+export { AccessState } from "./access-state";
+export type { AccessStateProps, AccessStateVariant } from "./access-state";
 
 export function cn(
   ...values: Array<string | false | null | undefined>

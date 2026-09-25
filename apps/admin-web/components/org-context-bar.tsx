@@ -3,6 +3,7 @@
 import { Building2, ChevronRight, Globe2, LockKeyhole, LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAdminData } from "./admin-data-context";
+import { AppointmentNotificationControl } from "@odyssey/ui";
 
 export function OrgContextBar() {
   const pathname = usePathname();
@@ -31,7 +32,8 @@ export function OrgContextBar() {
         </span>
       </div>
       {email ? (
-        <div className="org-context__actions">
+        <div className="org-context__actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AppointmentNotificationControl />
           <button
             className="org-context__logout-button"
             type="button"

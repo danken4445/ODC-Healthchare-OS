@@ -506,7 +506,7 @@ export default function ProviderTeleconsultRoomPage() {
                     )}
                     <Link
                       className="full-chart-link"
-                      href={`/?encounter=${appointment.encounter_id}`}
+                      href={`/encounters/${appointment.encounter_id}`}
                     >
                       Open full clinical workspace →
                     </Link>

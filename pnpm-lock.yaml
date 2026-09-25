@@ -203,16 +203,25 @@ importers:
 
   packages/ui:
     dependencies:
+      '@odyssey/supabase-client':
+        specifier: workspace:*
+        version: link:../supabase-client
       '@odyssey/types':
         specifier: workspace:*
         version: link:../types
       '@supabase/supabase-js':
         specifier: ^2.49.1
         version: 2.112.4(@opentelemetry/api@1.9.1)
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       react:
         specifier: ^19.0.0
         version: 19.2.8
     devDependencies:
+      '@types/qrcode':
+        specifier: 1.5.5
+        version: 1.5.5
       '@types/react':
         specifier: ^19.0.2
         version: 19.2.18

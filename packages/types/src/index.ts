@@ -143,9 +143,12 @@ export interface PatientSummary extends Pick<
   | "active"
   | "name"
   | "birth_date"
+  | "blood_type"
   | "gender"
+  | "photo_url"
   | "telecom"
   | "address"
+  | "contact"
   | "walk_in_id"
   | "created_at"
   | "updated_at"
@@ -322,7 +325,37 @@ export type EncounterSummary = Pick<
   | "service_type"
   | "period_start"
   | "period_end"
+  | "diagnosis"
 >;
+
+export type CoverageSummary = Pick<
+  CoverageRow,
+  | "id"
+  | "organization_id"
+  | "patient_id"
+  | "status"
+  | "coverage_type"
+  | "subscriber_id"
+  | "payor"
+  | "period_start"
+  | "period_end"
+  | "class_values"
+>;
+
+export type EncounterViewMode = "visual" | "simple";
+export type AnatomyView = "front" | "back" | "left" | "right";
+
+export interface EncounterRegionDiagnosis {
+  id: string;
+  encounterId: string;
+  regionCode: string;
+  regionDisplay: string;
+  anatomyView: AnatomyView;
+  diagnosisText: string;
+  codeSystem: string | null;
+  code: string | null;
+  recordedAt: string;
+}
 
 export type ObservationSummary = Pick<
   ObservationRow,
@@ -657,10 +690,16 @@ export interface InventoryEncounterOption {
 export interface PatientProfileInput {
   patientId: string;
   displayName: string;
-  birthDate: string | null;
-  gender: "female" | "male" | "other" | "unknown" | null;
-  phone: string;
-  address: string;
+  birthDate?: string | null;
+  gender?: "female" | "male" | "other" | "unknown" | null;
+  bloodType?: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-" | null;
+  photoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
 }
 
 export interface DateRange {
@@ -757,6 +796,50 @@ export function getHumanNameDisplay(name: Json): string {
   return "Unnamed patient";
 }
 
+/** Safely reads Odyssey body-region diagnoses from Encounter.diagnosis JSON. */
+export function getEncounterRegionDiagnoses(
+  encounter: EncounterSummary,
+): EncounterRegionDiagnosis[] {
+  if (!Array.isArray(encounter.diagnosis)) return [];
+
+  return encounter.diagnosis.flatMap((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const record = value as Record<string, Json | undefined>;
+    const condition = record.condition;
+    const conditionRecord = condition && typeof condition === "object" && !Array.isArray(condition)
+      ? condition as Record<string, Json | undefined>
+      : null;
+    const coding = conditionRecord && Array.isArray(conditionRecord.coding)
+      ? conditionRecord.coding[0]
+      : null;
+    const codingRecord = coding && typeof coding === "object" && !Array.isArray(coding)
+      ? coding as Record<string, Json | undefined>
+      : null;
+    const anatomyView = record.anatomyView;
+
+    if (
+      typeof record.id !== "string" ||
+      typeof record.regionCode !== "string" ||
+      typeof record.regionDisplay !== "string" ||
+      typeof record.recordedAt !== "string" ||
+      typeof conditionRecord?.text !== "string" ||
+      (anatomyView !== "front" && anatomyView !== "back" && anatomyView !== "left" && anatomyView !== "right")
+    ) return [];
+
+    return [{
+      id: record.id,
+      encounterId: encounter.id,
+      regionCode: record.regionCode,
+      regionDisplay: record.regionDisplay,
+      anatomyView,
+      diagnosisText: conditionRecord.text,
+      codeSystem: typeof codingRecord?.system === "string" ? codingRecord.system : null,
+      code: typeof codingRecord?.code === "string" ? codingRecord.code : null,
+      recordedAt: record.recordedAt,
+    }];
+  });
+}
+
 export type FhirResourceType =
   | "Organization"
   | "Practitioner"
@@ -781,7 +864,7 @@ export interface AuditActor {
   role: "patient" | "provider" | "admin" | "system";
 }
 
-/* ─── Loop 5: Financial types ─── */
+/* â”€â”€â”€ Loop 5: Financial types â”€â”€â”€ */
 
 export interface BillingEventSummary {
   id: string;
@@ -1046,6 +1129,9 @@ export interface OrganizationBranding {
   accentColor: string;
   supportEmail: string | null;
   supportPhone: string | null;
+  clinicVisitMessage?: string | null;
+  teleconsultMessage?: string | null;
+  bookingConfirmationMessage?: string | null;
 }
 
 export interface OrganizationBrandingInput {
@@ -1056,6 +1142,9 @@ export interface OrganizationBrandingInput {
   accentColor: string;
   supportEmail?: string;
   supportPhone?: string;
+  clinicVisitMessage?: string;
+  teleconsultMessage?: string;
+  bookingConfirmationMessage?: string;
 }
 
 export type DocumentTemplateCategory =

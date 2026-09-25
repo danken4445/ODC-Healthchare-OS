@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import React from "react";
+import { AppointmentNotificationControl } from "@odyssey/ui";
 
 export type WorkspaceTab = "all" | "queue" | "chart" | "diagnostics" | "schedule";
 
@@ -102,6 +103,7 @@ export function WorkspaceHeader({
             <HandCoins size={16} />
             <span>Payouts</span>
           </Link>
+          <AppointmentNotificationControl />
           <button
             type="button"
             className="vesper-provider-logout-btn"

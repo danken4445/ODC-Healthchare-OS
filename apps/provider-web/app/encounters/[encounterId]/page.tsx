@@ -3,22 +3,31 @@
 import {
   createDiagnosticServiceRequest,
   createBrowserSupabaseClient,
+  createPatientQrPayload,
   finishClinicalEncounter,
   getCurrentStaffDepartment,
   getInventoryWorkspace,
   getLaboratoryServices,
+  getMyEncounterViewMode,
   getOrganizationClinicalRecords,
   getOrganizationPatient,
+  getPatientCoverages,
   getPortalAccess,
   getSpecialistOptions,
   hasOrganizationPermission,
   issueMedicalCertificate,
   issuePrescription,
+  recordEncounterRegionDiagnosis,
+  saveMyEncounterViewMode,
   saveSoapNote,
   tagInventoryUsage,
 } from "@odyssey/supabase-client";
 import type {
   EncounterSummary,
+  EncounterViewMode,
+  AnatomyView,
+  CoverageSummary,
+  EncounterRegionDiagnosis,
   DocumentReferenceSummary,
   InventoryWorkspace,
   LaboratoryServiceSummary,
@@ -27,7 +36,21 @@ import type {
   PatientSummary,
   SpecialistOption,
 } from "@odyssey/types";
-import { Badge, Button, Field, Input } from "@odyssey/ui";
+import { getEncounterRegionDiagnoses } from "@odyssey/types";
+import {
+  Badge,
+  buildClinicalVitalReadings,
+  Button,
+  ClinicalPatientCard,
+  ClinicalVitalsPanel,
+  Field,
+  Input,
+  MUSCULOSKELETAL_REGIONS,
+  MusculoskeletalFigure,
+  MusculoskeletalRegionPanel,
+  AccessState,
+  type BodyRegionDefinition,
+} from "@odyssey/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -39,6 +62,7 @@ import {
   useState,
 } from "react";
 import { EncounterDevBar } from "../../components/EncounterDevBar";
+import { EncounterSoapEditor } from "../../components/EncounterSoapEditor";
 import {
   generateRandomEncounterData,
   isDeveloperModeActive,
@@ -51,55 +75,32 @@ function clinicalText(value: unknown): string {
   return typeof text === "string" ? text : "";
 }
 
-function triageValue(value: unknown, key: string): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const item = (value as Record<string, unknown>)[key];
-  return typeof item === "string" || typeof item === "number" ? String(item) : "";
-}
-
-function bloodPressure(value: unknown): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "Not recorded";
-  const reading = (value as Record<string, unknown>).blood_pressure;
-  if (!reading || typeof reading !== "object" || Array.isArray(reading)) return "Not recorded";
-  const bp = reading as Record<string, unknown>;
-  return bp.systolic && bp.diastolic ? `${bp.systolic}/${bp.diastolic} mmHg` : "Not recorded";
-}
-
 function dateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "Not recorded";
-}
-
-function age(birthDate: string | null): string {
-  if (!birthDate) return "Not recorded";
-  const birthday = new Date(birthDate);
-  if (Number.isNaN(birthday.getTime())) return "Not recorded";
-  const now = new Date();
-  let years = now.getFullYear() - birthday.getFullYear();
-  const beforeBirthday = now.getMonth() < birthday.getMonth() ||
-    (now.getMonth() === birthday.getMonth() && now.getDate() < birthday.getDate());
-  if (beforeBirthday) years -= 1;
-  return `${years} years`;
-}
-
-function jsonText(value: unknown): string {
-  if (!value) return "Not recorded";
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) {
-    const values = value.map(jsonText).filter((item) => item !== "Not recorded");
-    return values.join(", ") || "Not recorded";
-  }
-  if (typeof value === "object") {
-    const values = Object.values(value as Record<string, unknown>)
-      .filter((item) => typeof item === "string" || typeof item === "number")
-      .map(String);
-    return values.join(", ") || "Not recorded";
-  }
-  return "Not recorded";
 }
 
 function dosageText(value: unknown): string {
   return Array.isArray(value) ? clinicalText(value[0]) : "";
 }
+
+function jsonDisplay(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ["display", "name", "text", "value"]) {
+    if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
+  }
+  return null;
+}
+
+type EncounterAction =
+  | "prescription"
+  | "certificate"
+  | "laboratory"
+  | "referral"
+  | "tagging";
+
+type EncounterAccessState = "loading" | "unauthorized" | "error" | "ready";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -136,10 +137,12 @@ function openExportPreview({
 
 export default function EncounterRecordingPage() {
   const { encounterId } = useParams<{ encounterId: string }>();
+  const [accessState, setAccessState] = useState<EncounterAccessState>("loading");
   const [encounter, setEncounter] = useState<EncounterSummary | null>(null);
   const [patient, setPatient] = useState<PatientSummary | null>(null);
   const [records, setRecords] = useState<OrganizationClinicalRecords | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [coverages, setCoverages] = useState<CoverageSummary[]>([]);
   const [status, setStatus] = useState("Loading the secure encounter record…");
   const [busy, setBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
@@ -178,6 +181,16 @@ export default function EncounterRecordingPage() {
   const [referralNote, setReferralNote] = useState<string>("");
   const [tagStockId, setTagStockId] = useState<string>("");
   const [tagQuantity, setTagQuantity] = useState<string>("1");
+  const [preferredMode, setPreferredMode] = useState<EncounterViewMode>("visual");
+  const [forceSimpleMode, setForceSimpleMode] = useState(false);
+  const [anatomyView, setAnatomyView] = useState<AnatomyView>("front");
+  const [selectedRegion, setSelectedRegion] = useState<BodyRegionDefinition>(
+    MUSCULOSKELETAL_REGIONS.find((region) => region.code === "chest") ?? { code: "chest", display: "Chest" },
+  );
+  const [diagnosisBusy, setDiagnosisBusy] = useState(false);
+  const [activeAction, setActiveAction] = useState<EncounterAction>("prescription");
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
 
   // Check persisted debug mode on client mount
   useEffect(() => {
@@ -186,30 +199,101 @@ export default function EncounterRecordingPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 640px)");
+    const update = () => setForceSimpleMode(mobile.matches);
+    update();
+    mobile.addEventListener("change", update);
+    return () => {
+      mobile.removeEventListener("change", update);
+    };
+  }, []);
+
   const loadEncounter = useCallback(async () => {
+    setAccessState("loading");
+    setEncounter(null);
+    setPatient(null);
+    setRecords(null);
+    setOrganizationId(null);
+    setCoverages([]);
     const client = createBrowserSupabaseClient();
     const { data: sessionData } = await client.auth.getSession();
     if (!sessionData.session) {
-      setStatus("Your sign-in session is unavailable. Please sign in again.");
+      setAccessState("unauthorized");
+      setStatus("Sign-in is required to view this encounter.");
       return;
     }
 
     const access = await getPortalAccess(client, "provider");
-    const clinicId = access.data?.organizationIds[0];
-    if (access.error || !access.data?.allowed || !clinicId) {
+    if (access.error) {
+      setAccessState("error");
+      setStatus("We could not verify your encounter access.");
+      return;
+    }
+    if (!access.data?.allowed || !access.data.organizationIds.length) {
+      setAccessState("unauthorized");
       setStatus("This account is not authorized to record this encounter.");
+      return;
+    }
+
+    const permissionResults = await Promise.all(
+      access.data.organizationIds.map((candidateOrganizationId) =>
+        hasOrganizationPermission(
+          client,
+          candidateOrganizationId,
+          "can_start_consultation",
+        ),
+      ),
+    );
+    const permissionError = permissionResults.find((result) => result.error)?.error;
+    if (permissionError) {
+      setAccessState("error");
+      setStatus("We could not verify your encounter access.");
+      return;
+    }
+    const authorizedOrganizationIds = access.data.organizationIds.filter(
+      (_candidateOrganizationId, index) => permissionResults[index]?.data,
+    );
+    if (!authorizedOrganizationIds.length) {
+      setAccessState("unauthorized");
+      setStatus("You do not have permission to record this encounter.");
+      return;
+    }
+
+    const encounterLookups = await Promise.all(
+      authorizedOrganizationIds.map((candidateOrganizationId) =>
+        client
+          .from("encounters")
+          .select("id, organization_id")
+          .eq("id", encounterId)
+          .eq("organization_id", candidateOrganizationId)
+          .maybeSingle(),
+      ),
+    );
+    const lookupError = encounterLookups.find((result) => result.error)?.error;
+    if (lookupError) {
+      setAccessState("error");
+      setStatus("We could not verify your encounter access.");
+      return;
+    }
+    const clinicId = encounterLookups.find((result) => result.data)?.data?.organization_id;
+    if (!clinicId) {
+      setAccessState("unauthorized");
+      setStatus("This encounter is not available to your account.");
       return;
     }
 
     const clinicalResult = await getOrganizationClinicalRecords(client, clinicId);
     if (clinicalResult.error) {
-      setStatus(`Unable to load the encounter: ${clinicalResult.error.message}`);
+      setAccessState("error");
+      setStatus("We could not load this encounter securely.");
       return;
     }
     const currentEncounter = clinicalResult.data.encounters.find(
       (item) => item.id === encounterId,
     );
     if (!currentEncounter) {
+      setAccessState("unauthorized");
       setStatus("This encounter is unavailable in your assigned clinic.");
       return;
     }
@@ -220,9 +304,15 @@ export default function EncounterRecordingPage() {
       currentEncounter.patient_id,
     );
     if (patientResult.error || !patientResult.data) {
-      setStatus(patientResult.error?.message ?? "The patient profile is unavailable.");
+      setAccessState("error");
+      setStatus("We could not load this encounter securely.");
       return;
     }
+
+    const [coverageResult, preferenceResult] = await Promise.all([
+      getPatientCoverages(client, clinicId, currentEncounter.patient_id),
+      getMyEncounterViewMode(client),
+    ]);
 
     const [prescribePermission, diagnosticsPermission, inventoryPermission] =
       await Promise.all([
@@ -235,9 +325,8 @@ export default function EncounterRecordingPage() {
       diagnosticsPermission.error ||
       inventoryPermission.error
     ) {
-      setStatus(
-        `Unable to load encounter permissions: ${prescribePermission.error?.message ?? diagnosticsPermission.error?.message ?? inventoryPermission.error?.message}`,
-      );
+      setAccessState("error");
+      setStatus("We could not verify the encounter tools securely.");
       return;
     }
 
@@ -262,15 +351,16 @@ export default function EncounterRecordingPage() {
       (laboratoryResult && laboratoryResult.error) ||
       (specialistResult && specialistResult.error)
     ) {
-      setStatus(
-        `Unable to load encounter tools: ${departmentResult?.error?.message ?? inventoryResult?.error?.message ?? laboratoryResult?.error?.message ?? specialistResult?.error?.message}`,
-      );
+      setAccessState("error");
+      setStatus("We could not load the encounter tools securely.");
       return;
     }
 
     setOrganizationId(clinicId);
     setEncounter(currentEncounter);
     setPatient(patientResult.data);
+    setCoverages(coverageResult.error ? [] : coverageResult.data);
+    if (!preferenceResult.error) setPreferredMode(preferenceResult.data);
     setRecords(clinicalResult.data);
     setCanPrescribe(prescribePermission.data);
     setCanOrderDiagnostics(diagnosticsPermission.data);
@@ -282,6 +372,7 @@ export default function EncounterRecordingPage() {
     if (inventoryResult) setInventory(inventoryResult.data);
     if (laboratoryResult) setLaboratoryServices(laboratoryResult.data);
     if (specialistResult) setSpecialists(specialistResult.data);
+    setAccessState("ready");
     setStatus("Encounter record ready.");
   }, [encounterId]);
 
@@ -303,19 +394,49 @@ export default function EncounterRecordingPage() {
     }
   }, [currentSoapNote, soapDirty]);
 
-  const triage = useMemo(
-    () => records?.observations.find(
-      (item) => item.encounter_id === encounterId && item.code === "TRIAGE-VITALS",
-    ),
-    [encounterId, records?.observations],
-  );
   const priorEncounters = useMemo(
     () => (records?.encounters ?? [])
       .filter((item) => item.patient_id === encounter?.patient_id && item.id !== encounterId)
       .sort((a, b) => (b.period_start ?? "").localeCompare(a.period_start ?? "")),
     [encounter?.patient_id, encounterId, records?.encounters],
   );
+  const filteredPriorEncounters = useMemo(() => {
+    const query = historyQuery.trim().toLowerCase();
+    if (!query) return priorEncounters;
+    return priorEncounters.filter((prior) => {
+      const related = [
+        prior.service_type,
+        prior.status,
+        ...records?.observations.filter((item) => item.encounter_id === prior.id).flatMap((item) => [item.code, item.code_display, clinicalText(item.value), item.note]) ?? [],
+        ...records?.medicationRequests.filter((item) => item.encounter_id === prior.id).flatMap((item) => [item.medication_display, item.medication_code, item.note]) ?? [],
+        ...records?.documentReferences.filter((item) => item.encounter_id === prior.id).flatMap((item) => [item.content_title, item.description]) ?? [],
+        ...records?.serviceRequests.filter((item) => item.encounter_id === prior.id).flatMap((item) => [item.code_display, item.code, item.note]) ?? [],
+      ];
+      return related.some((value) => value?.toLowerCase().includes(query));
+    });
+  }, [historyQuery, priorEncounters, records]);
+  const effectiveMode: EncounterViewMode = forceSimpleMode ? "simple" : preferredMode;
+  const activeCoverage = coverages.find((coverage) => coverage.status === "active") ?? coverages[0] ?? null;
+  const regionDiagnoses = useMemo<EncounterRegionDiagnosis[]>(
+    () => (records?.encounters ?? [])
+      .filter((item) => item.patient_id === encounter?.patient_id)
+      .flatMap(getEncounterRegionDiagnoses),
+    [encounter?.patient_id, records?.encounters],
+  );
+  const patientObservations = useMemo(
+    () => (records?.observations ?? []).filter((observation) => observation.patient_id === encounter?.patient_id),
+    [encounter?.patient_id, records?.observations],
+  );
+  const vitalReadings = useMemo(
+    () => buildClinicalVitalReadings(patientObservations),
+    [patientObservations],
+  );
   const patientDetails = `${patient?.birth_date ?? "Birth date not recorded"} · ${patient?.gender ?? "Gender not recorded"}`;
+  const completionBlocker = !currentSoapNote
+    ? "Save clinical documentation before completing this encounter."
+    : soapDirty
+      ? "Save or discard the current documentation changes before completing."
+      : null;
 
   // Core Test Fill function
   const applyTestFill = useCallback(
@@ -399,8 +520,7 @@ export default function EncounterRecordingPage() {
   );
 
   // Easter Egg detection in SOAP documentation textarea
-  function handleSoapChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
-    const val = event.target.value;
+  function handleSoapChange(val: string) {
     setSoapInput(val);
     setSoapDirty(true);
 
@@ -425,6 +545,31 @@ export default function EncounterRecordingPage() {
       );
       setStatus("Easter Egg Active: Developer Mode unlocked.");
     }
+  }
+
+  async function selectEncounterMode(mode: EncounterViewMode) {
+    if (forceSimpleMode && mode === "visual") return;
+    setPreferredMode(mode);
+    const result = await saveMyEncounterViewMode(createBrowserSupabaseClient(), mode);
+    if (result.error) setStatus(`Unable to save view preference: ${result.error.message}`);
+  }
+
+  async function addRegionDiagnosis(text: string) {
+    setDiagnosisBusy(true);
+    const result = await recordEncounterRegionDiagnosis(createBrowserSupabaseClient(), {
+      encounterId,
+      regionCode: selectedRegion.code,
+      regionDisplay: selectedRegion.display,
+      anatomyView,
+      diagnosisText: text,
+    });
+    setDiagnosisBusy(false);
+    if (result.error) {
+      setStatus(`Unable to add diagnosis: ${result.error.message}`);
+      return;
+    }
+    await loadEncounter();
+    setStatus(`${selectedRegion.display} diagnosis added to this encounter.`);
   }
 
   function handleClearDrafts() {
@@ -504,6 +649,10 @@ export default function EncounterRecordingPage() {
   }
 
   async function completeEncounter() {
+    if (completionBlocker) {
+      setStatus(completionBlocker);
+      return;
+    }
     setBusy(true);
     const result = await finishClinicalEncounter(createBrowserSupabaseClient(), encounterId);
     setBusy(false);
@@ -512,6 +661,7 @@ export default function EncounterRecordingPage() {
       return;
     }
     await loadEncounter();
+    setCompletionDialogOpen(false);
     setStatus("Encounter completed and shared with the patient.");
   }
 
@@ -647,6 +797,24 @@ export default function EncounterRecordingPage() {
     setStatus("Item tagged for this encounter and held for billing.");
   }
 
+  if (accessState !== "ready") {
+    return (
+      <AccessState
+        actionHref="/"
+        actionLabel="Return to provider workspace"
+        description={
+          accessState === "loading"
+            ? "We are verifying your clinical permissions."
+            : accessState === "unauthorized"
+              ? "You do not have permission to view or record this encounter. A link alone does not grant access."
+              : "We could not securely verify this encounter. Please return to the provider workspace and try again."
+        }
+        eyebrow="Encounter recording"
+        variant={accessState}
+      />
+    );
+  }
+
   return (
     <main className="encounter-shell">
       <header className="encounter-header">
@@ -654,7 +822,7 @@ export default function EncounterRecordingPage() {
           <Link className="encounter-back" href="/">← Back to daily queue</Link>
           <p className="eyebrow">Focused encounter recording</p>
           <h1>{patient?.displayName ?? "Patient encounter"}</h1>
-          <p>{encounter?.service_type ?? "Clinical consultation"} · Started {dateTime(encounter?.period_start ?? null)}</p>
+          <p>{encounter?.service_type ?? "Clinical consultation"} · {patientDetails} · Started {dateTime(encounter?.period_start ?? null)}</p>
         </div>
         <div className="encounter-header-actions">
           {debugMode && (
@@ -666,9 +834,32 @@ export default function EncounterRecordingPage() {
             </span>
           )}
           {encounter && <Badge variant={encounter.status === "in_progress" ? "success" : "muted"}>{encounter.status.replaceAll("_", " ")}</Badge>}
-          {encounter?.status === "in_progress" && <Button disabled={busy} onClick={() => void completeEncounter()}>Complete encounter</Button>}
+          {encounter?.status === "in_progress" && (
+            <div className="encounter-completion-control">
+              <Button
+                disabled={busy || Boolean(completionBlocker)}
+                onClick={() => setCompletionDialogOpen(true)}
+                title={completionBlocker ?? "Review completion before closing the encounter"}
+              >
+                Complete encounter
+              </Button>
+              {completionBlocker ? <span>{completionBlocker}</span> : null}
+            </div>
+          )}
         </div>
       </header>
+
+      <dialog className="encounter-completion-dialog" onCancel={() => setCompletionDialogOpen(false)} open={completionDialogOpen}>
+        <form method="dialog">
+          <p className="eyebrow">Close encounter</p>
+          <h2>Complete this encounter?</h2>
+          <p>The note is saved and this action shares the completed record with the patient. Orders and documents already added remain attached to this encounter.</p>
+          <div>
+            <Button onClick={() => setCompletionDialogOpen(false)} type="button" variant="outline">Keep documenting</Button>
+            <Button disabled={busy} onClick={() => void completeEncounter()} type="button">{busy ? "Completing…" : "Complete encounter"}</Button>
+          </div>
+        </form>
+      </dialog>
 
       {/* Developer Debug Mode Toolbar */}
       {debugMode && (
@@ -704,94 +895,66 @@ export default function EncounterRecordingPage() {
 
       {encounter && patient && records && (
         <div className="encounter-layout">
-          <aside className="encounter-context" aria-label="Patient context">
-            <section className="encounter-context-section">
-              <p className="eyebrow">Patient information</p>
-              <h2>Basic information</h2>
-              <dl className="patient-facts">
-                <div><dt>Date of birth</dt><dd>{patient.birth_date ?? "Not recorded"} ({age(patient.birth_date)})</dd></div>
-                <div><dt>Gender</dt><dd>{patient.gender ?? "Not recorded"}</dd></div>
-                <div><dt>Contact</dt><dd>{jsonText(patient.telecom)}</dd></div>
-                <div><dt>Address</dt><dd>{jsonText(patient.address)}</dd></div>
-              </dl>
-            </section>
-            <section className="encounter-context-section">
-              <p className="eyebrow">Current visit</p>
-              <h2>Triage</h2>
-              {triage ? (
-                <dl className="patient-facts compact">
-                  <div><dt>Blood pressure</dt><dd>{bloodPressure(triage.value)}</dd></div>
-                  <div><dt>Pulse</dt><dd>{triageValue(triage.value, "pulse_bpm") || "Not recorded"} bpm</dd></div>
-                  <div><dt>Temperature</dt><dd>{triageValue(triage.value, "temperature_c") || "Not recorded"} °C</dd></div>
-                  <div><dt>SpO₂</dt><dd>{triageValue(triage.value, "oxygen_saturation_percent") || "Not recorded"} %</dd></div>
-                  {triageValue(triage.value, "chief_complaint") && <div><dt>Chief complaint</dt><dd>{triageValue(triage.value, "chief_complaint")}</dd></div>}
-                </dl>
-              ) : <p className="hint">No triage assessment has been recorded for this visit.</p>}
-            </section>
+          <aside className="encounter-context" aria-label="Patient details and vitals">
+            <ClinicalPatientCard
+              bloodType={patient.blood_type}
+              birthDate={patient.birth_date}
+              compact
+              displayName={patient.displayName}
+              gender={patient.gender}
+              photoUrl={patient.photo_url}
+              planName={jsonDisplay(activeCoverage?.payor) ?? activeCoverage?.coverage_type?.replaceAll("_", " ")}
+              policyNumber={activeCoverage?.subscriber_id}
+              qrPayload={createPatientQrPayload(organizationId ?? encounter.organization_id, patient.id)}
+            />
+            <ClinicalVitalsPanel readings={vitalReadings} />
           </aside>
 
           <section className="encounter-recording" aria-labelledby="encounter-recording-heading">
-            <div className="encounter-section-heading">
+            <div className="encounter-modebar">
               <div>
-                <p className="eyebrow">Current encounter</p>
-                <h2 id="encounter-recording-heading">Clinical documentation</h2>
+                <p className="eyebrow">Documentation workspace</p>
+                <h2 id="encounter-recording-heading">{effectiveMode === "visual" ? "Visual assessment" : "SOAP note"}</h2>
               </div>
-              <div className="encounter-heading-aside">
-                {debugMode && (
-                  <Button
-                    id="odc-soap-test-fill-btn"
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() => applyTestFill("soap")}
-                    title="Randomly generate SOAP note"
-                  >
-                    ⚡ Test Fill SOAP
-                  </Button>
-                )}
-                <span>{currentSoapNote ? "Revision" : "New note"}</span>
+              <div className="encounter-mode-toggle" role="group" aria-label="Encounter documentation mode">
+                <button aria-pressed={effectiveMode === "visual"} disabled={forceSimpleMode} onClick={() => void selectEncounterMode("visual")} type="button">Visual</button>
+                <button aria-pressed={effectiveMode === "simple"} onClick={() => void selectEncounterMode("simple")} type="button">Simple</button>
               </div>
             </div>
-            <form className="encounter-note-form" onSubmit={saveNote}>
-              <label htmlFor="encounter-soap-note">
-                SOAP documentation
-                {debugMode ? (
-                  <span className="dev-field-badge">Dev Mode · Type ODC to randomize</span>
-                ) : (
-                  <span className="dev-field-hint">Tip: Type ODC for Test Fill</span>
-                )}
-              </label>
-              <textarea
-                id="encounter-soap-note"
-                key={currentSoapNote?.id ?? encounterId}
-                name="text"
-                rows={18}
-                maxLength={20000}
-                value={soapInput}
+            {forceSimpleMode ? <p className="encounter-mode-note">Simple mode is used on compact phone viewports.</p> : null}
+
+            {effectiveMode === "visual" ? (
+              <section className="encounter-assessment-workspace" aria-label="Visual assessment workspace">
+                <MusculoskeletalFigure
+                  activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]}
+                  anatomyView={anatomyView}
+                  onRegionSelect={setSelectedRegion}
+                  onViewChange={setAnatomyView}
+                  selectedRegionCode={selectedRegion.code}
+                />
+                <MusculoskeletalRegionPanel
+                  busy={diagnosisBusy}
+                  diagnoses={regionDiagnoses}
+                  encounterOpen={encounter.status === "in_progress"}
+                  onDiagnosisSubmit={addRegionDiagnosis}
+                  onRegionChange={setSelectedRegion}
+                  selectedRegion={selectedRegion}
+                />
+              </section>
+            ) : (
+              <EncounterSoapEditor
+                busy={busy}
+                canEdit={encounter.status === "in_progress"}
+                currentNoteId={currentSoapNote?.id}
+                debugMode={debugMode}
+                encounterId={encounterId}
                 onChange={handleSoapChange}
-                placeholder={"Subjective:\n\nObjective:\n\nAssessment:\n\nPlan:\n\n(Easter egg: Type 'ODC' to activate Developer Test Fill)"}
-                required
+                onSubmit={saveNote}
+                onTestFillAll={() => applyTestFill("all")}
+                onTestFillSoap={() => applyTestFill("soap")}
+                value={soapInput}
               />
-              <div className="encounter-note-actions">
-                <p>Saved notes are versioned in the patient record.</p>
-                <div className="encounter-note-btn-group">
-                  {debugMode && (
-                    <Button
-                      id="odc-note-all-fill-btn"
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyTestFill("all")}
-                      title="Randomly populate all encounter inputs"
-                    >
-                      ⚡ Test Fill All
-                    </Button>
-                  )}
-                  <Button disabled={busy || encounter.status !== "in_progress"} type="submit">
-                    {busy ? "Saving…" : "Save consultation note"}
-                  </Button>
-                </div>
-              </div>
-            </form>
+            )}
 
             {encounter.status === "in_progress" && (
               <section className="encounter-actions" aria-labelledby="encounter-actions-heading">
@@ -816,8 +979,25 @@ export default function EncounterRecordingPage() {
                     <span>Permission-based</span>
                   </div>
                 </div>
+                <div className="encounter-action-launcher" role="group" aria-label="Choose an encounter action">
+                  {canPrescribe ? (
+                    <button aria-pressed={activeAction === "prescription"} onClick={() => setActiveAction("prescription")} type="button">Prescription</button>
+                  ) : null}
+                  {canPrescribe ? (
+                    <button aria-pressed={activeAction === "certificate"} onClick={() => setActiveAction("certificate")} type="button">Medical certificate</button>
+                  ) : null}
+                  {canOrderDiagnostics ? (
+                    <button aria-pressed={activeAction === "laboratory"} onClick={() => setActiveAction("laboratory")} type="button">Laboratory order</button>
+                  ) : null}
+                  {canOrderDiagnostics ? (
+                    <button aria-pressed={activeAction === "referral"} onClick={() => setActiveAction("referral")} type="button">Specialist referral</button>
+                  ) : null}
+                  {canTagInventory ? (
+                    <button aria-pressed={activeAction === "tagging"} onClick={() => setActiveAction("tagging")} type="button">Item tagging</button>
+                  ) : null}
+                </div>
                 <div className="encounter-actions-grid">
-                  {canPrescribe && (
+                  {canPrescribe && activeAction === "prescription" && (
                     <section className="encounter-action-card">
                       <div className="encounter-card-header">
                         <h3>Prescription</h3>
@@ -871,7 +1051,7 @@ export default function EncounterRecordingPage() {
                       <CurrentRecords title="Issued prescriptions" items={records.medicationRequests.filter((item) => item.encounter_id === encounterId)} render={(item) => <><strong>{item.medication_display ?? item.medication_code}</strong><p>{dosageText(item.dosage_instruction)}</p>{item.note && <p>{item.note}</p>}<Button className="encounter-export-button" onClick={() => previewPrescription(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
                     </section>
                   )}
-                  {canPrescribe && (
+                  {canPrescribe && activeAction === "certificate" && (
                     <section className="encounter-action-card">
                       <div className="encounter-card-header">
                         <h3>Medical certificate</h3>
@@ -915,7 +1095,7 @@ export default function EncounterRecordingPage() {
                       <CurrentRecords title="Issued medical certificates" items={records.documentReferences.filter((item) => item.encounter_id === encounterId && item.type_code === "medical-certificate")} render={(item) => <><strong>{item.content_title ?? item.type_display ?? "Medical certificate"}</strong><p>{item.description ?? "No description recorded."}</p><Button className="encounter-export-button" onClick={() => previewCertificate(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
                     </section>
                   )}
-                  {canOrderDiagnostics && (
+                  {canOrderDiagnostics && activeAction === "laboratory" && (
                     <section className="encounter-action-card">
                       <div className="encounter-card-header">
                         <h3>Laboratory order</h3>
@@ -969,7 +1149,7 @@ export default function EncounterRecordingPage() {
                       </form>
                     </section>
                   )}
-                  {canOrderDiagnostics && (
+                  {canOrderDiagnostics && activeAction === "referral" && (
                     <section className="encounter-action-card">
                       <div className="encounter-card-header">
                         <h3>Specialist referral</h3>
@@ -1023,7 +1203,7 @@ export default function EncounterRecordingPage() {
                       </form>
                     </section>
                   )}
-                  {canTagInventory && (
+                  {canTagInventory && activeAction === "tagging" && (
                     <section className="encounter-action-card">
                       <div className="encounter-card-header">
                         <h3>Item tagging</h3>
@@ -1099,18 +1279,34 @@ export default function EncounterRecordingPage() {
                   )}
                 </div>
                 {canOrderDiagnostics && <CurrentRecords title="Current orders and referrals" items={records.serviceRequests.filter((item) => item.encounter_id === encounterId)} render={(item) => <><strong>{item.code_display ?? item.code}</strong><p>{item.category} · {item.status.replaceAll("_", " ")}</p>{item.note && <p>{item.note}</p>}</>} />}
+                <section className="encounter-added-actions" aria-labelledby="encounter-added-actions-heading">
+                  <h3 id="encounter-added-actions-heading">Added to this encounter</h3>
+                  <ul>
+                    {records.medicationRequests.filter((item) => item.encounter_id === encounterId).map((item) => <li key={`rx-${item.id}`}>Prescription: {item.medication_display ?? item.medication_code}</li>)}
+                    {records.documentReferences.filter((item) => item.encounter_id === encounterId && item.type_code === "medical-certificate").map((item) => <li key={`certificate-${item.id}`}>Certificate: {item.content_title ?? item.type_display ?? "Medical certificate"}</li>)}
+                    {records.serviceRequests.filter((item) => item.encounter_id === encounterId).map((item) => <li key={`request-${item.id}`}>{item.category.replaceAll("_", " ")}: {item.code_display ?? item.code}</li>)}
+                    {(inventory?.usages ?? []).filter((item) => item.encounter_id === encounterId).map((item) => <li key={`usage-${item.id}`}>Tagged item: {inventory?.items.find((candidate) => candidate.id === item.item_id)?.name ?? "Item"}</li>)}
+                    {!records.medicationRequests.some((item) => item.encounter_id === encounterId) && !records.documentReferences.some((item) => item.encounter_id === encounterId && item.type_code === "medical-certificate") && !records.serviceRequests.some((item) => item.encounter_id === encounterId) && !(inventory?.usages ?? []).some((item) => item.encounter_id === encounterId) ? <li className="is-empty">No orders, documents, or tagged items yet.</li> : null}
+                  </ul>
+                </section>
               </section>
             )}
 
-            <section className="encounter-history" aria-labelledby="medical-history-heading">
-              <div className="encounter-section-heading">
-                <div><p className="eyebrow">Longitudinal record</p><h2 id="medical-history-heading">Previous medical history</h2></div>
+            <details className="encounter-history" id="medical-history-heading">
+              <summary>
+                <span><span className="eyebrow">Longitudinal record</span><strong>Previous medical history</strong></span>
                 <span>{priorEncounters.length} earlier {priorEncounters.length === 1 ? "encounter" : "encounters"}</span>
+              </summary>
+              <div className="encounter-history__content">
+                <label className="encounter-history__search" htmlFor="encounter-history-search">
+                  <span>Search earlier encounters</span>
+                  <Input id="encounter-history-search" onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search diagnosis, medication, order…" type="search" value={historyQuery} />
+                </label>
+                {!priorEncounters.length ? <p className="hint">No earlier encounters are recorded at this clinic.</p> : filteredPriorEncounters.length ? filteredPriorEncounters.map((prior) => (
+                  <HistoricalEncounter encounter={prior} key={prior.id} records={records} />
+                )) : <p className="hint">No earlier encounter matches this search.</p>}
               </div>
-              {!priorEncounters.length ? <p className="hint">No earlier encounters are recorded at this clinic.</p> : priorEncounters.map((prior) => (
-                <HistoricalEncounter encounter={prior} key={prior.id} records={records} />
-              ))}
-            </section>
+            </details>
           </section>
         </div>
       )}

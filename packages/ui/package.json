@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
-    "@odyssey/types": "workspace:*"
+    "@odyssey/supabase-client": "workspace:*",
+    "@odyssey/types": "workspace:*",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
+    "@types/qrcode": "1.5.5",
     "@types/react": "^19.0.2",
     "typescript": "^5.7.2"
   }

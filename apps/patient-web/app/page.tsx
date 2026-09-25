@@ -10,6 +10,7 @@ import {
   getCurrentUserEmail,
   getPortalAccess,
   getPatientAccessRecords,
+  getPatientCoverages,
   getPublicClinics,
   getWalkInPatientRecords,
   registerPatient,
@@ -20,6 +21,7 @@ import {
   subscribeToClinicalHistory,
   subscribeToWaitingRoomQueue,
   updateOwnPatientProfile,
+  createPatientQrPayload,
   getPatientInvoices,
   subscribeToInvoiceUpdates,
   getOrganizationBranding,
@@ -35,7 +37,10 @@ import type {
   WalkInAccessRecords,
   PatientInvoice,
   OrganizationBranding,
+  AnatomyView,
+  CoverageSummary,
 } from "@odyssey/types";
+import { getEncounterRegionDiagnoses } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
   Button,
@@ -47,14 +52,22 @@ import {
   CurrencyDisplay,
   QrPaymentCode,
   Select,
+  buildClinicalVitalReadings,
+  ClinicalPatientCard,
+  ClinicalVitalsPanel,
+  MusculoskeletalFigure,
+  MusculoskeletalRegionPanel,
+  MUSCULOSKELETAL_REGIONS,
+  type BodyRegionDefinition,
 } from "@odyssey/ui";
 import Image from "next/image";
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { PatientHeader, type PatientTab } from "./components/PatientHeader";
 import { PatientBookingsView } from "./components/PatientBookingsView";
 import { BookingStepHeader } from "./components/BookingStepHeader";
 import { ServiceCard } from "./components/ServiceCard";
 import { AvailableSlotsCalendar } from "./components/AvailableSlotsCalendar";
+import { PatientProfileEditor } from "./components/PatientProfileEditor";
 
 const localTestPassword = "LocalOnly-2026!";
 
@@ -64,6 +77,16 @@ function formatAppointmentTime(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function jsonDisplay(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ["display", "name", "text", "value"]) {
+    if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
+  }
+  return null;
 }
 
 function downloadClinicalDocument(
@@ -105,6 +128,11 @@ export default function Home() {
   );
   const [liveStatus, setLiveStatus] = useState("Offline");
   const [branding, setBranding] = useState<OrganizationBranding | null>(null);
+  const [coverages, setCoverages] = useState<CoverageSummary[]>([]);
+  const [anatomyView, setAnatomyView] = useState<AnatomyView>("front");
+  const [selectedRegion, setSelectedRegion] = useState<BodyRegionDefinition>(
+    MUSCULOSKELETAL_REGIONS.find((region) => region.code === "chest") ?? { code: "chest", display: "Chest" },
+  );
 
   const selectedClinic = clinics.find((clinic) => clinic.id === organizationId);
   const patientAtSelectedClinic = Boolean(records?.patients.length);
@@ -138,6 +166,7 @@ export default function Home() {
     const client = createBrowserSupabaseClient();
     const contextResult = await setPatientClinicContext(client, clinicId);
     if (contextResult.error) {
+      setCoverages([]);
       setRecords({
         patients: [],
         appointments: [],
@@ -159,6 +188,13 @@ export default function Home() {
     }
     if (!recordResult.error && recordResult.data) {
       setRecords(recordResult.data);
+      const patient = recordResult.data.patients[0];
+      if (patient) {
+        const coverageResult = await getPatientCoverages(client, clinicId, patient.id);
+        setCoverages(coverageResult.error ? [] : coverageResult.data);
+      } else {
+        setCoverages([]);
+      }
     }
     if (slotResult.error || recordResult.error) {
       setStatus(
@@ -437,31 +473,21 @@ export default function Home() {
     setStatus("Signed out.");
   }
 
-  async function handleProfileUpdate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const patient = records?.patients[0];
-    if (!patient) return;
-    const fields = new FormData(event.currentTarget);
-    const result = await updateOwnPatientProfile(
-      createBrowserSupabaseClient(),
-      {
-        patientId: patient.id,
-        displayName: String(fields.get("displayName") ?? ""),
-        birthDate: String(fields.get("birthDate") ?? "") || null,
-        gender: (String(fields.get("gender") ?? "") || null) as
-          "female" | "male" | "other" | "unknown" | null,
-        phone: String(fields.get("phone") ?? ""),
-        address: String(fields.get("address") ?? ""),
-      },
-    );
-    if (result.error)
-      return setStatus(`Profile update failed: ${result.error.message}`);
-    setStatus("Profile updated.");
-    await loadPatientDashboard(patient.organization_id);
-  }
 
   const displayedAppointments =
     walkInRecords?.appointments ?? records?.appointments ?? [];
+  const currentPatient = records?.patients[0] ?? null;
+  const activeCoverage = coverages.find((coverage) => coverage.status === "active") ?? coverages[0] ?? null;
+  const regionDiagnoses = useMemo(
+    () => (records?.encounters ?? [])
+      .filter((item) => item.patient_id === currentPatient?.id)
+      .flatMap(getEncounterRegionDiagnoses),
+    [currentPatient?.id, records?.encounters],
+  );
+  const patientVitals = useMemo(
+    () => buildClinicalVitalReadings(records?.observations ?? []),
+    [records?.observations],
+  );
 
   return (
     <main
@@ -652,6 +678,8 @@ export default function Home() {
                   onBook={(slotId, mode) => void handleBook(slotId, mode)}
                   services={services}
                   slots={slots}
+                  clinicName={selectedClinic?.name || branding?.displayName}
+                  branding={branding}
                 />
               </section>
             )
@@ -709,89 +737,73 @@ export default function Home() {
 
       {(activeTab === "all" || activeTab === "profile") && records?.patients[0] && (
         <section aria-labelledby="profile-heading">
-          <h2 id="profile-heading">My profile</h2>
-          <form className="inline-form" onSubmit={handleProfileUpdate}>
-            <Field label="Full name">
-              <Input
-                name="displayName"
-                defaultValue={records.patients[0].displayName}
-                minLength={2}
-                maxLength={120}
-                required
-              />
-            </Field>
-            <Field label="Birth date">
-              <Input
-                name="birthDate"
-                type="date"
-                defaultValue={records.patients[0].birth_date ?? ""}
-              />
-            </Field>
-            <Field label="Gender">
-              <Select
-                name="gender"
-                defaultValue={records.patients[0].gender ?? ""}
-              >
-                <option value="">Prefer not to say</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="other">Other</option>
-                <option value="unknown">Unknown</option>
-              </Select>
-            </Field>
-            <Field label="Phone">
-              <Input
-                name="phone"
-                maxLength={40}
-                defaultValue={
-                  Array.isArray(records.patients[0].telecom) &&
-                  typeof records.patients[0].telecom[0] === "object" &&
-                  records.patients[0].telecom[0] &&
-                  !Array.isArray(records.patients[0].telecom[0]) &&
-                  typeof records.patients[0].telecom[0].value === "string"
-                    ? records.patients[0].telecom[0].value
-                    : ""
-                }
-              />
-            </Field>
-            <Field label="Address">
-              <Input
-                name="address"
-                maxLength={500}
-                defaultValue={
-                  Array.isArray(records.patients[0].address) &&
-                  typeof records.patients[0].address[0] === "object" &&
-                  records.patients[0].address[0] &&
-                  !Array.isArray(records.patients[0].address[0]) &&
-                  typeof records.patients[0].address[0].text === "string"
-                    ? records.patients[0].address[0].text
-                    : ""
-                }
-              />
-            </Field>
-            <Button type="submit">Save profile</Button>
-          </form>
-          <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="section-heading" style={{ marginBottom: "1.25rem" }}>
             <div>
-              <strong>Account session</strong>
-              <p className="hint" style={{ margin: 0 }}>Signed in as {signedInAs}</p>
+              <h2 id="profile-heading" style={{ margin: 0, fontSize: "1.5rem" }}>My profile & clinical details</h2>
+              <p className="hint" style={{ marginTop: "0.25rem" }}>
+                Update your personal information, emergency contact, blood type, and digital clinic check-in pass.
+              </p>
             </div>
-            <Button variant="secondary" onClick={handleSignOut} aria-label="Log out" title="Log out">
-              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: "middle" }}>
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Log out
-            </Button>
           </div>
+          <PatientProfileEditor
+            patient={records.patients[0]}
+            activeCoverage={activeCoverage}
+            organizationId={organizationId}
+            signedInAs={signedInAs}
+            onProfileUpdated={async () => {
+              if (records.patients[0]?.organization_id) {
+                await loadPatientDashboard(records.patients[0].organization_id);
+              }
+            }}
+            onSignOut={handleSignOut}
+          />
         </section>
       )}
 
       {(activeTab === "all" || activeTab === "records") && records && (
-        <section aria-labelledby="history-heading">
+        <>
+        {currentPatient && organizationId ? (
+          <section className="patient-musculoskeletal-workspace" aria-labelledby="patient-body-map-heading">
+            <div className="section-heading patient-musculoskeletal-heading">
+              <div>
+                <p className="eyebrow">Read-only clinical record</p>
+                <h2 id="patient-body-map-heading">Your musculoskeletal history</h2>
+              </div>
+              <span className="live-indicator">Tap a body region</span>
+            </div>
+            <div className="patient-musculoskeletal-layout">
+              <aside className="patient-musculoskeletal-context" aria-label="Your details and vitals">
+                <ClinicalPatientCard
+                  bloodType={currentPatient.blood_type}
+                  birthDate={currentPatient.birth_date}
+                  displayName={currentPatient.displayName}
+                  gender={currentPatient.gender}
+                  photoUrl={currentPatient.photo_url}
+                  planName={jsonDisplay(activeCoverage?.payor) ?? activeCoverage?.coverage_type?.replaceAll("_", " ")}
+                  policyNumber={activeCoverage?.subscriber_id}
+                  qrPayload={createPatientQrPayload(organizationId, currentPatient.id)}
+                />
+                <ClinicalVitalsPanel readings={patientVitals} />
+              </aside>
+              <MusculoskeletalFigure
+                activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]}
+                anatomyView={anatomyView}
+                onRegionSelect={setSelectedRegion}
+                onViewChange={setAnatomyView}
+                selectedRegionCode={selectedRegion.code}
+              />
+              <MusculoskeletalRegionPanel
+                diagnoses={regionDiagnoses}
+                onRegionChange={setSelectedRegion}
+                readOnly
+                selectedRegion={selectedRegion}
+              />
+            </div>
+          </section>
+        ) : null}
+        <section aria-labelledby="medical-history-heading">
           <div className="section-heading">
-            <h2 id="history-heading">Medical history</h2>
+            <h2 id="medical-history-heading">Medical history</h2>
             <span className="live-indicator" data-live={liveStatus === "Live"}>
               {liveStatus} records
             </span>
@@ -941,6 +953,7 @@ export default function Home() {
             </div>
           )}
         </section>
+        </>
       )}
 
       {(activeTab === "all" || activeTab === "billing") && signedInAs && patientAtSelectedClinic && (

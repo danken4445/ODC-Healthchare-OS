@@ -1445,6 +1445,7 @@ export type Database = {
           address: Json;
           auth_user_id: string | null;
           birth_date: string | null;
+          blood_type: string | null;
           communication: Json;
           contact: Json;
           created_at: string;
@@ -1453,6 +1454,7 @@ export type Database = {
           identifier: Json;
           name: Json;
           organization_id: string;
+          photo_url: string | null;
           telecom: Json;
           updated_at: string;
           walk_in_failed_attempts: number;
@@ -1465,6 +1467,7 @@ export type Database = {
           address?: Json;
           auth_user_id?: string | null;
           birth_date?: string | null;
+          blood_type?: string | null;
           communication?: Json;
           contact?: Json;
           created_at?: string;
@@ -1473,6 +1476,7 @@ export type Database = {
           identifier?: Json;
           name: Json;
           organization_id: string;
+          photo_url?: string | null;
           telecom?: Json;
           updated_at?: string;
           walk_in_failed_attempts?: number;
@@ -1485,6 +1489,7 @@ export type Database = {
           address?: Json;
           auth_user_id?: string | null;
           birth_date?: string | null;
+          blood_type?: string | null;
           communication?: Json;
           contact?: Json;
           created_at?: string;
@@ -1493,6 +1498,7 @@ export type Database = {
           identifier?: Json;
           name?: Json;
           organization_id?: string;
+          photo_url?: string | null;
           telecom?: Json;
           updated_at?: string;
           walk_in_failed_attempts?: number;
@@ -1637,6 +1643,27 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      provider_preferences: {
+        Row: {
+          created_at: string;
+          encounter_view_mode: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          encounter_view_mode?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          encounter_view_mode?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
       };
       provider_weekly_availability: {
         Row: {
@@ -2011,6 +2038,41 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      get_my_encounter_view_mode: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      get_patient_coverages: {
+        Args: { p_organization_id: string; p_patient_id: string };
+        Returns: {
+          class_values: Json;
+          coverage_type: string;
+          id: string;
+          organization_id: string;
+          patient_id: string;
+          payor: Json;
+          period_end: string | null;
+          period_start: string | null;
+          status: string;
+          subscriber_id: string | null;
+        }[];
+      };
+      record_encounter_region_diagnosis: {
+        Args: {
+          p_anatomy_view: string;
+          p_code?: string;
+          p_code_system?: string;
+          p_diagnosis_text: string;
+          p_encounter_id: string;
+          p_region_code: string;
+          p_region_display: string;
+        };
+        Returns: Json;
+      };
+      save_my_encounter_view_mode: {
+        Args: { p_mode: string };
+        Returns: undefined;
+      };
       add_soap_note: {
         Args: {
           p_encounter_id: string;

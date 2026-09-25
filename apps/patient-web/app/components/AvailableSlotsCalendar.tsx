@@ -1,14 +1,17 @@
 "use client";
 
-import type { AppointmentDeliveryMode, AppointmentSlotSummary, ClinicServiceSummary } from "@odyssey/types";
+import type { AppointmentDeliveryMode, AppointmentSlotSummary, ClinicServiceSummary, OrganizationBranding } from "@odyssey/types";
 import { Button } from "@odyssey/ui";
 import { useMemo, useState } from "react";
+import { BookingConfirmationModal } from "./BookingConfirmationModal";
 
 interface AvailableSlotsCalendarProps {
   busySlotId: string | null;
   onBook: (slotId: string, mode: AppointmentDeliveryMode) => void;
   services: ClinicServiceSummary[];
   slots: AppointmentSlotSummary[];
+  clinicName?: string;
+  branding?: OrganizationBranding | null;
 }
 
 function dateKey(value: string | Date): string {
@@ -20,12 +23,24 @@ function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-export function AvailableSlotsCalendar({ busySlotId, onBook, services, slots }: AvailableSlotsCalendarProps) {
+export function AvailableSlotsCalendar({
+  busySlotId,
+  onBook,
+  services,
+  slots,
+  clinicName,
+  branding,
+}: AvailableSlotsCalendarProps) {
   const firstSlotDate = slots[0]?.start_at ? new Date(slots[0].start_at) : new Date();
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(firstSlotDate.getFullYear(), firstSlotDate.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarExpanded, setCalendarExpanded] = useState(true);
   const [showAllTimes, setShowAllTimes] = useState(false);
+  const [pendingBooking, setPendingBooking] = useState<{
+    slot: AppointmentSlotSummary;
+    mode: AppointmentDeliveryMode;
+    service?: ClinicServiceSummary;
+  } | null>(null);
 
   const slotsByDate = useMemo(() => {
     const grouped = new Map<string, AppointmentSlotSummary[]>();
@@ -51,6 +66,16 @@ export function AvailableSlotsCalendar({ busySlotId, onBook, services, slots }: 
     setSelectedDate(key);
     setCalendarExpanded(false);
     setShowAllTimes(false);
+  }
+
+  function handleOpenConfirmation(slot: AppointmentSlotSummary, mode: AppointmentDeliveryMode, service?: ClinicServiceSummary) {
+    setPendingBooking({ slot, mode, service });
+  }
+
+  function handleConfirmBooking() {
+    if (!pendingBooking) return;
+    onBook(pendingBooking.slot.id, pendingBooking.mode);
+    setPendingBooking(null);
   }
 
   return (
@@ -87,12 +112,28 @@ export function AvailableSlotsCalendar({ busySlotId, onBook, services, slots }: 
           <div className="slots-for-day__heading"><div><p>Available times</p><h3>{selectedLabel}</h3></div><span>{selectedSlots.length} {selectedSlots.length === 1 ? "opening" : "openings"}</span></div>
           <div className="slots-for-day__list">
             {visibleSlots.map((slot) => {
-              const modes = services.find((service) => service.id === slot.clinic_service_id)?.delivery_modes ?? ["in_person"];
+              const service = services.find((s) => s.id === slot.clinic_service_id);
+              const modes = service?.delivery_modes ?? ["in_person"];
               return <article className="time-slot-card" key={slot.id}>
                 <div><strong>{formatTime(slot.start_at)}</strong><span>{slot.service_type ?? "General consultation"}</span></div>
                 <div className="time-slot-card__actions">
-                  {modes.includes("in_person") ? <Button disabled={busySlotId !== null} onClick={() => onBook(slot.id, "in_person")}>{busySlotId === slot.id ? "Booking…" : "Clinic visit"}</Button> : null}
-                  {modes.includes("virtual") ? <Button disabled={busySlotId !== null} onClick={() => onBook(slot.id, "virtual")} variant="outline">{busySlotId === slot.id ? "Booking…" : "Video visit"}</Button> : null}
+                  {modes.includes("in_person") ? (
+                    <Button
+                      disabled={busySlotId !== null}
+                      onClick={() => handleOpenConfirmation(slot, "in_person", service)}
+                    >
+                      {busySlotId === slot.id ? "Booking…" : "Book for a Clinic Visit"}
+                    </Button>
+                  ) : null}
+                  {modes.includes("virtual") ? (
+                    <Button
+                      disabled={busySlotId !== null}
+                      onClick={() => handleOpenConfirmation(slot, "virtual", service)}
+                      variant="outline"
+                    >
+                      {busySlotId === slot.id ? "Booking…" : "Book for a Tele-Consultation"}
+                    </Button>
+                  ) : null}
                 </div>
               </article>;
             })}
@@ -100,6 +141,19 @@ export function AvailableSlotsCalendar({ busySlotId, onBook, services, slots }: 
           {selectedSlots.length > 4 ? <Button className="show-more-times" onClick={() => setShowAllTimes((current) => !current)} variant="ghost">{showAllTimes ? "Show fewer times" : `Show ${selectedSlots.length - 4} more times`}</Button> : null}
         </>}
       </div>
+
+      {/* Confirmation Message Modal */}
+      <BookingConfirmationModal
+        busy={busySlotId !== null}
+        isOpen={pendingBooking !== null}
+        slot={pendingBooking?.slot ?? null}
+        mode={pendingBooking?.mode ?? null}
+        service={pendingBooking?.service}
+        clinicName={clinicName}
+        branding={branding}
+        onCancel={() => setPendingBooking(null)}
+        onConfirm={handleConfirmBooking}
+      />
     </div>
   );
 }

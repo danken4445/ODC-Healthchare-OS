@@ -18,6 +18,7 @@ import type {
   VesperNotification,
   VesperPatientRecord,
 } from "../../hooks/use-vesper-dashboard-data";
+import { AppointmentNotificationControl } from "@odyssey/ui";
 
 interface VesperTopbarProps {
   patients?: VesperPatientRecord[];
@@ -173,19 +174,8 @@ export function VesperTopbar({
           <span className="vesper-dot-indicator" />
         </button>
 
-        {/* Notifications Button */}
-        <button
-          type="button"
-          className="vesper-icon-action-btn"
-          aria-label="Notifications"
-          onClick={onOpenNotifications}
-          title="Clinical & System Notifications"
-        >
-          <Bell size={17} />
-          {unreadCount > 0 && (
-            <span className="vesper-dot-indicator vesper-dot-indicator--amber" />
-          )}
-        </button>
+        {/* Appointment Realtime Alerts Control */}
+        <AppointmentNotificationControl />
 
         {/* User Profile Block */}
         <div className="vesper-user-profile-anchor">

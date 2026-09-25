@@ -17,6 +17,10 @@ import {
   type DateRange,
   type DocumentReferenceSummary,
   type EncounterSummary,
+  type EncounterViewMode,
+  type EncounterRegionDiagnosis,
+  type AnatomyView,
+  type CoverageSummary,
   type MedicationRequestSummary,
   type ObservationSummary,
   type MedicalCertificateInput,
@@ -88,6 +92,7 @@ import {
 } from "@odyssey/types";
 
 let browserClient: SupabaseClient<Database> | undefined;
+let publicBrowserClient: SupabaseClient<Database> | undefined;
 
 export interface PublicSupabaseConfig {
   anonKey: string;
@@ -103,7 +108,7 @@ export type SupabaseResult<T> =
   { data: T; error: null } | { data: null; error: SupabaseFailure };
 
 const patientSummaryColumns =
-  "id, organization_id, active, name, birth_date, gender, telecom, address, walk_in_id, created_at, updated_at";
+  "id, organization_id, active, name, birth_date, blood_type, gender, photo_url, telecom, address, contact, walk_in_id, created_at, updated_at";
 const appointmentSummaryColumns =
   "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction, clinic_service_id, queue_date, queue_number, delivery_mode";
 const appointmentSlotSummaryColumns =
@@ -114,7 +119,7 @@ const waitingRoomQueueColumns =
   "appointment_id, organization_id, queue_date, queue_number, service_name, scheduled_at, stage";
 const publicClinicSummaryColumns = "id, name, telecom, address";
 const encounterSummaryColumns =
-  "id, organization_id, patient_id, appointment_id, practitioner_role_id, status, class_code, service_type, period_start, period_end";
+  "id, organization_id, patient_id, appointment_id, practitioner_role_id, status, class_code, service_type, period_start, period_end, diagnosis";
 const observationSummaryColumns =
   "id, organization_id, patient_id, encounter_id, status, code, code_display, effective_at, issued_at, value, value_unit, supersedes_id, diagnostic_report_id, reference_range, note";
 const medicationRequestSummaryColumns =
@@ -169,14 +174,21 @@ export function createBrowserSupabaseClient(): SupabaseClient<Database> {
 
 /** A sessionless browser client for intentionally public clinic directories. */
 export function createPublicSupabaseClient(): SupabaseClient<Database> {
+  if (typeof window !== "undefined" && publicBrowserClient) {
+    return publicBrowserClient;
+  }
   const { url, anonKey } = publicSupabaseConfig();
-  return createClient<Database>(url, anonKey, {
+  const client = createClient<Database>(url, anonKey, {
     auth: {
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: false,
     },
   });
+  if (typeof window !== "undefined") {
+    publicBrowserClient = client;
+  }
+  return client;
 }
 
 /** Use this from server-only code that does not require cookie session wiring. */
@@ -633,6 +645,77 @@ export async function saveSoapNote(
   return error ? failure(error) : success(data);
 }
 
+export async function getMyEncounterViewMode(
+  client: SupabaseClient<Database>,
+): Promise<SupabaseResult<EncounterViewMode>> {
+  const { data, error } = await client.rpc("get_my_encounter_view_mode");
+  if (error) return failure(error);
+  return success(data === "simple" ? "simple" : "visual");
+}
+
+export async function saveMyEncounterViewMode(
+  client: SupabaseClient<Database>,
+  mode: EncounterViewMode,
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("save_my_encounter_view_mode", { p_mode: mode });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function recordEncounterRegionDiagnosis(
+  client: SupabaseClient<Database>,
+  input: {
+    encounterId: string;
+    regionCode: string;
+    regionDisplay: string;
+    anatomyView: AnatomyView;
+    diagnosisText: string;
+    codeSystem?: string | null;
+    code?: string | null;
+  },
+): Promise<SupabaseResult<EncounterRegionDiagnosis>> {
+  const { data, error } = await client.rpc("record_encounter_region_diagnosis", {
+    p_encounter_id: input.encounterId,
+    p_region_code: input.regionCode,
+    p_region_display: input.regionDisplay,
+    p_anatomy_view: input.anatomyView,
+    p_diagnosis_text: input.diagnosisText,
+    p_code_system: input.codeSystem ?? undefined,
+    p_code: input.code ?? undefined,
+  });
+  if (error) return failure(error);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return failure({ message: "The diagnosis record was not returned." });
+  }
+  const record = data as Record<string, Json | undefined>;
+  const condition = record.condition;
+  const conditionRecord = condition && typeof condition === "object" && !Array.isArray(condition)
+    ? condition as Record<string, Json | undefined>
+    : null;
+  return success({
+    id: String(record.id ?? ""),
+    encounterId: input.encounterId,
+    regionCode: String(record.regionCode ?? input.regionCode),
+    regionDisplay: String(record.regionDisplay ?? input.regionDisplay),
+    anatomyView: input.anatomyView,
+    diagnosisText: typeof conditionRecord?.text === "string" ? conditionRecord.text : input.diagnosisText,
+    codeSystem: input.codeSystem ?? null,
+    code: input.code ?? null,
+    recordedAt: String(record.recordedAt ?? new Date().toISOString()),
+  });
+}
+
+export async function getPatientCoverages(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  patientId: string,
+): Promise<SupabaseResult<CoverageSummary[]>> {
+  const { data, error } = await client.rpc("get_patient_coverages", {
+    p_organization_id: organizationId,
+    p_patient_id: patientId,
+  });
+  return error ? failure(error) : success((data ?? []) as unknown as CoverageSummary[]);
+}
+
 /** Records an immutable nurse triage assessment before the doctor may start. */
 export async function recordTriageVitalSigns(
   client: SupabaseClient<Database>,
@@ -699,11 +782,17 @@ export async function updateOwnPatientProfile(
   const { error } = await client.rpc("update_own_patient_profile", {
     p_patient_id: input.patientId,
     p_display_name: input.displayName,
-    p_birth_date: input.birthDate as string,
-    p_gender: input.gender as string,
-    p_phone: input.phone,
-    p_address: input.address,
-  });
+    p_birth_date: (input.birthDate || null) as string,
+    p_gender: (input.gender || null) as string,
+    p_phone: input.phone ?? "",
+    p_address: input.address ?? "",
+    p_blood_type: (input.bloodType || null) as string,
+    p_photo_url: (input.photoUrl || null) as string,
+    p_email: input.email ?? "",
+    p_emergency_contact_name: input.emergencyContactName ?? "",
+    p_emergency_contact_phone: input.emergencyContactPhone ?? "",
+    p_emergency_contact_relationship: input.emergencyContactRelationship ?? "",
+  } as any);
   return error ? failure(error) : success(undefined);
 }
 
@@ -1688,6 +1777,11 @@ export async function bookAppointmentSlot(
     p_delivery_mode: deliveryMode,
   });
   if (error) return failure(error);
+  broadcastAppointmentBooked({
+    appointmentId: data,
+    patientId,
+    deliveryMode,
+  });
   return success(data);
 }
 
@@ -1957,6 +2051,155 @@ export function subscribeToAppointmentQueue(
   };
 }
 
+export interface AppointmentBookingEvent {
+  appointmentId?: string;
+  organizationId?: string;
+  patientId?: string;
+  deliveryMode?: string;
+  serviceType?: string;
+  startAt?: string;
+  status?: string;
+  timestamp?: number;
+}
+
+export function broadcastAppointmentBooked(
+  event: Omit<AppointmentBookingEvent, "timestamp"> & { timestamp?: number },
+): void {
+  if (typeof window === "undefined") return;
+  const payload: AppointmentBookingEvent = {
+    ...event,
+    timestamp: event.timestamp || Date.now(),
+  };
+
+  try {
+    const channel = new BroadcastChannel("odyssey_appointment_booking");
+    channel.postMessage(payload);
+    channel.close();
+  } catch {
+    // BroadcastChannel unsupported
+  }
+
+  try {
+    window.localStorage.setItem(
+      "odyssey_booking_alert",
+      JSON.stringify(payload),
+    );
+  } catch {
+    // localStorage unavailable
+  }
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent("odyssey_booking_alert", { detail: payload }),
+    );
+  } catch {
+    // CustomEvent unavailable
+  }
+}
+
+/**
+ * Subscribes to real-time appointment booking events for both admin-web and provider-web.
+ * Listens across:
+ * 1. Supabase Realtime postgres_changes INSERT on appointments table.
+ * 2. Cross-tab BroadcastChannel ("odyssey_appointment_booking").
+ * 3. Cross-window storage events ("odyssey_booking_alert").
+ * 4. In-window custom events ("odyssey_booking_alert").
+ */
+export function subscribeToAppointmentBookings(
+  client: SupabaseClient<Database>,
+  organizationId: string | null | undefined,
+  onBooking: (event: AppointmentBookingEvent) => void,
+  onStatus?: (status: RealtimeConnectionStatus) => void,
+): () => void {
+  // Deduplication cache with 10-second TTL
+  const seenKeys = new Set<string>();
+  const deliverEvent = (event: AppointmentBookingEvent) => {
+    const key = event.appointmentId ? `id:${event.appointmentId}` : `ts:${Math.floor((event.timestamp || Date.now()) / 1000)}`;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    setTimeout(() => seenKeys.delete(key), 10_000);
+    onBooking(event);
+  };
+
+  const channelName = `appointment-bookings:${organizationId || "global"}:${Date.now()}`;
+  const channel = client.channel(channelName);
+
+  channel.on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "appointments",
+      ...(organizationId ? { filter: `organization_id=eq.${organizationId}` } : {}),
+    },
+    (payload) => {
+      const row = (payload.new || {}) as Record<string, unknown>;
+      deliverEvent({
+        appointmentId: typeof row.id === "string" ? row.id : undefined,
+        organizationId: typeof row.organization_id === "string" ? row.organization_id : undefined,
+        patientId: typeof row.patient_id === "string" ? row.patient_id : undefined,
+        deliveryMode: typeof row.delivery_mode === "string" ? row.delivery_mode : undefined,
+        serviceType: typeof row.service_type === "string" ? row.service_type : undefined,
+        startAt: typeof row.start_at === "string" ? row.start_at : undefined,
+        status: typeof row.status === "string" ? row.status : "booked",
+        timestamp: Date.now(),
+      });
+    },
+  );
+
+  channel.subscribe((status) => {
+    onStatus?.(status as RealtimeConnectionStatus);
+  });
+
+  let bc: BroadcastChannel | null = null;
+  if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+    try {
+      bc = new BroadcastChannel("odyssey_appointment_booking");
+      bc.onmessage = (msgEvent) => {
+        if (msgEvent.data && typeof msgEvent.data === "object") {
+          deliverEvent(msgEvent.data as AppointmentBookingEvent);
+        }
+      };
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleStorage = (storageEvt: StorageEvent) => {
+    if (storageEvt.key === "odyssey_booking_alert" && storageEvt.newValue) {
+      try {
+        const parsed = JSON.parse(storageEvt.newValue);
+        deliverEvent(parsed);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleCustom = (customEvt: Event) => {
+    const detail = (customEvt as CustomEvent).detail;
+    if (detail && typeof detail === "object") {
+      deliverEvent(detail as AppointmentBookingEvent);
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("odyssey_booking_alert", handleCustom);
+  }
+
+  return () => {
+    void client.removeChannel(channel);
+    if (bc) {
+      bc.close();
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("odyssey_booking_alert", handleCustom);
+    }
+  };
+}
+
 /** Public queue snapshot. Rows contain no patient name or patient identifier. */
 export async function getWaitingRoomQueue(
   client: SupabaseClient<Database>,
@@ -2029,7 +2272,7 @@ function isWalkInAccessRecords(value: unknown): value is WalkInAccessRecords {
   );
 }
 
-/* ─── Loop 5: Financial functions ─── */
+/* â”€â”€â”€ Loop 5: Financial functions â”€â”€â”€ */
 
 export async function getBillingWorkspace(
   client: SupabaseClient<Database>,
@@ -2386,7 +2629,7 @@ export async function getOrganizationBranding(
   const untyped = client as unknown as SupabaseClient;
   const { data, error } = await untyped
     .from("organization_branding")
-    .select("id, organization_id, display_name, tagline, logo_url, primary_color, accent_color, support_email, support_phone")
+    .select("*")
     .eq("organization_id", organizationId)
     .single();
   if (error) return failure(error);
@@ -2396,10 +2639,13 @@ export async function getOrganizationBranding(
     displayName: data.display_name as string,
     tagline: (data.tagline as string) ?? null,
     logoUrl: (data.logo_url as string) ?? null,
-    primaryColor: data.primary_color as string,
-    accentColor: data.accent_color as string,
+    primaryColor: (data.primary_color as string) || "#087f7a",
+    accentColor: (data.accent_color as string) || "#087f7a",
     supportEmail: (data.support_email as string) ?? null,
     supportPhone: (data.support_phone as string) ?? null,
+    clinicVisitMessage: (data.clinic_visit_message as string) ?? null,
+    teleconsultMessage: (data.teleconsult_message as string) ?? null,
+    bookingConfirmationMessage: (data.booking_confirmation_message as string) ?? null,
   });
 }
 
@@ -2408,6 +2654,30 @@ export async function saveOrganizationBranding(
   organizationId: string,
   input: OrganizationBrandingInput,
 ): Promise<SupabaseResult<string>> {
+  const untyped = client as unknown as SupabaseClient;
+  const updatePayload: Record<string, unknown> = {
+    display_name: input.displayName,
+    tagline: input.tagline ?? "",
+    logo_url: input.logoUrl ?? "",
+    primary_color: input.primaryColor,
+    accent_color: input.accentColor,
+    support_email: input.supportEmail ?? "",
+    support_phone: input.supportPhone ?? "",
+  };
+  if (input.clinicVisitMessage !== undefined) updatePayload.clinic_visit_message = input.clinicVisitMessage;
+  if (input.teleconsultMessage !== undefined) updatePayload.teleconsult_message = input.teleconsultMessage;
+  if (input.bookingConfirmationMessage !== undefined) updatePayload.booking_confirmation_message = input.bookingConfirmationMessage;
+
+  const { error: directError } = await untyped
+    .from("organization_branding")
+    .update(updatePayload)
+    .eq("organization_id", organizationId);
+
+  if (!directError) {
+    await untyped.from("organizations").update({ name: input.displayName }).eq("id", organizationId);
+    return success(organizationId);
+  }
+
   const { data, error } = await client.rpc(
     "save_organization_branding" as never,
     {
@@ -2419,6 +2689,9 @@ export async function saveOrganizationBranding(
       p_accent_color: input.accentColor,
       p_support_email: input.supportEmail ?? "",
       p_support_phone: input.supportPhone ?? "",
+      p_clinic_visit_message: input.clinicVisitMessage ?? "",
+      p_teleconsult_message: input.teleconsultMessage ?? "",
+      p_booking_confirmation_message: input.bookingConfirmationMessage ?? "",
     } as never,
   );
   return error ? failure(error) : success(data as unknown as string);
