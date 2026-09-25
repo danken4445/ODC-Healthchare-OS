@@ -589,14 +589,21 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     .filter({ hasText: "Virtual" })
     .last();
   await providerVirtualRow.getByRole("button", { name: "Open chart" }).click();
+  await expect(providerPage).toHaveURL(/\/encounters\//);
   await expect(
-    providerPage.getByRole("heading", { name: "Consultation chart" }),
+    providerPage.getByRole("heading", { name: "Clinical documentation" }),
+  ).toBeVisible();
+  await expect(
+    providerPage.getByRole("heading", { name: "Basic information" }),
+  ).toBeVisible();
+  await expect(
+    providerPage.getByRole("heading", { name: "Previous medical history" }),
   ).toBeVisible();
   await providerPage
     .getByRole("button", { name: "Complete encounter" })
     .click();
   await expect(providerPage.getByRole("status")).toContainText(
-    "Encounter completed",
+    "Encounter completed and shared with the patient",
   );
 
   const adminContext = await browser.newContext();

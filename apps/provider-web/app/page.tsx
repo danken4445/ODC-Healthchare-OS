@@ -14,6 +14,7 @@ import {
   getUpcomingDayRange,
   getOrganizationClinicalRecords,
   getProviderAppointmentSlots,
+  getProviderWeeklyAvailability,
   getInventoryWorkspace,
   getCurrentStaffDepartment,
   hasOrganizationPermission,
@@ -52,6 +53,8 @@ import type {
   DiagnosticsWorkspace,
   SpecialistOption,
   LaboratoryServiceSummary,
+  ProviderWeeklyAvailabilityRow,
+  WeeklyAvailabilityWindow,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -61,8 +64,15 @@ import {
   Field,
   Input,
 } from "@odyssey/ui";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   WorkspaceHeader,
   type WorkspaceTab,
@@ -125,9 +135,10 @@ const WEEKDAYS = [
   "Thursday",
   "Friday",
   "Saturday",
-];
+] as const;
 
 export default function Home() {
+  const router = useRouter();
   const [email, setEmail] = useState("doctor@synthetic.odyssey.test");
   const [password, setPassword] = useState("");
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
@@ -150,6 +161,9 @@ export default function Home() {
   const [editingService, setEditingService] =
     useState<ClinicServiceSummary | null>(null);
   const [scheduleServiceId, setScheduleServiceId] = useState("");
+  const [weeklyAvailability, setWeeklyAvailability] = useState<
+    ProviderWeeklyAvailabilityRow[]
+  >([]);
   const [clinicalRecords, setClinicalRecords] =
     useState<OrganizationClinicalRecords | null>(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(
@@ -182,6 +196,13 @@ export default function Home() {
 
   const ownedServices = services.filter(
     (service) => service.owner_practitioner_role_id === providerRoleId,
+  );
+  const selectedWeeklyAvailability = useMemo(
+    () =>
+      weeklyAvailability.filter(
+        (window) => window.clinic_service_id === scheduleServiceId,
+      ),
+    [scheduleServiceId, weeklyAvailability],
   );
   const selectedEncounter = clinicalRecords?.encounters.find(
     (encounter) => encounter.id === selectedEncounterId,
@@ -260,18 +281,20 @@ export default function Home() {
     async (clinicId = organizationId) => {
       if (!clinicId) return;
       const client = createBrowserSupabaseClient();
-      const [slotResult, serviceResult] = await Promise.all([
+      const [slotResult, serviceResult, weeklyResult] = await Promise.all([
         getProviderAppointmentSlots(client, clinicId),
         getClinicServices(client, clinicId),
+        getProviderWeeklyAvailability(client, clinicId),
       ]);
-      if (slotResult.error || serviceResult.error) {
+      if (slotResult.error || serviceResult.error || weeklyResult.error) {
         setStatus(
-          `Availability query failed: ${slotResult.error?.message ?? serviceResult.error?.message}`,
+          `Availability query failed: ${slotResult.error?.message ?? serviceResult.error?.message ?? weeklyResult.error?.message}`,
         );
         return;
       }
       setSlots(slotResult.data);
       setServices(serviceResult.data);
+      setWeeklyAvailability(weeklyResult.data);
     },
     [organizationId],
   );
@@ -332,6 +355,19 @@ export default function Home() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    const bookableServices = services.filter(
+      (service) =>
+        service.owner_practitioner_role_id === providerRoleId &&
+        service.booking_enabled,
+    );
+    if (
+      !bookableServices.some((service) => service.id === scheduleServiceId)
+    ) {
+      setScheduleServiceId(bookableServices[0]?.id ?? "");
+    }
+  }, [providerRoleId, scheduleServiceId, services]);
 
   useEffect(() => {
     if (!signedInAs || !organizationId) return;
@@ -521,9 +557,7 @@ export default function Home() {
     if (result.error)
       return setStatus(`Unable to start encounter: ${result.error.message}`);
     setStatus(`Encounter ${result.data} is in progress.`);
-    setSelectedEncounterId(result.data);
-    await loadClinicalRecords();
-    await loadQueue();
+    router.push(`/encounters/${result.data}`);
   }
 
   async function handleTriage(event: FormEvent<HTMLFormElement>) {
@@ -659,32 +693,18 @@ export default function Home() {
     await Promise.all([loadQueue(), loadClinicalRecords()]);
   }
 
-  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleCreateAvailability(
+    serviceId: string,
+    windows: WeeklyAvailabilityWindow[],
+  ) {
     if (!organizationId) return setStatus("No staff clinic is assigned.");
-    const form = event.currentTarget;
-    const fields = new FormData(form);
     const selectedService = services.find(
-      (service) => service.id === String(fields.get("scheduleServiceId") ?? ""),
+      (service) => service.id === serviceId,
     );
     if (!selectedService) {
       setStatus("Choose a service for this weekly schedule.");
       return;
     }
-    const windows = WEEKDAYS.flatMap((day, index) => {
-      if (!fields.get(`day-${index}-enabled`)) return [];
-      const startTime = String(fields.get(`day-${index}-start`) ?? "");
-      const endTime = String(fields.get(`day-${index}-end`) ?? "");
-      if (!startTime || !endTime || endTime <= startTime) return [];
-      return [{ dayOfWeek: index, startTime, endTime }];
-    });
-    if (!windows.length)
-      return setStatus("Choose at least one day and a valid time range.");
-    if (
-      windows.length !==
-      [...fields.keys()].filter((key) => key.endsWith("-enabled")).length
-    )
-      return setStatus("Every enabled day needs a valid start and end time.");
     setAvailabilityBusy(true);
     const result = await saveProviderWeeklyAvailability(
       createBrowserSupabaseClient(),
@@ -696,8 +716,11 @@ export default function Home() {
       return setStatus(
         `Unable to save weekly availability: ${result.error.message}`,
       );
+    const savedDays = windows
+      .map((window) => WEEKDAYS[window.dayOfWeek])
+      .join(", ");
     setStatus(
-      `Weekly availability saved. ${result.data} future appointment slots are now bookable.`,
+      `Weekly hours saved for ${savedDays} in Asia/Manila time. ${result.data} future appointment slots are now bookable.`,
     );
     await loadAvailability();
   }
@@ -817,6 +840,7 @@ export default function Home() {
     setQueue([]);
     setSlots([]);
     setServices([]);
+    setWeeklyAvailability([]);
     setLiveStatus("Offline");
     setClinicalRecords(null);
     setSelectedEncounterId(null);
@@ -959,7 +983,7 @@ export default function Home() {
                 {liveStatus} queue
               </span>
               <Button variant="secondary" onClick={handleSignOut}>
-                Sign out
+                Log out
               </Button>
             </span>
           </div>
@@ -1063,7 +1087,7 @@ export default function Home() {
                   appointment.encounterStatus === "in_progress" ? (
                     <Button size="sm" variant="outline" onClick={() => {
                       const encounter = clinicalRecords?.encounters.find((item) => item.appointment_id === appointment.id);
-                      setSelectedEncounterId(encounter?.id ?? null);
+                      if (encounter) router.push(`/encounters/${encounter.id}`);
                     }}>Open chart</Button>
                   ) : appointment.delivery_mode === "virtual" ? (
                     <Link href={`/teleconsult/${appointment.id}`}><Button size="sm">Open room</Button></Link>
@@ -1295,7 +1319,7 @@ export default function Home() {
                             const encounter = clinicalRecords?.encounters.find(
                               (item) => item.appointment_id === appointment.id,
                             );
-                            setSelectedEncounterId(encounter?.id ?? null);
+                            if (encounter) router.push(`/encounters/${encounter.id}`);
                           }}
                         >
                           Open chart
@@ -1328,7 +1352,7 @@ export default function Home() {
                         const encounter = clinicalRecords?.encounters.find(
                           (item) => item.appointment_id === appointment.id,
                         );
-                        setSelectedEncounterId(encounter?.id ?? null);
+                        if (encounter) router.push(`/encounters/${encounter.id}`);
                       }}
                     >
                       Open chart
@@ -2153,6 +2177,7 @@ export default function Home() {
                 <WeeklyScheduleBuilder
                   services={ownedServices}
                   scheduleServiceId={scheduleServiceId}
+                  savedAvailability={selectedWeeklyAvailability}
                   onServiceChange={setScheduleServiceId}
                   onSubmit={handleCreateAvailability}
                   availabilityBusy={availabilityBusy}
@@ -2166,7 +2191,7 @@ export default function Home() {
                       Availability schedule
                     </h3>
                     <p className="hint" style={{ marginTop: "0.2rem" }}>
-                      Select an open time to make it unavailable. Booked appointments cannot be changed here.
+                      Select an open time to make it unavailable. If a recurring day has already passed this week, its first new slots appear next week.
                     </p>
                   </div>
                 </div>

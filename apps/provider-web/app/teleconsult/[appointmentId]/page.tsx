@@ -17,7 +17,7 @@ import type {
 } from "@odyssey/types";
 import { Badge, Button, TeleconsultWebRtcRoom } from "@odyssey/ui";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 function clinicalText(value: unknown): string {
@@ -58,6 +58,7 @@ function ChartIcon() {
 }
 
 export default function ProviderTeleconsultRoomPage() {
+  const router = useRouter();
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [appointment, setAppointment] = useState<TeleconsultAppointment | null>(
@@ -68,6 +69,11 @@ export default function ProviderTeleconsultRoomPage() {
   const [status, setStatus] = useState("Authorizing the assigned room…");
   const [busy, setBusy] = useState(false);
   const [chartOpen, setChartOpen] = useState(true);
+
+  async function handleSignOut() {
+    await signOut(createBrowserSupabaseClient());
+    router.push("/");
+  }
 
   const loadClinicalRecords = useCallback(async (clinicId: string) => {
     const result = await getOrganizationClinicalRecords(
@@ -246,6 +252,20 @@ export default function ProviderTeleconsultRoomPage() {
           >
             <ChartIcon />{" "}
             {chartOpen ? "Hide patient chart" : "Open patient chart"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void handleSignOut()}
+            aria-label="Log out"
+            title="Log out"
+          >
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: "middle" }}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Log out
           </Button>
         </div>
       </header>

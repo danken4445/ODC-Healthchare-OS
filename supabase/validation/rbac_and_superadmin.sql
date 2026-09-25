@@ -32,6 +32,12 @@ select not (select is_allowed from public.get_portal_access('provider')) as fron
 select not (select is_allowed from public.get_portal_access('patient')) as front_desk_patient_denied;
 select not public.can_manage_organization_accounts('10000000-0000-0000-0000-000000000001')
   as front_desk_cannot_manage_clinic_accounts;
+select array['can_access_admin_portal', 'can_manage_appointments', 'can_identify_patients']::text[]
+  <@ public.get_my_organization_permissions('10000000-0000-0000-0000-000000000001')
+  as front_desk_navigation_permissions_returned;
+select not ('can_manage_staff_roles' = any(
+  public.get_my_organization_permissions('10000000-0000-0000-0000-000000000001')
+)) as front_desk_staff_navigation_denied;
 reset role;
 
 -- The clinic administrator may manage accounts at its assigned clinic only.
@@ -42,6 +48,12 @@ select public.can_manage_organization_accounts('10000000-0000-0000-0000-00000000
   as admin_can_manage_clinic_a_accounts;
 select not public.can_manage_organization_accounts('10000000-0000-0000-0000-000000000002')
   as admin_cannot_manage_clinic_b_accounts;
+select array['can_view_analytics', 'can_manage_patients', 'can_manage_staff_roles']::text[]
+  <@ public.get_my_organization_permissions('10000000-0000-0000-0000-000000000001')
+  as admin_navigation_permissions_returned;
+select cardinality(public.get_my_organization_permissions(
+  '10000000-0000-0000-0000-000000000002'
+)) = 0 as admin_other_clinic_permissions_denied;
 reset role;
 
 -- A platform administrator has administrative admission but cannot read the

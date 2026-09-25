@@ -1,7 +1,8 @@
 node_modules/
 .pnpm-store/
 .turbo/
-.next/
+.next*
+.codex-artifacts/
 dist/
 .env
 .env.local

@@ -33,13 +33,29 @@ export default function ProviderTeleconsultPage() {
     setStatus(`${result.data.length} assigned virtual appointment${result.data.length === 1 ? "" : "s"}.`);
   }
 
+  async function handleSignOut() {
+    await signOut(createBrowserSupabaseClient());
+    window.location.href = "/";
+  }
+
   useEffect(() => { void loadRooms(); }, []);
 
   return (
     <main>
       <p className="eyebrow">Provider workspace · Remote care</p>
       <h1>Teleconsult meeting rooms</h1>
-      <nav className="session-actions"><Link href="/">← Queue</Link><Link href="/payouts">My payouts</Link></nav>
+      <nav className="session-actions">
+        <Link href="/">← Queue</Link>
+        <Link href="/payouts">My payouts</Link>
+        <Button size="sm" variant="ghost" onClick={() => void handleSignOut()} aria-label="Log out" title="Log out">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: "middle" }}>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Log out
+        </Button>
+      </nav>
       <p role="status">{status}</p>
       <DataTable
         caption="Virtual appointments assigned to this practitioner at their clinic."

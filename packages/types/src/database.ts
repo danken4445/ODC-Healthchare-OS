@@ -2207,6 +2207,10 @@ export type Database = {
         Args: { p_organization_id: string };
         Returns: string | null;
       };
+      get_my_organization_permissions: {
+        Args: { p_organization_id: string };
+        Returns: string[];
+      };
       get_portal_access: {
         Args: { p_portal: string };
         Returns: {

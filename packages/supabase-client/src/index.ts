@@ -39,6 +39,7 @@ import {
   type WalkInRegistrationInput,
   type WaitingRoomQueueItem,
   type WeeklyAvailabilityWindow,
+  type ProviderWeeklyAvailabilityRow,
   type DepartmentInput,
   type DepartmentSummary,
   type InventoryEncounterOption,
@@ -202,6 +203,25 @@ function toPatientSummary(
   row: Omit<PatientSummary, "displayName">,
 ): PatientSummary {
   return { ...row, displayName: getHumanNameDisplay(row.name) };
+}
+
+/** Gets one organization-scoped patient profile for an authorized clinical workspace. */
+export async function getOrganizationPatient(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  patientId: string,
+): Promise<SupabaseResult<PatientSummary | null>> {
+  const { data, error } = await client
+    .from("patients")
+    .select(patientSummaryColumns)
+    .eq("organization_id", organizationId)
+    .eq("id", patientId)
+    .maybeSingle();
+
+  if (error) return failure(error);
+  return success(
+    data ? toPatientSummary(data as unknown as Omit<PatientSummary, "displayName">) : null,
+  );
 }
 
 /** Gets future scheduled appointments for one patient, ordered chronologically. */
@@ -732,6 +752,18 @@ export async function hasOrganizationPermission(
   return error ? failure(error) : success(Boolean(data));
 }
 
+/** Loads the signed-in user's complete effective permission set in one RPC. */
+export async function getMyOrganizationPermissions(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<ClinicRolePermission[]>> {
+  const { data, error } = await client.rpc("get_my_organization_permissions", {
+    p_organization_id: organizationId,
+  });
+  if (error) return failure(error);
+  return success((data ?? []) as ClinicRolePermission[]);
+}
+
 export async function getClinicRoleDefinitions(
   client: SupabaseClient<Database>,
   organizationId: string,
@@ -959,6 +991,82 @@ export async function createDepartment(
     .select(departmentSummaryColumns)
     .single();
   return error ? failure(error) : success(data as unknown as DepartmentSummary);
+}
+
+/** Lists clinic departments for the staff administration workspace. */
+export async function getStaffDepartments(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<DepartmentSummary[]>> {
+  const { data, error } = await client
+    .from("departments")
+    .select(departmentSummaryColumns)
+    .eq("organization_id", organizationId)
+    .order("active", { ascending: false })
+    .order("name");
+  if (!error && data) {
+    return success(data as unknown as DepartmentSummary[]);
+  }
+  const rpcResult = await client.rpc("list_staff_departments", {
+    p_organization_id: organizationId,
+  });
+  if (rpcResult.error) return failure(error ?? rpcResult.error);
+  return success((rpcResult.data ?? []) as unknown as DepartmentSummary[]);
+}
+
+/** Creates or updates a department through the staff-management authorization boundary. */
+export async function saveStaffDepartment(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    id?: string;
+    name: string;
+    description?: string;
+    active: boolean;
+  },
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc(
+    "save_staff_department" as never,
+    {
+      p_organization_id: input.organizationId,
+      p_department_id: input.id ?? null,
+      p_name: input.name,
+      p_description: input.description ?? "",
+      p_active: input.active,
+    } as never,
+  );
+  if (!error && data) return success(data as string);
+
+  // Fallback to table update/insert if the RPC is unavailable
+  if (input.id) {
+    const updateResult = await client
+      .from("departments")
+      .update({
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        active: input.active,
+      })
+      .eq("id", input.id)
+      .eq("organization_id", input.organizationId)
+      .select("id")
+      .single();
+    if (updateResult.error) return failure(error ?? updateResult.error);
+    return success(updateResult.data.id);
+  } else {
+    const insertResult = await client
+      .from("departments")
+      .insert({
+        organization_id: input.organizationId,
+        code: "",
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        active: input.active,
+      })
+      .select("id")
+      .single();
+    if (insertResult.error) return failure(error ?? insertResult.error);
+    return success(insertResult.data.id);
+  }
 }
 
 export async function createInventoryItem(
@@ -1489,6 +1597,21 @@ export async function getProviderAppointmentSlots(
     .order("start_at", { ascending: true });
   if (error) return failure(error);
   return success((data ?? []) as unknown as AppointmentSlotSummary[]);
+}
+
+/** The signed-in provider's persisted recurring hours for an organization. */
+export async function getProviderWeeklyAvailability(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<ProviderWeeklyAvailabilityRow[]>> {
+  const { data, error } = await client
+    .from("provider_weekly_availability")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("clinic_service_id", { ascending: true })
+    .order("day_of_week", { ascending: true });
+  if (error) return failure(error);
+  return success((data ?? []) as ProviderWeeklyAvailabilityRow[]);
 }
 
 export async function createAppointmentSlot(
@@ -2454,4 +2577,52 @@ export async function setClinicUserActive(
     } as never,
   );
   return error ? failure(error) : success(undefined);
+}
+
+export async function setGovernancePatientActive(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  patientId: string,
+  active: boolean,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc(
+    "set_governance_patient_active" as never,
+    {
+      p_organization_id: organizationId,
+      p_patient_id: patientId,
+      p_active: active,
+    } as never,
+  );
+  return error ? failure(error) : success(undefined);
+}
+
+export async function saveCompanyCoverage(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    id?: string;
+    patientId: string;
+    coverageType: string;
+    subscriberId?: string;
+    payorName: string;
+    periodStart?: string;
+    periodEnd?: string;
+    status: string;
+  },
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc(
+    "save_company_coverage" as never,
+    {
+      p_organization_id: input.organizationId,
+      p_coverage_id: input.id ?? null,
+      p_patient_id: input.patientId,
+      p_coverage_type: input.coverageType,
+      p_subscriber_id: input.subscriberId ?? "",
+      p_payor_name: input.payorName,
+      p_period_start: input.periodStart || null,
+      p_period_end: input.periodEnd || null,
+      p_status: input.status,
+    } as never,
+  );
+  return error ? failure(error) : success(data as unknown as string);
 }

@@ -2,18 +2,11 @@
 
 import {
   adjustDepartmentStock,
-  createBrowserSupabaseClient,
   createDepartment,
   createInventoryItem,
-  getAccessibleOrganizations,
   getCurrentStaffDepartment,
-  getCurrentUserEmail,
   getInventoryWorkspace,
-  getPortalAccess,
-  hasOrganizationPermission,
   listInventoryEncounters,
-  signInWithPassword,
-  signOut,
   subscribeToInventory,
   tagInventoryUsage,
   transferDepartmentStock,
@@ -22,7 +15,6 @@ import {
 import type {
   InventoryEncounterOption,
   InventoryWorkspace,
-  PublicClinicSummary,
 } from "@odyssey/types";
 import {
   Badge,
@@ -35,6 +27,8 @@ import {
   TabPanel,
 } from "@odyssey/ui";
 import Link from "next/link";
+import { useAdminData } from "../../components/admin-data-context";
+import { AdminSignIn } from "../../components/admin-sign-in";
 import {
   useCallback,
   useEffect,
@@ -112,16 +106,13 @@ const srTabs = [
 
 export default function InventoryPage() {
   /* Auth and workspace state */
-  const [email, setEmail] = useState("inventory@synthetic.odyssey.test");
-  const [password, setPassword] = useState("");
-  const [signedInAs, setSignedInAs] = useState<string | null>(null);
-  const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
-  const [organizationId, setOrganizationId] = useState("");
+  const { client, email: signedInAs, organization, permissions, signOut: handleSignOut } = useAdminData();
+  const organizationId = organization?.id ?? "";
+  const canManage = permissions.includes("can_manage_inventory");
+  const canTag = permissions.includes("can_tag_inventory_usage");
   const [workspace, setWorkspace] =
     useState<InventoryWorkspace>(emptyWorkspace);
   const [encounters, setEncounters] = useState<InventoryEncounterOption[]>([]);
-  const [canManage, setCanManage] = useState(false);
-  const [canTag, setCanTag] = useState(false);
   const [inventoryDepartmentId, setInventoryDepartmentId] = useState<string | null>(
     null,
   );
@@ -223,7 +214,6 @@ export default function InventoryPage() {
   const loadInventory = useCallback(
     async (clinicId = organizationId, manage = canManage) => {
       if (!clinicId) return;
-      const client = createBrowserSupabaseClient();
       const [inventoryResult, encounterResult] = await Promise.all([
         getInventoryWorkspace(client, clinicId, manage),
         listInventoryEncounters(client, clinicId),
@@ -235,69 +225,31 @@ export default function InventoryPage() {
       setWorkspace(inventoryResult.data);
       setEncounters(encounterResult.error ? [] : encounterResult.data);
     },
-    [canManage, organizationId],
+    [canManage, client, organizationId],
   );
-
-  async function openInventoryPortal(emailAddress: string) {
-    const client = createBrowserSupabaseClient();
-    const accessResult = await getPortalAccess(client, "admin");
-    if (accessResult.error || !accessResult.data.allowed) {
-      await signOut(client);
-      setSignedInAs(null);
-      return setStatus(
-        "This account is not authorized for the inventory workspace.",
-      );
-    }
-    const clinicResult = await getAccessibleOrganizations(
-      client,
-      accessResult.data.organizationIds,
-    );
-    if (clinicResult.error || !clinicResult.data.length) {
-      await signOut(client);
-      return setStatus(
-        `Clinic access failed: ${clinicResult.error?.message ?? "No assigned clinic."}`,
-      );
-    }
-    const clinicId = clinicResult.data[0].id;
-    const [manageResult, tagResult] = await Promise.all([
-      hasOrganizationPermission(client, clinicId, "can_manage_inventory"),
-      hasOrganizationPermission(client, clinicId, "can_tag_inventory_usage"),
-    ]);
-    if (
-      manageResult.error ||
-      tagResult.error ||
-      (!manageResult.data && !tagResult.data)
-    ) {
-      await signOut(client);
-      return setStatus("Your clinic role has no inventory permissions.");
-    }
-    setSignedInAs(emailAddress);
-    setClinics(clinicResult.data);
-    setOrganizationId(clinicId);
-    setCanManage(manageResult.data);
-    setCanTag(tagResult.data);
-    const departmentResult = await getCurrentStaffDepartment(client, clinicId);
-    if (departmentResult.error)
-      return setStatus(
-        `Department context query failed: ${departmentResult.error.message}`,
-      );
-    setInventoryDepartmentId(departmentResult.data);
-    setInventoryDepartmentSelection(departmentResult.data ?? "");
-    setStatus("Inventory workspace ready.");
-    await loadInventory(clinicId, manageResult.data);
-  }
 
   /* ─── Effects ─────────────────────────────────────────────── */
   useEffect(() => {
-    void getCurrentUserEmail(createBrowserSupabaseClient()).then((result) => {
-      if (!result.error && result.data) void openInventoryPortal(result.data);
+    let current = true;
+    if (!signedInAs || !organizationId) return () => { current = false; };
+    void getCurrentStaffDepartment(client, organizationId).then(async (departmentResult) => {
+      if (!current) return;
+      if (departmentResult.error) {
+        setStatus(`Department context query failed: ${departmentResult.error.message}`);
+        return;
+      }
+      setInventoryDepartmentId(departmentResult.data);
+      setInventoryDepartmentSelection(departmentResult.data ?? "");
+      setStatus("Inventory workspace ready.");
+      await loadInventory(organizationId, canManage);
     });
-  }, []);
+    return () => { current = false; };
+  }, [canManage, client, loadInventory, organizationId, signedInAs]);
 
   useEffect(() => {
     if (!signedInAs || !organizationId) return;
     const unsubscribe = subscribeToInventory(
-      createBrowserSupabaseClient(),
+      client,
       organizationId,
       () => void loadInventory(),
       (connectionStatus) =>
@@ -306,42 +258,9 @@ export default function InventoryPage() {
         ),
     );
     return unsubscribe;
-  }, [loadInventory, organizationId, signedInAs]);
+  }, [client, loadInventory, organizationId, signedInAs]);
 
   /* ─── Handlers ────────────────────────────────────────────── */
-  async function handleSignIn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const result = await signInWithPassword(
-      createBrowserSupabaseClient(),
-      email,
-      password,
-    );
-    if (result.error)
-      return setStatus(`Sign-in failed: ${result.error.message}`);
-    await openInventoryPortal(result.data);
-  }
-
-  async function handleClinicChange(clinicId: string) {
-    const client = createBrowserSupabaseClient();
-    const [manageResult, tagResult] = await Promise.all([
-      hasOrganizationPermission(client, clinicId, "can_manage_inventory"),
-      hasOrganizationPermission(client, clinicId, "can_tag_inventory_usage"),
-    ]);
-    if (manageResult.error || tagResult.error)
-      return setStatus("Unable to verify inventory permissions.");
-    setOrganizationId(clinicId);
-    setCanManage(manageResult.data);
-    setCanTag(tagResult.data);
-    const departmentResult = await getCurrentStaffDepartment(client, clinicId);
-    if (departmentResult.error)
-      return setStatus(
-        `Department context query failed: ${departmentResult.error.message}`,
-      );
-    setInventoryDepartmentId(departmentResult.data);
-    setInventoryDepartmentSelection(departmentResult.data ?? "");
-    await loadInventory(clinicId, manageResult.data);
-  }
-
   async function runForm(
     event: FormEvent<HTMLFormElement>,
     action: (
@@ -361,20 +280,6 @@ export default function InventoryPage() {
     await loadInventory();
   }
 
-  async function handleSignOut() {
-    await signOut(createBrowserSupabaseClient());
-    setSignedInAs(null);
-    setClinics([]);
-    setOrganizationId("");
-    setWorkspace(emptyWorkspace);
-    setCanManage(false);
-    setCanTag(false);
-    setInventoryDepartmentId(null);
-    setInventoryDepartmentSelection("");
-    setLiveStatus("Offline");
-    setStatus("Signed out.");
-  }
-
   /* ─── Sign-in screen ──────────────────────────────────────── */
   if (!signedInAs) {
     return (
@@ -389,26 +294,7 @@ export default function InventoryPage() {
               room dashboard.
             </p>
           </div>
-          <form className="stack narrow-form" onSubmit={handleSignIn}>
-            <Field label="Email">
-              <Input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Password">
-              <Input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </Field>
-            <Button type="submit">Sign in</Button>
-            <p className="hint">Local reset password: LocalOnly-2026!</p>
-          </form>
+          <AdminSignIn />
           <p role="status" className="inv-login__status">
             {status}
           </p>
@@ -418,7 +304,7 @@ export default function InventoryPage() {
   }
 
   /* ─── Dashboard ───────────────────────────────────────────── */
-  const currentClinic = clinics.find((c) => c.id === organizationId);
+  const currentClinic = organization;
 
   return (
     <main className="inv-dashboard">
@@ -441,7 +327,7 @@ export default function InventoryPage() {
             {liveStatus} stock
           </span>
           <span className="inv-header__user">{signedInAs}</span>
-          <Link href="/">Appointments</Link>
+          <Link href="/appointments">Appointments</Link>
           <Button size="sm" onClick={() => void loadInventory()}>
             Refresh
           </Button>
@@ -450,32 +336,12 @@ export default function InventoryPage() {
             variant="secondary"
             onClick={() => void handleSignOut()}
           >
-            Sign out
+            Log out
           </Button>
         </div>
       </div>
 
       {/* ── Clinic selector ─────────────────────────────────── */}
-      {clinics.length > 1 && (
-        <section className="inv-clinic-picker">
-          <Field label="Clinic workspace">
-            <select
-              className="odyssey-input"
-              value={organizationId}
-              onChange={(event) =>
-                void handleClinicChange(event.target.value)
-              }
-            >
-              {clinics.map((clinic) => (
-                <option key={clinic.id} value={clinic.id}>
-                  {clinic.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </section>
-      )}
-
       {/* ── KPI Cards ───────────────────────────────────────── */}
       <section className="inv-kpi-grid">
         <div className="inv-kpi-card">
@@ -719,7 +585,7 @@ export default function InventoryPage() {
                       event,
                       async (fields) =>
                         adjustDepartmentStock(
-                          createBrowserSupabaseClient(),
+                          client,
                           {
                             itemId: String(fields.get("itemId")),
                             departmentId: String(
@@ -829,7 +695,7 @@ export default function InventoryPage() {
                       event,
                       async (fields) =>
                         adjustDepartmentStock(
-                          createBrowserSupabaseClient(),
+                          client,
                           {
                             itemId: String(fields.get("itemId")),
                             departmentId: String(
@@ -928,7 +794,7 @@ export default function InventoryPage() {
                       event,
                       async (fields) =>
                         transferDepartmentStock(
-                          createBrowserSupabaseClient(),
+                          client,
                           {
                             itemId: String(
                               fields.get("transferItemId"),
@@ -1054,7 +920,7 @@ export default function InventoryPage() {
                       event,
                       async (fields) =>
                         createInventoryItem(
-                          createBrowserSupabaseClient(),
+                          client,
                           {
                             organizationId,
                             name: String(fields.get("name") ?? ""),
@@ -1140,7 +1006,7 @@ export default function InventoryPage() {
                       event,
                       async (fields) =>
                         updateInventoryItemPricing(
-                          createBrowserSupabaseClient(),
+                          client,
                           {
                             itemId: String(fields.get("itemId") ?? ""),
                             unitCost: Number(fields.get("unitCost")),
@@ -1220,7 +1086,7 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        createDepartment(createBrowserSupabaseClient(), {
+                        createDepartment(client, {
                           organizationId,
                           name: String(fields.get("name") ?? ""),
                           description: String(
@@ -1277,7 +1143,7 @@ export default function InventoryPage() {
               void runForm(
                 event,
                 async (fields) =>
-                  tagInventoryUsage(createBrowserSupabaseClient(), {
+                  tagInventoryUsage(client, {
                     encounterId: String(fields.get("encounterId")),
                     stockId: String(fields.get("stockId")),
                     quantity: Number(fields.get("usageQuantity")),

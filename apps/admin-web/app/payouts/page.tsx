@@ -1,71 +1,44 @@
 "use client";
 
-import {
-  createBrowserSupabaseClient,
-  getAccessibleOrganizations,
-  getDoctorPayouts,
-  getPortalAccess,
-  hasOrganizationPermission,
-  setPractitionerPayoutRate,
-  settleDoctorPayouts,
-  signOut,
-} from "@odyssey/supabase-client";
-import type { DoctorPayoutSummary, PublicClinicSummary } from "@odyssey/types";
+import { getDoctorPayouts, setPractitionerPayoutRate, settleDoctorPayouts } from "@odyssey/supabase-client";
+import type { DoctorPayoutSummary } from "@odyssey/types";
 import { Badge, Button, CurrencyDisplay, DataTable, Field, Input } from "@odyssey/ui";
-import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { AdminSignIn } from "../../components/admin-sign-in";
+import { useAdminData } from "../../components/admin-data-context";
 
 export default function AdminPayoutsPage() {
-  const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const { client, email, error: accessError, organization, permissions } = useAdminData();
   const [payouts, setPayouts] = useState<DoctorPayoutSummary[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [canManage, setCanManage] = useState(false);
   const [status, setStatus] = useState("Loading payout workspace…");
   const [busy, setBusy] = useState(false);
+  const canManage = permissions.includes("can_manage_payouts");
   const pendingTotal = useMemo(() => payouts.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.payout_amount, 0), [payouts]);
 
-  async function loadPayouts(clinicId: string) {
-    const client = createBrowserSupabaseClient();
-    const [result, permission] = await Promise.all([
-      getDoctorPayouts(client, clinicId),
-      hasOrganizationPermission(client, clinicId, "can_manage_payouts"),
-    ]);
-    setCanManage(Boolean(permission.data));
+  const loadPayouts = useCallback(async (clinicId: string) => {
+    const result = await getDoctorPayouts(client, clinicId);
     if (result.error) return setStatus(`Unable to load payouts: ${result.error.message}`);
     setPayouts(result.data);
     setSelected([]);
     setStatus("Only completed encounters with finalized service billing appear here.");
-  }
+  }, [client]);
 
   useEffect(() => {
-    async function load() {
-      const client = createBrowserSupabaseClient();
-      const access = await getPortalAccess(client, "admin");
-      if (access.error || !access.data.allowed) {
-        await signOut(client);
-        setStatus("Sign in through the administrative workspace to view payouts.");
-        return;
-      }
-      const result = await getAccessibleOrganizations(client, access.data.organizationIds);
-      if (result.error || !result.data[0]) return setStatus("No assigned clinic is available.");
-      setClinics(result.data);
-      setOrganizationId(result.data[0].id);
-      await loadPayouts(result.data[0].id);
-    }
-    void load();
-  }, []);
+    if (!organization) return;
+    void loadPayouts(organization.id);
+  }, [loadPayouts, organization]);
 
   async function settle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!organizationId) return;
+    if (!organization) return;
     const reference = String(new FormData(event.currentTarget).get("reference") ?? "");
     setBusy(true);
-    const result = await settleDoctorPayouts(createBrowserSupabaseClient(), organizationId, selected, reference);
+    const result = await settleDoctorPayouts(client, organization.id, selected, reference);
     setStatus(result.error ? `Unable to settle payouts: ${result.error.message}` : `${result.data} payout${result.data === 1 ? "" : "s"} marked paid.`);
     if (!result.error) {
       event.currentTarget.reset();
-      await loadPayouts(organizationId);
+      await loadPayouts(organization.id);
     }
     setBusy(false);
   }
@@ -74,17 +47,17 @@ export default function AdminPayoutsPage() {
     const percent = Number(value);
     if (!Number.isFinite(percent)) return;
     setBusy(true);
-    const result = await setPractitionerPayoutRate(createBrowserSupabaseClient(), item.practitioner_role_id, Math.round(percent * 100));
+    const result = await setPractitionerPayoutRate(client, item.practitioner_role_id, Math.round(percent * 100));
     setStatus(result.error ? `Unable to update rate: ${result.error.message}` : `Future payouts for ${item.practitioner_name} will use ${percent.toFixed(2)}%. Existing snapshots are unchanged.`);
     setBusy(false);
   }
+
+  if (!email && accessError) return <AdminSignIn />;
 
   return (
     <main>
       <p className="eyebrow">Odyssey Admin · Remote care</p>
       <h1>Doctor payouts</h1>
-      <p><Link href="/">← Administration</Link></p>
-      {clinics.length > 1 && <Field label="Clinic"><select className="odyssey-input" value={organizationId ?? ""} onChange={(event) => { setOrganizationId(event.target.value); void loadPayouts(event.target.value); }}>{clinics.map((clinic) => <option key={clinic.id} value={clinic.id}>{clinic.name}</option>)}</select></Field>}
       <p role="status">{status}</p>
       <section><span className="hint">Pending total</span><h2><CurrencyDisplay amount={pendingTotal} /></h2></section>
       {canManage && (

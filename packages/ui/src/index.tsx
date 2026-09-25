@@ -2,6 +2,7 @@ import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
+  SelectHTMLAttributes,
   TableHTMLAttributes,
 } from "react";
 import type { AppointmentStatus, InvoiceStatus, PayorType } from "@odyssey/types";
@@ -70,6 +71,17 @@ export interface CardProps {
   children: ReactNode;
   className?: string;
   variant?: "default" | "queue-card" | "data-row";
+}
+
+export function Select({
+  className,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn("odyssey-input odyssey-select", className)} {...props} />;
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden="true" className={cn("odyssey-skeleton", className)} />;
 }
 
 export function Card({ children, className, variant = "default" }: CardProps) {

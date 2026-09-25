@@ -1,8 +1,12 @@
 "use client";
 
-import type { ClinicServiceSummary } from "@odyssey/types";
+import type {
+  ClinicServiceSummary,
+  ProviderWeeklyAvailabilityRow,
+  WeeklyAvailabilityWindow,
+} from "@odyssey/types";
 import { Button, Field, Input } from "@odyssey/ui";
-import { useState, useRef, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 const WEEKDAYS = [
   "Sunday",
@@ -12,161 +16,209 @@ const WEEKDAYS = [
   "Thursday",
   "Friday",
   "Saturday",
-];
+] as const;
+
+interface DayConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+const DEFAULT_DAY_CONFIG: DayConfig = {
+  enabled: false,
+  start: "10:00",
+  end: "17:00",
+};
 
 interface WeeklyScheduleBuilderProps {
   services: ClinicServiceSummary[];
   scheduleServiceId: string;
+  savedAvailability: ProviderWeeklyAvailabilityRow[];
   onServiceChange: (serviceId: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onSubmit: (
+    serviceId: string,
+    windows: WeeklyAvailabilityWindow[],
+  ) => Promise<void>;
   availabilityBusy: boolean;
+}
+
+function minutesSinceMidnight(value: string): number {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function configsFromSavedRows(
+  rows: ProviderWeeklyAvailabilityRow[],
+): DayConfig[] {
+  return WEEKDAYS.map((_, dayOfWeek) => {
+    const saved = rows.find((row) => row.day_of_week === dayOfWeek);
+    return saved
+      ? {
+          enabled: true,
+          start: saved.start_time.slice(0, 5),
+          end: saved.end_time.slice(0, 5),
+        }
+      : { ...DEFAULT_DAY_CONFIG };
+  });
 }
 
 export function WeeklyScheduleBuilder({
   services,
   scheduleServiceId,
+  savedAvailability,
   onServiceChange,
   onSubmit,
   availabilityBusy,
 }: WeeklyScheduleBuilderProps) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [dayConfigs, setDayConfigs] = useState(
-    WEEKDAYS.map(() => ({
-      enabled: false,
-      start: "10:00",
-      end: "17:00",
-    }))
+  const [dayConfigs, setDayConfigs] = useState<DayConfig[]>(() =>
+    configsFromSavedRows(savedAvailability),
+  );
+  const [validationError, setValidationError] = useState("");
+
+  const activeService = services.find(
+    (service) => service.id === scheduleServiceId,
+  );
+  const activeDays = useMemo(
+    () =>
+      dayConfigs
+        .map((config, dayOfWeek) => ({ config, dayOfWeek }))
+        .filter(({ config }) => config.enabled),
+    [dayConfigs],
   );
 
-  const activeService = services.find((s) => s.id === scheduleServiceId);
+  useEffect(() => {
+    setDayConfigs(configsFromSavedRows(savedAvailability));
+    setValidationError("");
+  }, [scheduleServiceId, savedAvailability]);
 
-  function applyPreset(preset: "weekdays" | "morning" | "afternoon" | "weekend" | "clear") {
-    setDayConfigs((prev) =>
-      prev.map((cfg, idx) => {
-        if (preset === "clear") {
-          return { ...cfg, enabled: false };
-        }
-        if (preset === "weekdays") {
-          // Mon-Fri (1 to 5)
-          const isWeekday = idx >= 1 && idx <= 5;
-          return {
-            ...cfg,
-            enabled: isWeekday,
-            start: isWeekday ? "09:00" : cfg.start,
-            end: isWeekday ? "17:00" : cfg.end,
-          };
-        }
-        if (preset === "morning") {
-          // Mon-Sat (1 to 6)
-          const isMonSat = idx >= 1 && idx <= 6;
-          return {
-            ...cfg,
-            enabled: isMonSat,
-            start: isMonSat ? "08:00" : cfg.start,
-            end: isMonSat ? "12:00" : cfg.end,
-          };
-        }
-        if (preset === "afternoon") {
-          // Mon-Fri (1 to 5)
-          const isWeekday = idx >= 1 && idx <= 5;
-          return {
-            ...cfg,
-            enabled: isWeekday,
-            start: isWeekday ? "13:00" : cfg.start,
-            end: isWeekday ? "17:00" : cfg.end,
-          };
-        }
-        if (preset === "weekend") {
-          // Sat & Sun (0 and 6)
-          const isWeekend = idx === 0 || idx === 6;
-          return {
-            ...cfg,
-            enabled: isWeekend,
-            start: isWeekend ? "10:00" : cfg.start,
-            end: isWeekend ? "14:00" : cfg.end,
-          };
-        }
-        return cfg;
-      })
+  function applyPreset(
+    preset: "weekdays" | "morning" | "afternoon" | "weekend" | "clear",
+  ) {
+    setValidationError("");
+    setDayConfigs((previous) =>
+      previous.map((config, dayOfWeek) => {
+        if (preset === "clear") return { ...config, enabled: false };
+
+        const matchesPreset =
+          preset === "weekend"
+            ? dayOfWeek === 0 || dayOfWeek === 6
+            : preset === "morning"
+              ? dayOfWeek >= 1 && dayOfWeek <= 6
+              : dayOfWeek >= 1 && dayOfWeek <= 5;
+        const start =
+          preset === "morning"
+            ? "08:00"
+            : preset === "afternoon"
+              ? "13:00"
+              : preset === "weekdays"
+                ? "09:00"
+                : "10:00";
+        const end =
+          preset === "morning"
+            ? "12:00"
+            : preset === "weekend"
+              ? "14:00"
+              : "17:00";
+
+        return matchesPreset
+          ? { enabled: true, start, end }
+          : { ...config, enabled: false };
+      }),
     );
   }
 
-  function handleDayToggle(index: number, checked: boolean) {
-    setDayConfigs((prev) =>
-      prev.map((cfg, idx) => (idx === index ? { ...cfg, enabled: checked } : cfg))
+  function handleDayToggle(dayOfWeek: number, checked: boolean) {
+    setValidationError("");
+    setDayConfigs((previous) =>
+      previous.map((config, index) =>
+        index === dayOfWeek ? { ...config, enabled: checked } : config,
+      ),
     );
   }
 
-  function handleTimeChange(index: number, field: "start" | "end", value: string) {
-    setDayConfigs((prev) =>
-      prev.map((cfg, idx) => (idx === index ? { ...cfg, [field]: value } : cfg))
+  function handleTimeChange(
+    dayOfWeek: number,
+    field: "start" | "end",
+    value: string,
+  ) {
+    setValidationError("");
+    setDayConfigs((previous) =>
+      previous.map((config, index) =>
+        index === dayOfWeek ? { ...config, [field]: value } : config,
+      ),
+    );
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeService) {
+      setValidationError("Choose a service before saving weekly hours.");
+      return;
+    }
+    if (!activeDays.length) {
+      setValidationError("Select at least one working day.");
+      return;
+    }
+
+    for (const { config, dayOfWeek } of activeDays) {
+      const duration =
+        minutesSinceMidnight(config.end) - minutesSinceMidnight(config.start);
+      if (duration <= 0) {
+        setValidationError(
+          `${WEEKDAYS[dayOfWeek]} must end after its start time.`,
+        );
+        return;
+      }
+      if (duration % activeService.duration_minutes !== 0) {
+        setValidationError(
+          `${WEEKDAYS[dayOfWeek]} must fit complete ${activeService.duration_minutes}-minute appointments.`,
+        );
+        return;
+      }
+    }
+
+    await onSubmit(
+      activeService.id,
+      activeDays.map(({ config, dayOfWeek }) => ({
+        dayOfWeek,
+        startTime: config.start,
+        endTime: config.end,
+      })),
     );
   }
 
   return (
-    <div style={{ background: "var(--odyssey-card)", padding: "1.25rem", borderRadius: "0.5rem", border: "1px solid var(--odyssey-border)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
+    <section className="weekly-builder" aria-labelledby="weekly-builder-title">
+      <div className="weekly-builder__header">
         <div>
-          <h3 className="schedule-heading" style={{ margin: 0, fontSize: "1.25rem" }}>
-            Weekly Recurring Availability Builder
+          <h3 id="weekly-builder-title" className="schedule-heading">
+            Weekly recurring hours
           </h3>
-          <p className="hint" style={{ marginTop: "0.25rem" }}>
-            Select your clinical service, configure working shifts, and Odyssey will generate bookable slots automatically.
+          <p className="hint">
+            Choose working days and times once. Odyssey generates future
+            appointment slots in Asia/Manila time.
           </p>
         </div>
+        <span className="weekly-builder__saved-state">
+          {savedAvailability.length
+            ? `${savedAvailability.length} saved day${savedAvailability.length === 1 ? "" : "s"}`
+            : "No saved hours"}
+        </span>
       </div>
 
-      {/* Preset Quick Chips */}
-      <div style={{ marginBottom: "1rem" }}>
-        <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", fontWeight: 700, color: "var(--odyssey-muted-foreground)", textTransform: "uppercase" }}>
-          Schedule templates
-        </p>
-        <div className="preset-chips-group">
-          <Button
-            className="preset-chip"
-            onClick={() => applyPreset("weekdays")}
+      <form className="weekly-schedule" onSubmit={handleSubmit} noValidate>
+        <div className="weekly-builder__setup">
+          <Field
+            className="weekly-builder__service"
+            label="Service"
+            hint={
+              activeService
+                ? `${activeService.duration_minutes}-minute appointment intervals`
+                : "Select the service these hours apply to"
+            }
           >
-            Weekdays, 9:00 AM–5:00 PM
-          </Button>
-          <Button
-            className="preset-chip"
-            onClick={() => applyPreset("morning")}
-          >
-            Morning, Mon–Sat
-          </Button>
-          <Button
-            className="preset-chip"
-            onClick={() => applyPreset("afternoon")}
-          >
-            Afternoon, Mon–Fri
-          </Button>
-          <Button
-            className="preset-chip"
-            onClick={() => applyPreset("weekend")}
-          >
-            Weekend, 10:00 AM–2:00 PM
-          </Button>
-          <Button
-            className="preset-chip"
-            style={{ color: "var(--odyssey-destructive)" }}
-            onClick={() => applyPreset("clear")}
-          >
-            Clear schedule
-          </Button>
-        </div>
-      </div>
-
-      <form
-        ref={formRef}
-        className="weekly-schedule"
-        onSubmit={onSubmit}
-        style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
-      >
-        <div style={{ maxWidth: "32rem" }}>
-          <Field label="Service">
             <select
               className="odyssey-input"
-              name="scheduleServiceId"
               value={scheduleServiceId}
               onChange={(event) => onServiceChange(event.target.value)}
               required
@@ -179,80 +231,149 @@ export function WeeklyScheduleBuilder({
                 .map((service) => (
                   <option key={service.id} value={service.id}>
                     {service.name} ({service.duration_minutes} min
-                    {service.base_price ? ` · PHP ${Number(service.base_price).toFixed(2)}` : ""})
+                    {service.base_price
+                      ? ` · PHP ${Number(service.base_price).toFixed(2)}`
+                      : ""}
+                    )
                   </option>
                 ))}
             </select>
           </Field>
-          {activeService && (
-            <p className="hint" style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>
-              Slot intervals will be partitioned into <strong>{activeService.duration_minutes}-minute</strong> consultation appointments.
-            </p>
-          )}
-        </div>
 
-        <div className="weekly-days" style={{ display: "grid", gap: "0.6rem" }}>
-          {WEEKDAYS.map((day, index) => {
-            const isEnabled = dayConfigs[index].enabled;
-            return (
-              <div
-                key={day}
-                className="weekly-day"
-                style={{
-                  padding: "0.6rem 0.85rem",
-                  borderRadius: "0.5rem",
-                  background: isEnabled ? "var(--odyssey-muted)" : "var(--odyssey-background)",
-                  border: isEnabled ? "1px solid var(--odyssey-emerald-border)" : "1px solid var(--odyssey-border)",
-                  transition: "all 0.15s ease",
-                }}
+          <div className="weekly-builder__templates">
+            <span className="weekly-builder__label">Quick templates</span>
+            <div className="preset-chips-group">
+              <Button
+                className="preset-chip"
+                variant="outline"
+                onClick={() => applyPreset("weekdays")}
               >
-                <label className="day-enabled" style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                  <input
-                    name={`day-${index}-enabled`}
-                    type="checkbox"
-                    checked={isEnabled}
-                    onChange={(e) => handleDayToggle(index, e.target.checked)}
-                    style={{ width: "1.1rem", height: "1.1rem", accentColor: "var(--odyssey-primary)" }}
-                  />
-                  <strong style={{ color: isEnabled ? "var(--odyssey-emerald-text)" : "inherit" }}>
-                    {day}
-                  </strong>
-                </label>
-                <Input
-                  aria-label={`${day} start time`}
-                  name={`day-${index}-start`}
-                  type="time"
-                  value={dayConfigs[index].start}
-                  onChange={(e) => handleTimeChange(index, "start", e.target.value)}
-                  disabled={!isEnabled}
-                />
-                <span style={{ textAlign: "center", color: "var(--odyssey-muted-foreground)", fontWeight: 600 }}>
-                  to
-                </span>
-                <Input
-                  aria-label={`${day} end time`}
-                  name={`day-${index}-end`}
-                  type="time"
-                  value={dayConfigs[index].end}
-                  onChange={(e) => handleTimeChange(index, "end", e.target.value)}
-                  disabled={!isEnabled}
-                />
-              </div>
-            );
-          })}
+                Weekdays 9–5
+              </Button>
+              <Button
+                className="preset-chip"
+                variant="outline"
+                onClick={() => applyPreset("morning")}
+              >
+                Mornings Mon–Sat
+              </Button>
+              <Button
+                className="preset-chip"
+                variant="outline"
+                onClick={() => applyPreset("afternoon")}
+              >
+                Afternoons Mon–Fri
+              </Button>
+              <Button
+                className="preset-chip"
+                variant="outline"
+                onClick={() => applyPreset("weekend")}
+              >
+                Weekend 10–2
+              </Button>
+              <Button
+                className="preset-chip preset-chip--clear"
+                variant="ghost"
+                onClick={() => applyPreset("clear")}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <Button type="submit" disabled={availabilityBusy}>
-            {availabilityBusy ? "Saving…" : "Add availability"}
-          </Button>
-          {dayConfigs.filter((d) => d.enabled).length > 0 && (
-            <span style={{ fontSize: "0.85rem", color: "var(--odyssey-muted-foreground)" }}>
-              {dayConfigs.filter((d) => d.enabled).length} day(s) configured for generation
+        <fieldset className="weekly-builder__days">
+          <legend>Working days</legend>
+          <div className="weekly-day-picker">
+            {WEEKDAYS.map((day, dayOfWeek) => {
+              const enabled = dayConfigs[dayOfWeek].enabled;
+              return (
+                <label
+                  key={day}
+                  className={`weekly-day-toggle${enabled ? " is-active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(event) =>
+                      handleDayToggle(dayOfWeek, event.target.checked)
+                    }
+                  />
+                  <span>{day}</span>
+                  <small>{enabled ? "Included" : "Off"}</small>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {activeDays.length ? (
+          <div className="weekly-day-editors" aria-label="Hours by day">
+            {activeDays.map(({ config, dayOfWeek }) => (
+              <section className="weekly-day-editor" key={WEEKDAYS[dayOfWeek]}>
+                <strong>{WEEKDAYS[dayOfWeek]}</strong>
+                <div className="weekly-day-editor__times">
+                  <label>
+                    <span>From</span>
+                    <Input
+                      aria-label={`${WEEKDAYS[dayOfWeek]} start time`}
+                      type="time"
+                      value={config.start}
+                      onChange={(event) =>
+                        handleTimeChange(
+                          dayOfWeek,
+                          "start",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </label>
+                  <span className="weekly-day-editor__separator">to</span>
+                  <label>
+                    <span>Until</span>
+                    <Input
+                      aria-label={`${WEEKDAYS[dayOfWeek]} end time`}
+                      type="time"
+                      value={config.end}
+                      onChange={(event) =>
+                        handleTimeChange(dayOfWeek, "end", event.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="weekly-builder__empty">
+            Select a day above to add its working hours.
+          </div>
+        )}
+
+        {validationError ? (
+          <p className="weekly-builder__error" role="alert">
+            {validationError}
+          </p>
+        ) : null}
+
+        <div className="weekly-builder__actions">
+          <div>
+            <strong>
+              {activeDays.length} day{activeDays.length === 1 ? "" : "s"} in
+              this schedule
+            </strong>
+            <span>
+              Saving replaces the recurring hours for the selected service.
             </span>
-          )}
+          </div>
+          <Button
+            type="submit"
+            disabled={availabilityBusy || !activeService}
+          >
+            {availabilityBusy ? "Saving…" : "Save weekly hours"}
+          </Button>
         </div>
       </form>
-    </div>
+    </section>
   );
 }

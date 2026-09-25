@@ -1,127 +1,33 @@
 "use client";
 
-import {
-  createBrowserSupabaseClient,
-  getAccessibleOrganizations,
-  getCurrentUserEmail,
-  getPortalAccess,
-  hasOrganizationPermission,
-  identifyPatientByQr,
-} from "@odyssey/supabase-client";
-import type { IdentifiedPatient, PublicClinicSummary } from "@odyssey/types";
-import { Button, Field } from "@odyssey/ui";
-import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { identifyPatientByQr } from "@odyssey/supabase-client";
+import type { IdentifiedPatient } from "@odyssey/types";
+import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { AdminSignIn } from "../../components/admin-sign-in";
+import { useAdminData } from "../../components/admin-data-context";
+import { PageHeader } from "../../components/page-header";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 
 export default function PatientLookupPage() {
-  const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
-  const [organizationId, setOrganizationId] = useState("");
+  const { client, email, error: accessError, organization } = useAdminData();
+  const [credential, setCredential] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [patient, setPatient] = useState<IdentifiedPatient | null>(null);
-  const [authorized, setAuthorized] = useState<boolean | null>(null);
-  const [status, setStatus] = useState("Checking front-desk access.");
-  const scannerInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    async function open() {
-      const client = createBrowserSupabaseClient();
-      const [userResult, accessResult] = await Promise.all([
-        getCurrentUserEmail(client),
-        getPortalAccess(client, "admin"),
-      ]);
-      if (userResult.error || !userResult.data || accessResult.error || !accessResult.data.allowed || accessResult.data.isSuperadmin) {
-        setAuthorized(false);
-        setStatus("An authorized clinic operations account is required.");
-        return;
-      }
-      const clinicResult = await getAccessibleOrganizations(client, accessResult.data.organizationIds);
-      if (clinicResult.error || !clinicResult.data.length) {
-        setAuthorized(false);
-        setStatus("No assigned clinic is available.");
-        return;
-      }
-      const clinicId = clinicResult.data[0].id;
-      const permission = await hasOrganizationPermission(client, clinicId, "can_identify_patients");
-      if (permission.error || !permission.data) {
-        setAuthorized(false);
-        setStatus("Your role cannot identify patients by QR.");
-        return;
-      }
-      setClinics(clinicResult.data);
-      setOrganizationId(clinicId);
-      setAuthorized(true);
-      setStatus("Ready for a clinic patient QR.");
-      window.setTimeout(() => scannerInput.current?.focus(), 0);
-    }
-    void open();
-  }, []);
-
-  async function identify(event: FormEvent<HTMLFormElement>) {
+  const [loading, setLoading] = useState(false);
+  if (!email && accessError) return <AdminSignIn />;
+  async function identify(event: FormEvent) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const payload = String(new FormData(form).get("qrPayload") ?? "");
-    setPatient(null);
-    const result = await identifyPatientByQr(createBrowserSupabaseClient(), organizationId, payload);
-    if (result.error) {
-      setStatus(`Identification failed: ${result.error.message}`);
-      scannerInput.current?.select();
-      return;
-    }
-    setPatient(result.data);
-    setStatus("Patient identity confirmed. This lookup was added to the audit trail.");
-    form.reset();
-    scannerInput.current?.focus();
+    if (!organization) { setError("Select a clinic organization before identifying a patient."); return; }
+    setLoading(true); setError(null); setPatient(null);
+    const result = await identifyPatientByQr(client, organization.id, credential.trim());
+    if (result.error) setError(result.error.message); else setPatient(result.data);
+    setLoading(false);
   }
-
-  if (authorized !== true) {
-    return (
-      <main className="patient-lookup-shell">
-        <p className="eyebrow">Front desk</p>
-        <h1>{authorized === null ? "Opening patient identification…" : "Access unavailable"}</h1>
-        <p>{status}</p>
-        <Link href="/">Return to clinic operations</Link>
-      </main>
-    );
-  }
-
-  return (
-    <main className="patient-lookup-shell">
-      <header className="governance-header">
-        <div>
-          <p className="eyebrow">Front desk</p>
-          <h1>Identify patient</h1>
-          <p className="hint">Use a connected QR reader. The scanner enters the code here without opening the patient chart.</p>
-        </div>
-        <Link href="/">Clinic schedule</Link>
-      </header>
-      {clinics.length > 1 && (
-        <Field label="Clinic workspace">
-          <select className="odyssey-input" value={organizationId} onChange={(event) => { setOrganizationId(event.target.value); setPatient(null); }}>
-            {clinics.map((clinic) => <option key={clinic.id} value={clinic.id}>{clinic.name}</option>)}
-          </select>
-        </Field>
-      )}
-      <section className="scanner-card">
-        <div className="scanner-frame" aria-hidden="true"><span /></div>
-        <form className="stack" onSubmit={identify}>
-          <Field label="Patient QR payload">
-            <input ref={scannerInput} className="odyssey-input" name="qrPayload" autoComplete="off" placeholder="Scan now" required />
-          </Field>
-          <Button type="submit">Identify patient</Button>
-        </form>
-      </section>
-      {patient && (
-        <section className="identified-patient" aria-live="polite">
-          <p className="eyebrow">Identity confirmed</p>
-          <h2>{patient.displayName}</h2>
-          <dl>
-            <div><dt>Walk-in ID</dt><dd>{patient.walkInId ?? "Registered patient"}</dd></div>
-            <div><dt>Date of birth</dt><dd>{patient.birthDate ?? "Not recorded"}</dd></div>
-            <div><dt>Gender</dt><dd>{patient.gender ?? "Not recorded"}</dd></div>
-          </dl>
-          <p className="hint">Confirm these details verbally before continuing with scheduling or check-in.</p>
-        </section>
-      )}
-      <p role="status" className="governance-status">{status}</p>
-    </main>
-  );
+  return <>
+    <PageHeader eyebrow="Clinical administration" title="Patient identification" description="Identify a patient from their Odyssey QR credential. Every successful and failed lookup is recorded by the database." />
+    <div className="qr-layout"><section className="scanner-panel"><div className="scanner-view" aria-label="QR credential input"><QrCode aria-hidden="true" size={88} /><span><ScanLine aria-hidden="true" size={20} />QR credential verification</span></div><div><h2>Verify patient QR</h2><p>Scan the credential with an attached scanner or paste its complete Odyssey payload below.</p><form className="stack" onSubmit={identify}><label className="field-label">QR credential payload<Input value={credential} onChange={(event) => setCredential(event.target.value)} placeholder="ODYSSEY|organization-id|patient-id" required /></label><Button disabled={loading} type="submit"><ScanLine aria-hidden="true" size={16} />{loading ? "Verifying…" : "Verify credential"}</Button></form></div></section><section className="manual-lookup"><h2>Verification controls</h2><p>The database checks the credential against the selected organization and active patient index. No patient data is stored in this page.</p><dl className="review-list"><div><dt>Organization</dt><dd>{organization?.name ?? "Not selected"}</dd></div><div><dt>Audit</dt><dd>Required for every lookup</dd></div></dl>{error ? <p className="form-error" role="alert">{error}</p> : null}</section></div>
+    {patient ? <section className="identity-result" aria-live="polite"><div className="identity-result__heading"><CheckCircle2 aria-hidden="true" size={22} /><div><h2>Identity match confirmed</h2><p>Returned by the organization-scoped identification function</p></div><span><ShieldCheck aria-hidden="true" size={14} />Lookup logged</span></div><dl><div><dt>Patient</dt><dd>{patient.displayName}</dd></div><div><dt>Record identifier</dt><dd>{patient.patientId}</dd></div><div><dt>Date of birth</dt><dd>{patient.birthDate ?? "Not recorded"}</dd></div><div><dt>Gender</dt><dd>{patient.gender ?? "Not recorded"}</dd></div></dl><Button onClick={() => window.location.assign("/patients")}>Open patient records</Button></section> : null}
+  </>;
 }

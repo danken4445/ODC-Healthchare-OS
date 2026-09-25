@@ -2,30 +2,57 @@
 
 import type { AppointmentSlotSummary } from "@odyssey/types";
 import { Button, DataTable } from "@odyssey/ui";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+const CLINIC_TIME_ZONE = "Asia/Manila";
+
+function clinicDateKey(value: string | Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CLINIC_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(typeof value === "string" ? new Date(value) : value);
+  const get = (type: "year" | "month" | "day") =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function addDays(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfWeek(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+  return addDays(dateKey, -weekday);
+}
+
+function dateKeyToClinicNoon(dateKey: string): Date {
+  return new Date(`${dateKey}T12:00:00+08:00`);
+}
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: CLINIC_TIME_ZONE,
   }).format(new Date(value));
 }
 
 function formatDate(value: string): string {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? dateKeyToClinicNoon(value)
+    : new Date(value);
   return new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
-  }).format(new Date(value));
-}
-
-function isSameDay(d1: Date, d2: Date): boolean {
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate()
-  );
+    timeZone: CLINIC_TIME_ZONE,
+  }).format(date);
 }
 
 const WEEKDAYS = [
@@ -55,27 +82,15 @@ export function AvailabilityStudio({
   const [statusFilter, setStatusFilter] = useState<"all" | "free" | "booked" | "blocked">("all");
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [togglingSlotId, setTogglingSlotId] = useState<string | null>(null);
+  const autoFocusedWeek = useRef(false);
 
   // Compute reference week dates
   const weekDates = useMemo(() => {
-    const now = new Date();
-    // Offset week
-    const target = new Date(now);
-    target.setDate(now.getDate() + weekOffset * 7);
-
-    // Get Sunday of that week
-    const dayOfWeek = target.getDay();
-    const sunday = new Date(target);
-    sunday.setDate(target.getDate() - dayOfWeek);
-    sunday.setHours(0, 0, 0, 0);
-
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(sunday);
-      d.setDate(sunday.getDate() + i);
-      days.push(d);
-    }
-    return days;
+    const currentWeekStart = startOfWeek(clinicDateKey(new Date()));
+    const visibleWeekStart = addDays(currentWeekStart, weekOffset * 7);
+    return WEEKDAYS.map((_, dayOfWeek) =>
+      addDays(visibleWeekStart, dayOfWeek),
+    );
   }, [weekOffset]);
 
   // Metrics
@@ -105,8 +120,7 @@ export function AvailabilityStudio({
     const map = new Map<string, AppointmentSlotSummary[]>();
     for (const slot of filteredSlots) {
       if (!slot.start_at) continue;
-      const d = new Date(slot.start_at);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = clinicDateKey(slot.start_at);
       const list = map.get(key) ?? [];
       list.push(slot);
       map.set(key, list);
@@ -117,6 +131,29 @@ export function AvailabilityStudio({
     }
     return map;
   }, [filteredSlots]);
+
+  useEffect(() => {
+    if (autoFocusedWeek.current || !slots.length) return;
+    autoFocusedWeek.current = true;
+    const currentWeekStart = startOfWeek(clinicDateKey(new Date()));
+    const currentWeekEnd = addDays(currentWeekStart, 6);
+    const slotDateKeys = slots
+      .filter((slot) => Boolean(slot.start_at))
+      .map((slot) => clinicDateKey(slot.start_at))
+      .sort();
+    const hasCurrentWeekSlots = slotDateKeys.some(
+      (dateKey) => dateKey >= currentWeekStart && dateKey <= currentWeekEnd,
+    );
+    if (hasCurrentWeekSlots || !slotDateKeys.length) return;
+
+    const earliestWeek = startOfWeek(slotDateKeys[0]);
+    const daysUntilEarliestWeek = Math.round(
+      (dateKeyToClinicNoon(earliestWeek).getTime() -
+        dateKeyToClinicNoon(currentWeekStart).getTime()) /
+        86_400_000,
+    );
+    setWeekOffset(Math.max(0, Math.floor(daysUntilEarliestWeek / 7)));
+  }, [slots]);
 
   async function handleSlotClick(slot: AppointmentSlotSummary) {
     if (slot.appointment_id || slot.status === "busy" || availabilityBusy) return;
@@ -224,7 +261,7 @@ export function AvailabilityStudio({
               className={`view-btn ${viewMode === "agenda" ? "active" : ""}`}
               onClick={() => setViewMode("agenda")}
             >
-              📅 Day Agenda
+              Day agenda
             </Button>
             <Button
               type="button"
@@ -311,18 +348,17 @@ export function AvailabilityStudio({
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--odyssey-foreground)" }}>
-              Week of {formatDate(weekDates[0].toISOString())} – {formatDate(weekDates[6].toISOString())}
+              Week of {formatDate(weekDates[0])} – {formatDate(weekDates[6])}
             </span>
             <span style={{ fontSize: "0.8rem", color: "var(--odyssey-muted-foreground)" }}>
-              💡 <strong>Tip:</strong> Click any slot card to toggle between <strong>Bookable</strong> and <strong>Blocked</strong>.
+              <strong>Tip:</strong> Click any slot card to toggle between <strong>Bookable</strong> and <strong>Blocked</strong>.
             </span>
           </div>
 
           <div className="weekly-matrix-grid">
-            {weekDates.map((dayDate, dayIdx) => {
-              const dateKey = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, "0")}-${String(dayDate.getDate()).padStart(2, "0")}`;
+            {weekDates.map((dateKey, dayIdx) => {
               const daySlots = slotsByDate.get(dateKey) ?? [];
-              const isToday = isSameDay(dayDate, new Date());
+              const isToday = dateKey === clinicDateKey(new Date());
               const dayFree = daySlots.filter((s) => s.status === "free").length;
               const dayBooked = daySlots.filter((s) => s.appointment_id || s.status === "busy").length;
 
@@ -345,7 +381,7 @@ export function AvailabilityStudio({
                     <div className="matrix-day-name" style={{ color: isToday ? "var(--odyssey-primary)" : "inherit" }}>
                       {WEEKDAYS[dayIdx]} {isToday && "(Today)"}
                     </div>
-                    <div className="matrix-day-date">{formatDate(dayDate.toISOString())}</div>
+                    <div className="matrix-day-date">{formatDate(dateKey)}</div>
                     <div className="matrix-day-badge">
                       {daySlots.length === 0
                         ? "No slots"
@@ -429,7 +465,6 @@ export function AvailabilityStudio({
             <p className="hint">No appointment slots match the current filter.</p>
           ) : (
             Array.from(slotsByDate.entries()).map(([dateStr, daySlots]) => {
-              const dateObj = new Date(dateStr + "T00:00:00");
               return (
                 <div
                   key={dateStr}
@@ -451,7 +486,7 @@ export function AvailabilityStudio({
                     }}
                   >
                     <h4 style={{ margin: 0, fontSize: "1.05rem" }}>
-                      {formatDate(dateObj.toISOString())}
+                      {formatDate(dateStr)}
                     </h4>
                     <span style={{ fontSize: "0.85rem", color: "var(--odyssey-muted-foreground)" }}>
                       {daySlots.length} slots

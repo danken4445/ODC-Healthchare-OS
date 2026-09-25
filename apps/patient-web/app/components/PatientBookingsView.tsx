@@ -46,9 +46,10 @@ export function PatientBookingsView({
   const inPersonBookings = appointments.filter((a) => !isVirtual(a));
   const activeBookings = appointments.filter(isActive);
   const doneBookings = appointments.filter(isDone);
-  const activeVirtualAppts = appointments.filter(
-    (a) => isVirtual(a) && (a.status === "booked" || a.status === "arrived"),
-  );
+  const activeVirtualAppts = appointments
+    .filter((a) => isVirtual(a) && (a.status === "booked" || a.status === "arrived"))
+    .sort((a, b) => new Date(a.start_at ?? 0).getTime() - new Date(b.start_at ?? 0).getTime());
+  const nextVirtualAppointment = activeVirtualAppts[0];
 
   const filteredAppointments = useMemo(() => {
     if (filter === "virtual") return virtualBookings;
@@ -77,14 +78,14 @@ export function PatientBookingsView({
             </span>
           </div>
 
-          {activeVirtualAppts.map((appt) => (
-            <div key={appt.id} className="active-virtual-banner__body">
+          {nextVirtualAppointment ? (
+            <div key={nextVirtualAppointment.id} className="active-virtual-banner__body">
               <div className="active-virtual-banner__content">
                 <h3 className="active-virtual-banner__title">
-                  {appt.service_type ?? "Virtual Doctor Consultation"}
+                  {nextVirtualAppointment.service_type ?? "Virtual Doctor Consultation"}
                 </h3>
                 <p className="active-virtual-banner__time">
-                  🗓️ Scheduled: <strong>{formatAppointmentTime(appt.start_at)}</strong>
+                  Scheduled: <strong>{formatAppointmentTime(nextVirtualAppointment.start_at)}</strong>
                 </p>
                 <div className="active-virtual-banner__features">
                   <span>🔒 End-to-End Encrypted</span>
@@ -94,17 +95,22 @@ export function PatientBookingsView({
               </div>
 
               <div className="active-virtual-banner__cta-container">
-                <Link href={`/teleconsult/${appt.id}`} className="active-virtual-banner__cta-link">
+                <Link href={`/teleconsult/${nextVirtualAppointment.id}`} className="active-virtual-banner__cta-link">
                   <Button
                     size="default"
                     className="active-virtual-banner__cta-btn"
                   >
-                    <span>📹 Join Video Call Now</span>
+                    <span>Join video call now</span>
                   </Button>
                 </Link>
               </div>
             </div>
-          ))}
+          ) : null}
+          {activeVirtualAppts.length > 1 ? (
+            <button className="active-virtual-banner__more" onClick={() => setFilter("virtual")} type="button">
+              View {activeVirtualAppts.length - 1} more ready {activeVirtualAppts.length === 2 ? "appointment" : "appointments"}
+            </button>
+          ) : null}
         </div>
       )}
 

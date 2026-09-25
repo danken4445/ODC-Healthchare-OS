@@ -46,10 +46,15 @@ import {
   PayorTypeBadge,
   CurrencyDisplay,
   QrPaymentCode,
+  Select,
 } from "@odyssey/ui";
+import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { PatientHeader, type PatientTab } from "./components/PatientHeader";
 import { PatientBookingsView } from "./components/PatientBookingsView";
+import { BookingStepHeader } from "./components/BookingStepHeader";
+import { ServiceCard } from "./components/ServiceCard";
+import { AvailableSlotsCalendar } from "./components/AvailableSlotsCalendar";
 
 const localTestPassword = "LocalOnly-2026!";
 
@@ -495,13 +500,15 @@ export default function Home() {
         />
       )}
 
-      <p className="eyebrow">Patient portal</p>
+      <div className="patient-hero">
+      <p className="eyebrow">Care that meets you where you are</p>
       {branding?.logoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="clinic-brand-logo" src={branding.logoUrl} alt={`${branding.displayName} logo`} />
+        <Image className="clinic-brand-logo" src={branding.logoUrl} alt={`${branding.displayName} logo`} width={144} height={48} sizes="144px" unoptimized />
       )}
-      <h1>{branding?.displayName ?? "Book a clinic appointment"}</h1>
-      {branding?.tagline && <p>{branding.tagline}</p>}
+      <h1>{branding?.displayName ?? "Your health, a little easier."}</h1>
+      <p>{branding?.tagline ?? "Find care, book a visit, and keep your health information close—all in one calm, secure place."}</p>
+      {!signedInAs ? <Button onClick={() => document.getElementById("clinic-heading")?.scrollIntoView({ behavior: "smooth" })}>Find care near me</Button> : null}
+      </div>
 
       {(!signedInAs || activeTab === "all" || activeTab === "book") && (
         <section aria-labelledby="clinic-heading">
@@ -527,13 +534,7 @@ export default function Home() {
           <section aria-labelledby="services-heading">
             <h2 id="services-heading">Clinic services</h2>
             <div className="service-grid">
-              {services.map((service) => (
-                <article className="service-card" key={service.id}>
-                  <h3>{service.name}</h3>
-                  <p>{service.description ?? "Clinic consultation service."}</p>
-                  <p className="hint">{service.duration_minutes} minutes</p>
-                </article>
-              ))}
+              {services.map((service) => <ServiceCard description={service.description ?? "Friendly, professional care from your clinic team."} duration={service.duration_minutes} key={service.id} name={service.name} />)}
               {!services.length && <p>No services are available right now.</p>}
             </div>
           </section>
@@ -599,7 +600,7 @@ export default function Home() {
               <Button type="submit" disabled={authSubmitting}>
                 {authSubmitting ? "Signing in…" : "Sign in"}
               </Button>
-              <p className="hint">Local reset password: {localTestPassword}</p>
+              {process.env.NODE_ENV === "development" ? <p className="hint">Development account password: {localTestPassword}</p> : null}
             </form>
           </section>
         </div>
@@ -617,7 +618,7 @@ export default function Home() {
                 {liveStatus} bookings
               </span>
               <Button variant="secondary" onClick={handleSignOut}>
-                Sign out
+                Log out
               </Button>
             </span>
           </div>
@@ -643,117 +644,15 @@ export default function Home() {
           ) : (
             (activeTab === "all" || activeTab === "book") && (
               <section aria-labelledby="available-slots-heading">
-                <h2 id="available-slots-heading">Available slots</h2>
+                <BookingStepHeader current={2} description="Choose the time and visit type that feel right for you." title="Pick a date and time" />
+                <span className="sr-only" id="available-slots-heading">Available slots</span>
 
-                {/* Mobile Slot Cards (Visible on <= 768px) */}
-                <div className="mobile-slots-grid">
-                  {!slots.length ? (
-                    <p>No appointment slots are available.</p>
-                  ) : (
-                    slots.map((slot) => {
-                      const modes = services.find(
-                        (service) => service.id === slot.clinic_service_id,
-                      )?.delivery_modes ?? ["in_person"];
-
-                      return (
-                        <div key={slot.id} className="mobile-slot-card">
-                          <div className="mobile-slot-card__top">
-                            <div>
-                              <div className="mobile-slot-card__time">
-                                🗓️ {formatAppointmentTime(slot.start_at)}
-                              </div>
-                              <div className="mobile-slot-card__service">
-                                {slot.service_type ?? "General Consultation"}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mobile-slot-card__actions">
-                            {modes.includes("in_person") && (
-                              <Button
-                                size="default"
-                                className="mobile-slot-card__btn"
-                                disabled={busySlotId !== null}
-                                onClick={() => void handleBook(slot.id, "in_person")}
-                                aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
-                              >
-                                {busySlotId === slot.id ? "Booking…" : "🏥 Clinic Visit"}
-                              </Button>
-                            )}
-                            {modes.includes("virtual") && (
-                              <Button
-                                size="default"
-                                variant="outline"
-                                className="mobile-slot-card__btn"
-                                disabled={busySlotId !== null}
-                                onClick={() => void handleBook(slot.id, "virtual")}
-                                aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
-                              >
-                                {busySlotId === slot.id ? "Booking…" : "📹 Virtual Call"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Desktop Data Table (Visible on > 768px) */}
-                <div className="desktop-slots-table">
-                  <DataTable
-                    caption="Available appointments for the selected clinic."
-                    data={slots}
-                    emptyMessage="No appointment slots are available."
-                    getRowId={(slot) => slot.id}
-                    columns={[
-                      {
-                        id: "time",
-                        header: "Date and time",
-                        cell: (slot) => formatAppointmentTime(slot.start_at),
-                      },
-                      {
-                        id: "service",
-                        header: "Service",
-                        cell: (slot) => slot.service_type ?? "Consultation",
-                      },
-                      {
-                        id: "action",
-                        header: "",
-                        cell: (slot) => {
-                          const modes = services.find(
-                            (service) => service.id === slot.clinic_service_id,
-                          )?.delivery_modes ?? ["in_person"];
-                          return (
-                            <span className="session-actions">
-                              {modes.includes("in_person") && (
-                                <Button
-                                  size="sm"
-                                  disabled={busySlotId !== null}
-                                  onClick={() => void handleBook(slot.id, "in_person")}
-                                  aria-label={`Book in-person ${formatAppointmentTime(slot.start_at)}`}
-                                >
-                                  {busySlotId === slot.id ? "Booking…" : "Book clinic"}
-                                </Button>
-                              )}
-                              {modes.includes("virtual") && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={busySlotId !== null}
-                                  onClick={() => void handleBook(slot.id, "virtual")}
-                                  aria-label={`Book virtual ${formatAppointmentTime(slot.start_at)}`}
-                                >
-                                  {busySlotId === slot.id ? "Booking…" : "Book virtual"}
-                                </Button>
-                              )}
-                            </span>
-                          );
-                        },
-                      },
-                    ]}
-                  />
-                </div>
+                <AvailableSlotsCalendar
+                  busySlotId={busySlotId}
+                  onBook={(slotId, mode) => void handleBook(slotId, mode)}
+                  services={services}
+                  slots={slots}
+                />
               </section>
             )
           )}
@@ -786,7 +685,7 @@ export default function Home() {
         </section>
       )}
 
-      <p role="status">{status}</p>
+      <p className="patient-status" role="status">{status}</p>
 
       {(activeTab === "all" || activeTab === "bookings") && (records || walkInRecords) && (
         <section aria-labelledby="bookings-heading" style={{ marginTop: "1.5rem" }}>
@@ -829,8 +728,7 @@ export default function Home() {
               />
             </Field>
             <Field label="Gender">
-              <select
-                className="odyssey-input"
+              <Select
                 name="gender"
                 defaultValue={records.patients[0].gender ?? ""}
               >
@@ -839,7 +737,7 @@ export default function Home() {
                 <option value="male">Male</option>
                 <option value="other">Other</option>
                 <option value="unknown">Unknown</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Phone">
               <Input
@@ -873,6 +771,20 @@ export default function Home() {
             </Field>
             <Button type="submit">Save profile</Button>
           </form>
+          <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <strong>Account session</strong>
+              <p className="hint" style={{ margin: 0 }}>Signed in as {signedInAs}</p>
+            </div>
+            <Button variant="secondary" onClick={handleSignOut} aria-label="Log out" title="Log out">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: "middle" }}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Log out
+            </Button>
+          </div>
         </section>
       )}
 
@@ -890,13 +802,28 @@ export default function Home() {
             <div className="history-list">
               {records.encounters.map((encounter) => (
                 <article className="history-card" key={encounter.id}>
-                  <h3>{encounter.service_type ?? "Clinical visit"}</h3>
-                  <p className="hint">
+                  <details className="history-card__disclosure">
+                    <summary className="history-card__summary">
+                      <span className="history-card__summary-copy">
+                        <span className="history-card__title">
+                          {encounter.service_type ?? "Clinical visit"}
+                        </span>
+                        <span className="hint history-card__meta">
                     {encounter.period_start
                       ? new Date(encounter.period_start).toLocaleString()
                       : "Date pending"}{" "}
                     · {encounter.status.replaceAll("_", " ")}
-                  </p>
+                        </span>
+                      </span>
+                      <span className="history-card__toggle" aria-hidden="true">
+                        <span className="history-card__toggle-closed">View details</span>
+                        <span className="history-card__toggle-open">Hide details</span>
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m5 7.5 5 5 5-5" />
+                        </svg>
+                      </span>
+                    </summary>
+                    <div className="history-card__details">
                   {records.observations
                     .filter(
                       (item) =>
@@ -1007,6 +934,8 @@ export default function Home() {
                         {report.conclusion && <p>{report.conclusion}</p>}
                       </div>
                     ))}
+                    </div>
+                  </details>
                 </article>
               ))}
             </div>

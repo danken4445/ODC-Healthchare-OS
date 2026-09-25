@@ -1117,3 +1117,14 @@ textarea.odyssey-input {
   }
 }
 
+/* Shared shadcn-compatible feedback primitives. */
+.odyssey-select { appearance: auto; }
+.odyssey-skeleton {
+  min-height: 1rem;
+  border-radius: calc(var(--odyssey-radius) - 4px);
+  background: linear-gradient(90deg, var(--odyssey-muted) 25%, var(--odyssey-background) 50%, var(--odyssey-muted) 75%);
+  background-size: 200% 100%;
+  animation: odyssey-skeleton 1.5s ease-in-out infinite;
+}
+@keyframes odyssey-skeleton { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .odyssey-skeleton { animation: none; } }
