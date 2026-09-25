@@ -18,6 +18,12 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/patients", anyOf: ["can_manage_patients"] },
   { href: "/patient-lookup", anyOf: ["can_identify_patients"] },
   { href: "/appointments", anyOf: ["can_manage_appointments"] },
+  { href: "/queue", public: true },
+  { href: "/teleconsult", anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments", "can_access_admin_portal"] },
+  { href: "/soap-notes", anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients", "can_access_admin_portal"] },
+  { href: "/referrals", anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients", "can_access_admin_portal"] },
+  { href: "/prescriptions", anyOf: ["can_start_consultation", "can_manage_patients", "can_access_admin_portal"] },
+  { href: "/support", public: true },
   { href: "/billing/claims", anyOf: ["can_view_claims", "can_manage_claims"] },
   { href: "/billing", anyOf: ["can_view_billing", "can_manage_billing"] },
   { href: "/companies", anyOf: ["can_view_billing", "can_manage_billing", "can_view_claims", "can_manage_claims"] },
@@ -36,7 +42,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/settings/features", allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
   { href: "/waiting-room", public: true },
   { href: "/governance", anyOf: ["can_manage_patients"] },
-  { href: "/", anyOf: ["can_view_analytics"] },
+  { href: "/", public: true },
 ];
 
 export function canAccessAdminDestination(
@@ -46,7 +52,7 @@ export function canAccessAdminDestination(
 ): boolean {
   if (rule.public) return true;
   if (rule.superadminOnly) return isSuperadmin;
-  if (isSuperadmin) return Boolean(rule.allowSuperadmin);
+  if (isSuperadmin) return true;
   return Boolean(rule.anyOf?.some((permission) => permissions.includes(permission)));
 }
 

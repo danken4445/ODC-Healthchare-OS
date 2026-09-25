@@ -1,5 +1,5 @@
-import { AnalyticsDashboard } from "../components/analytics-dashboard";
+import { VesperDashboard } from "../components/vesper-dashboard";
 
 export default function DashboardPage() {
-  return <AnalyticsDashboard />;
+  return <VesperDashboard />;
 }
