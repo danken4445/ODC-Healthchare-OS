@@ -19,6 +19,11 @@ import { Badge, Button, TeleconsultWebRtcRoom } from "@odyssey/ui";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  generateRandomEncounterData,
+  isDeveloperModeActive,
+  setDeveloperModeActive,
+} from "../../components/encounter-test-data";
 
 function clinicalText(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
@@ -69,6 +74,17 @@ export default function ProviderTeleconsultRoomPage() {
   const [status, setStatus] = useState("Authorizing the assigned room…");
   const [busy, setBusy] = useState(false);
   const [chartOpen, setChartOpen] = useState(true);
+
+  // Developer Mode (ODC Easter Egg)
+  const [debugMode, setDebugMode] = useState(false);
+  const [soapInput, setSoapInput] = useState("");
+  const [soapDirty, setSoapDirty] = useState(false);
+
+  useEffect(() => {
+    if (isDeveloperModeActive()) {
+      setDebugMode(true);
+    }
+  }, []);
 
   async function handleSignOut() {
     await signOut(createBrowserSupabaseClient());
@@ -173,20 +189,58 @@ export default function ProviderTeleconsultRoomPage() {
     setBusy(false);
   }
 
+  // Sync SOAP note if not modified
+  useEffect(() => {
+    if (currentSoapNote && !soapDirty) {
+      setSoapInput(clinicalText(currentSoapNote.value));
+    }
+  }, [currentSoapNote, soapDirty]);
+
+  function handleTestFillSoap() {
+    const data = generateRandomEncounterData();
+    setSoapInput(data.soap);
+    setSoapDirty(true);
+    setStatus(`Test Fill generated random clinical note (${data.profile.name}).`);
+  }
+
+  function handleSoapChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = event.target.value;
+    setSoapInput(val);
+    setSoapDirty(true);
+
+    const trimmedUpper = val.trim().toUpperCase();
+    if (trimmedUpper === "ODC") {
+      setDebugMode(true);
+      setDeveloperModeActive(true);
+      const data = generateRandomEncounterData();
+      setSoapInput(data.soap);
+      setStatus(
+        `🎉 Easter Egg Unlocked: Developer mode activated! Generated case: ${data.profile.name}.`,
+      );
+    } else if (!debugMode && trimmedUpper.includes("ODC")) {
+      setDebugMode(true);
+      setDeveloperModeActive(true);
+      setStatus("🎉 Easter Egg Unlocked: Developer mode activated.");
+    }
+  }
+
   async function saveNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!appointment?.encounter_id || !organizationId) return;
     const form = event.currentTarget;
     const fields = new FormData(form);
+    const text = (soapInput || String(fields.get("text") ?? "")).trim();
+    if (!text) return;
     setBusy(true);
     const result = await saveSoapNote(createBrowserSupabaseClient(), {
       encounterId: appointment.encounter_id,
-      text: String(fields.get("text") ?? "").trim(),
+      text,
       supersedesId: currentSoapNote?.id,
     });
     if (result.error) {
       setStatus(`Unable to save consultation note: ${result.error.message}`);
     } else {
+      setSoapDirty(false);
       await loadClinicalRecords(organizationId);
       setStatus(
         currentSoapNote
@@ -388,11 +442,28 @@ export default function ProviderTeleconsultRoomPage() {
                     <section className="chart-section chart-note-section">
                       <div className="chart-section-heading">
                         <h3>Consultation note</h3>
-                        <span>{currentSoapNote ? "Revision" : "New note"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          {debugMode && (
+                            <Button
+                              id="teleconsult-test-fill-btn"
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                              onClick={handleTestFillSoap}
+                              title="Randomly generate SOAP note"
+                            >
+                              ⚡ Test Fill
+                            </Button>
+                          )}
+                          <span>{currentSoapNote ? "Revision" : "New note"}</span>
+                        </div>
                       </div>
                       <form onSubmit={saveNote}>
                         <label htmlFor="consultation-note">
                           SOAP documentation
+                          {debugMode && (
+                            <span className="dev-field-badge">Dev Mode · Type ODC to randomize</span>
+                          )}
                         </label>
                         <textarea
                           id="consultation-note"
@@ -400,13 +471,10 @@ export default function ProviderTeleconsultRoomPage() {
                           rows={14}
                           maxLength={20000}
                           key={currentSoapNote?.id ?? appointment.encounter_id}
-                          defaultValue={
-                            currentSoapNote
-                              ? clinicalText(currentSoapNote.value)
-                              : ""
-                          }
+                          value={soapInput}
+                          onChange={handleSoapChange}
                           placeholder={
-                            "Subjective:\n\nObjective:\n\nAssessment:\n\nPlan:"
+                            "Subjective:\n\nObjective:\n\nAssessment:\n\nPlan:\n\n(Tip: Type 'ODC' for Test Fill)"
                           }
                           required
                         />

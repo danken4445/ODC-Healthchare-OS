@@ -77,9 +77,16 @@ import {
   WorkspaceHeader,
   type WorkspaceTab,
 } from "./components/WorkspaceHeader";
+import { DoctorOverview } from "./components/DoctorOverview";
+import { Stethoscope } from "lucide-react";
 import { WeeklyScheduleBuilder } from "./components/WeeklyScheduleBuilder";
 import { AvailabilityStudio } from "./components/AvailabilityStudio";
 import { QueueBoard } from "./components/QueueBoard";
+import {
+  generateRandomTriageData,
+  isDeveloperModeActive,
+  setDeveloperModeActive,
+} from "./components/encounter-test-data";
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -183,6 +190,34 @@ export default function Home() {
   const [canTriage, setCanTriage] = useState(false);
   const [selectedTriageAppointmentId, setSelectedTriageAppointmentId] =
     useState<string | null>(null);
+
+  // Developer Debug Mode (Easter Egg) for Triage
+  const [triageDebugMode, setTriageDebugMode] = useState(false);
+  const [triageToast, setTriageToast] = useState<string | null>(null);
+  const [triageProfileName, setTriageProfileName] = useState<string | null>(null);
+
+  // Controlled form states for Triage
+  const [triageSystolic, setTriageSystolic] = useState("");
+  const [triageDiastolic, setTriageDiastolic] = useState("");
+  const [triagePulse, setTriagePulse] = useState("");
+  const [triageRespiratory, setTriageRespiratory] = useState("");
+  const [triageTemp, setTriageTemp] = useState("");
+  const [triageOxygen, setTriageOxygen] = useState("");
+  const [triageWeight, setTriageWeight] = useState("");
+  const [triageHeight, setTriageHeight] = useState("");
+  const [triagePain, setTriagePain] = useState("");
+  const [triageAcuity, setTriageAcuity] = useState<
+    "routine" | "urgent" | "emergency"
+  >("routine");
+  const [triageChiefComplaint, setTriageChiefComplaint] = useState("");
+  const [triageNotes, setTriageNotes] = useState("");
+  const [triageDirty, setTriageDirty] = useState(false);
+
+  useEffect(() => {
+    if (isDeveloperModeActive()) {
+      setTriageDebugMode(true);
+    }
+  }, []);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsWorkspace | null>(
     null,
   );
@@ -249,6 +284,114 @@ export default function Home() {
       observation.encounter_id === selectedTriageEncounter?.id &&
       observation.code === "TRIAGE-VITALS",
   );
+
+  useEffect(() => {
+    if (!triageDirty) {
+      setTriageSystolic(triageBloodPressure(currentTriage?.value, "systolic"));
+      setTriageDiastolic(triageBloodPressure(currentTriage?.value, "diastolic"));
+      setTriagePulse(triageValue(currentTriage?.value, "pulse_bpm"));
+      setTriageRespiratory(triageValue(currentTriage?.value, "respiratory_rate"));
+      setTriageTemp(triageValue(currentTriage?.value, "temperature_c"));
+      setTriageOxygen(triageValue(currentTriage?.value, "oxygen_saturation_percent"));
+      setTriageWeight(triageValue(currentTriage?.value, "weight_kg"));
+      setTriageHeight(triageValue(currentTriage?.value, "height_cm"));
+      setTriagePain(triageValue(currentTriage?.value, "pain_score"));
+      setTriageAcuity(
+        (triageValue(currentTriage?.value, "acuity") as "routine" | "urgent" | "emergency") || "routine",
+      );
+      setTriageChiefComplaint(triageValue(currentTriage?.value, "chief_complaint"));
+      setTriageNotes(triageValue(currentTriage?.value, "notes"));
+    }
+  }, [currentTriage, selectedTriageAppointmentId, triageDirty]);
+
+  useEffect(() => {
+    setTriageDirty(false);
+    setTriageToast(null);
+  }, [selectedTriageAppointmentId]);
+
+  function applyTestFillTriage() {
+    const data = generateRandomTriageData();
+    setTriageSystolic(String(data.systolicBp));
+    setTriageDiastolic(String(data.diastolicBp));
+    setTriagePulse(String(data.pulseBpm));
+    setTriageRespiratory(String(data.respiratoryRate));
+    setTriageTemp(String(data.temperatureC));
+    setTriageOxygen(String(data.oxygenSaturation));
+    setTriageWeight(String(data.weightKg));
+    setTriageHeight(String(data.heightCm));
+    setTriagePain(String(data.painScore));
+    setTriageAcuity(data.acuity);
+    setTriageChiefComplaint(data.chiefComplaint);
+    setTriageNotes(data.notes);
+    setTriageProfileName(data.profileName);
+    setTriageDirty(true);
+    setTriageToast(`✨ Test Fill applied: ${data.profileName}`);
+    setStatus(`Test Fill generated randomized triage assessment for ${data.profileName}.`);
+  }
+
+  function handleTriageTextChange(
+    field: "chiefComplaint" | "notes",
+    value: string,
+  ) {
+    if (field === "chiefComplaint") {
+      setTriageChiefComplaint(value);
+    } else {
+      setTriageNotes(value);
+    }
+    setTriageDirty(true);
+
+    const trimmedUpper = value.trim().toUpperCase();
+    if (trimmedUpper === "ODC") {
+      setTriageDebugMode(true);
+      setDeveloperModeActive(true);
+      const data = generateRandomTriageData();
+      setTriageSystolic(String(data.systolicBp));
+      setTriageDiastolic(String(data.diastolicBp));
+      setTriagePulse(String(data.pulseBpm));
+      setTriageRespiratory(String(data.respiratoryRate));
+      setTriageTemp(String(data.temperatureC));
+      setTriageOxygen(String(data.oxygenSaturation));
+      setTriageWeight(String(data.weightKg));
+      setTriageHeight(String(data.heightCm));
+      setTriagePain(String(data.painScore));
+      setTriageAcuity(data.acuity);
+      setTriageChiefComplaint(data.chiefComplaint);
+      setTriageNotes(data.notes);
+      setTriageProfileName(data.profileName);
+      setTriageToast(
+        `🎉 Easter Egg Unlocked: ODC Developer Mode Activated! Triage data generated: ${data.profileName}`,
+      );
+      setStatus(
+        `Easter Egg Active: Developer Mode unlocked and Test Fill applied for ${data.profileName}.`,
+      );
+    } else if (!triageDebugMode && trimmedUpper.includes("ODC")) {
+      setTriageDebugMode(true);
+      setDeveloperModeActive(true);
+      setTriageToast(
+        "🎉 Easter Egg Unlocked: ODC Developer Mode Activated! Click 'Test Fill' to randomize.",
+      );
+      setStatus("Easter Egg Active: Developer Mode unlocked.");
+    }
+  }
+
+  function handleClearTriageDrafts() {
+    setTriageSystolic(triageBloodPressure(currentTriage?.value, "systolic"));
+    setTriageDiastolic(triageBloodPressure(currentTriage?.value, "diastolic"));
+    setTriagePulse(triageValue(currentTriage?.value, "pulse_bpm"));
+    setTriageRespiratory(triageValue(currentTriage?.value, "respiratory_rate"));
+    setTriageTemp(triageValue(currentTriage?.value, "temperature_c"));
+    setTriageOxygen(triageValue(currentTriage?.value, "oxygen_saturation_percent"));
+    setTriageWeight(triageValue(currentTriage?.value, "weight_kg"));
+    setTriageHeight(triageValue(currentTriage?.value, "height_cm"));
+    setTriagePain(triageValue(currentTriage?.value, "pain_score"));
+    setTriageAcuity(
+      (triageValue(currentTriage?.value, "acuity") as "routine" | "urgent" | "emergency") || "routine",
+    );
+    setTriageChiefComplaint(triageValue(currentTriage?.value, "chief_complaint"));
+    setTriageNotes(triageValue(currentTriage?.value, "notes"));
+    setTriageDirty(false);
+    setTriageToast("Draft triage inputs cleared.");
+  }
 
   const loadQueue = useCallback(
     async (clinicId = organizationId, view = queueView, date = customDate) => {
@@ -567,26 +710,32 @@ export default function Home() {
     setClinicalBusy(true);
     const result = await recordTriageVitalSigns(createBrowserSupabaseClient(), {
       appointmentId: selectedTriageAppointmentId,
-      systolicBp: Number(fields.get("systolicBp")),
-      diastolicBp: Number(fields.get("diastolicBp")),
-      pulseBpm: Number(fields.get("pulseBpm")),
-      respiratoryRate: Number(fields.get("respiratoryRate")),
-      temperatureC: Number(fields.get("temperatureC")),
-      oxygenSaturation: Number(fields.get("oxygenSaturation")),
-      weightKg: fields.get("weightKg") ? Number(fields.get("weightKg")) : null,
-      heightCm: fields.get("heightCm") ? Number(fields.get("heightCm")) : null,
-      painScore: fields.get("painScore")
-        ? Number(fields.get("painScore"))
+      systolicBp: Number(triageSystolic || fields.get("systolicBp")),
+      diastolicBp: Number(triageDiastolic || fields.get("diastolicBp")),
+      pulseBpm: Number(triagePulse || fields.get("pulseBpm")),
+      respiratoryRate: Number(triageRespiratory || fields.get("respiratoryRate")),
+      temperatureC: Number(triageTemp || fields.get("temperatureC")),
+      oxygenSaturation: Number(triageOxygen || fields.get("oxygenSaturation")),
+      weightKg: (triageWeight || fields.get("weightKg"))
+        ? Number(triageWeight || fields.get("weightKg"))
         : null,
-      acuity: String(fields.get("acuity")) as
+      heightCm: (triageHeight || fields.get("heightCm"))
+        ? Number(triageHeight || fields.get("heightCm"))
+        : null,
+      painScore: (triagePain || fields.get("painScore"))
+        ? Number(triagePain || fields.get("painScore"))
+        : null,
+      acuity: (triageAcuity || String(fields.get("acuity"))) as
         "routine" | "urgent" | "emergency",
-      chiefComplaint: String(fields.get("chiefComplaint") ?? "").trim() || null,
-      notes: String(fields.get("notes") ?? "").trim() || null,
+      chiefComplaint: (triageChiefComplaint || String(fields.get("chiefComplaint") ?? "")).trim() || null,
+      notes: (triageNotes || String(fields.get("notes") ?? "")).trim() || null,
       supersedesId: currentTriage?.id,
     });
     setClinicalBusy(false);
     if (result.error)
       return setStatus(`Unable to save triage: ${result.error.message}`);
+    setTriageDirty(false);
+    setTriageToast(null);
     setStatus(
       currentTriage
         ? "Triage vital-sign correction saved."
@@ -970,6 +1119,34 @@ export default function Home() {
             onSignOut={handleSignOut}
           />
 
+          {/* Vesper Doctor Overview Dashboard */}
+          {activeTab === "all" && (
+            <DoctorOverview
+              doctorName={signedInAs ?? "Clinician"}
+              department={currentDepartmentName}
+              queue={queue}
+              diagnostics={diagnostics}
+              clinicalRecords={clinicalRecords}
+              activeEncounterId={selectedEncounterId}
+              onStartConsultation={(appointment) => {
+                if (appointment.encounterStatus === "in_progress") {
+                  const encounter = clinicalRecords?.encounters.find(
+                    (item) => item.appointment_id === appointment.id,
+                  );
+                  if (encounter) router.push(`/encounters/${encounter.id}`);
+                  else void handleStart(appointment.id);
+                } else {
+                  void handleStart(appointment.id);
+                }
+              }}
+              onOpenTriage={(appointment) => {
+                setSelectedTriageAppointmentId(appointment.id);
+                setActiveTab("queue");
+              }}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
+
           {/* Legacy session container preserved for tests */}
           <div className="session" style={{ display: "none" }}>
             <span>Signed in as {signedInAs}</span>
@@ -988,7 +1165,7 @@ export default function Home() {
             </span>
           </div>
 
-          {(activeTab === "all" || activeTab === "diagnostics") && (
+          {activeTab === "diagnostics" && (
             <>
               {!!diagnostics?.notifications.length && (
                 <section aria-labelledby="notifications-heading">
@@ -1158,7 +1335,7 @@ export default function Home() {
           </>
           )}
 
-          {(activeTab === "all" || activeTab === "queue") && (
+          {activeTab === "queue" && (
             <section aria-labelledby="queue-heading" style={{ marginTop: "1rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
                 <div>
@@ -1379,202 +1556,342 @@ export default function Home() {
         </section>
       )}
 
-      {(activeTab === "all" || activeTab === "queue" || activeTab === "chart") && canTriage && selectedTriageAppointment && (
+      {(activeTab === "queue" || activeTab === "chart") && canTriage && selectedTriageAppointment && (
         <section aria-labelledby="triage-heading">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">
-                    {selectedTriageAppointment.patientName}
-                  </p>
-                  <h2 id="triage-heading">Triage assessment</h2>
-                </div>
-                <span className="hint">
-                  {currentTriage
-                    ? "Correcting this assessment creates an immutable new version."
-                    : "Finalize the assessment before handing the patient to the doctor."}
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">
+                {selectedTriageAppointment.patientName}
+              </p>
+              <h2 id="triage-heading">Triage assessment</h2>
+            </div>
+            <div className="encounter-heading-aside">
+              {triageDebugMode && (
+                <Button
+                  id="odc-triage-test-fill-btn"
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={applyTestFillTriage}
+                  title="Randomly generate triage vital signs and assessment"
+                >
+                  ⚡ Test Fill Triage
+                </Button>
+              )}
+              {triageDebugMode && (
+                <Button
+                  id="odc-triage-clear-btn"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  onClick={handleClearTriageDrafts}
+                  title="Clear draft triage inputs"
+                >
+                  🧹 Clear
+                </Button>
+              )}
+              {triageDebugMode && (
+                <span
+                  className="dev-easter-egg-tag dev-easter-egg-tag--header"
+                  title="ODC Easter Egg Debug Mode Active"
+                >
+                  🧪 Dev Mode Active
                 </span>
+              )}
+              <span className="hint">
+                {currentTriage
+                  ? "Correcting this assessment creates an immutable new version."
+                  : "Finalize the assessment before handing the patient to the doctor."}
+              </span>
+            </div>
+          </div>
+
+          {/* Triage Easter Egg / Test Fill Toast */}
+          {triageToast && (
+            <div className="encounter-dev-toast" role="status" aria-live="polite">
+              <div className="dev-toast-content">
+                <span className="dev-toast-icon">⚡</span>
+                <span>{triageToast}</span>
               </div>
-              <Card>
-                <form className="stack" onSubmit={handleTriage}>
-                  <div className="two-column">
-                    <Field label="Systolic blood pressure (mmHg)">
-                      <Input
-                        name="systolicBp"
-                        type="number"
-                        min="40"
-                        max="300"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-systolic`}
-                        defaultValue={triageBloodPressure(
-                          currentTriage?.value,
-                          "systolic",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Diastolic blood pressure (mmHg)">
-                      <Input
-                        name="diastolicBp"
-                        type="number"
-                        min="20"
-                        max="200"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-diastolic`}
-                        defaultValue={triageBloodPressure(
-                          currentTriage?.value,
-                          "diastolic",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Pulse (bpm)">
-                      <Input
-                        name="pulseBpm"
-                        type="number"
-                        min="20"
-                        max="300"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-pulse`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "pulse_bpm",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Respiratory rate (breaths/min)">
-                      <Input
-                        name="respiratoryRate"
-                        type="number"
-                        min="4"
-                        max="100"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-respiratory`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "respiratory_rate",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Temperature (°C)">
-                      <Input
-                        name="temperatureC"
-                        type="number"
-                        min="25"
-                        max="45"
-                        step="0.1"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-temperature`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "temperature_c",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Oxygen saturation (%)">
-                      <Input
-                        name="oxygenSaturation"
-                        type="number"
-                        min="0"
-                        max="100"
-                        required
-                        key={`${currentTriage?.id ?? "new"}-oxygen`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "oxygen_saturation_percent",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Weight (kg)">
-                      <Input
-                        name="weightKg"
-                        type="number"
-                        min="0.1"
-                        max="700"
-                        step="0.1"
-                        key={`${currentTriage?.id ?? "new"}-weight`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "weight_kg",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Height (cm)">
-                      <Input
-                        name="heightCm"
-                        type="number"
-                        min="20"
-                        max="300"
-                        step="0.1"
-                        key={`${currentTriage?.id ?? "new"}-height`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "height_cm",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Pain score (0–10)">
-                      <Input
-                        name="painScore"
-                        type="number"
-                        min="0"
-                        max="10"
-                        key={`${currentTriage?.id ?? "new"}-pain`}
-                        defaultValue={triageValue(
-                          currentTriage?.value,
-                          "pain_score",
-                        )}
-                      />
-                    </Field>
-                    <Field label="Acuity">
-                      <select
-                        className="odyssey-input"
-                        name="acuity"
-                        key={`${currentTriage?.id ?? "new"}-acuity`}
-                        defaultValue={
-                          triageValue(currentTriage?.value, "acuity") ||
-                          "routine"
-                        }
-                      >
-                        <option value="routine">Routine</option>
-                        <option value="urgent">Urgent</option>
-                        <option value="emergency">Emergency</option>
-                      </select>
-                    </Field>
-                  </div>
-                  <Field label="Chief complaint">
-                    <textarea
-                      className="odyssey-input"
-                      name="chiefComplaint"
-                      rows={3}
-                      maxLength={2000}
-                      key={`${currentTriage?.id ?? "new"}-complaint`}
-                      defaultValue={triageValue(
-                        currentTriage?.value,
-                        "chief_complaint",
-                      )}
-                    />
-                  </Field>
-                  <Field label="Triage notes">
-                    <textarea
-                      className="odyssey-input"
-                      name="notes"
-                      rows={4}
-                      maxLength={5000}
-                      key={`${currentTriage?.id ?? "new"}-notes`}
-                      defaultValue={triageValue(currentTriage?.value, "notes")}
-                    />
-                  </Field>
-                  <Button type="submit" disabled={clinicalBusy}>
-                    {clinicalBusy
-                      ? "Saving…"
-                      : currentTriage
-                        ? "Save triage correction"
-                        : "Complete triage"}
-                  </Button>
-                </form>
-              </Card>
-            </section>
+              <button
+                type="button"
+                className="dev-toast-close"
+                onClick={() => setTriageToast(null)}
+                aria-label="Dismiss notification"
+              >
+                ×
+              </button>
+            </div>
           )}
 
-          {(activeTab === "all" || activeTab === "chart") && selectedEncounterId && (
+          <Card>
+            <form className="stack" onSubmit={handleTriage}>
+              <div className="two-column">
+                <Field label="Systolic blood pressure (mmHg)">
+                  <Input
+                    id="triage-systolic-bp"
+                    name="systolicBp"
+                    type="number"
+                    min="40"
+                    max="300"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-systolic`}
+                    value={triageSystolic}
+                    onChange={(e) => {
+                      setTriageSystolic(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Diastolic blood pressure (mmHg)">
+                  <Input
+                    id="triage-diastolic-bp"
+                    name="diastolicBp"
+                    type="number"
+                    min="20"
+                    max="200"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-diastolic`}
+                    value={triageDiastolic}
+                    onChange={(e) => {
+                      setTriageDiastolic(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Pulse (bpm)">
+                  <Input
+                    id="triage-pulse-bpm"
+                    name="pulseBpm"
+                    type="number"
+                    min="20"
+                    max="300"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-pulse`}
+                    value={triagePulse}
+                    onChange={(e) => {
+                      setTriagePulse(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Respiratory rate (breaths/min)">
+                  <Input
+                    id="triage-respiratory-rate"
+                    name="respiratoryRate"
+                    type="number"
+                    min="4"
+                    max="100"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-respiratory`}
+                    value={triageRespiratory}
+                    onChange={(e) => {
+                      setTriageRespiratory(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Temperature (°C)">
+                  <Input
+                    id="triage-temperature-c"
+                    name="temperatureC"
+                    type="number"
+                    min="25"
+                    max="45"
+                    step="0.1"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-temperature`}
+                    value={triageTemp}
+                    onChange={(e) => {
+                      setTriageTemp(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Oxygen saturation (%)">
+                  <Input
+                    id="triage-oxygen-saturation"
+                    name="oxygenSaturation"
+                    type="number"
+                    min="0"
+                    max="100"
+                    required
+                    key={`${currentTriage?.id ?? "new"}-oxygen`}
+                    value={triageOxygen}
+                    onChange={(e) => {
+                      setTriageOxygen(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Weight (kg)">
+                  <Input
+                    id="triage-weight-kg"
+                    name="weightKg"
+                    type="number"
+                    min="0.1"
+                    max="700"
+                    step="0.1"
+                    key={`${currentTriage?.id ?? "new"}-weight`}
+                    value={triageWeight}
+                    onChange={(e) => {
+                      setTriageWeight(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Height (cm)">
+                  <Input
+                    id="triage-height-cm"
+                    name="heightCm"
+                    type="number"
+                    min="20"
+                    max="300"
+                    step="0.1"
+                    key={`${currentTriage?.id ?? "new"}-height`}
+                    value={triageHeight}
+                    onChange={(e) => {
+                      setTriageHeight(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Pain score (0–10)">
+                  <Input
+                    id="triage-pain-score"
+                    name="painScore"
+                    type="number"
+                    min="0"
+                    max="10"
+                    key={`${currentTriage?.id ?? "new"}-pain`}
+                    value={triagePain}
+                    onChange={(e) => {
+                      setTriagePain(e.target.value);
+                      setTriageDirty(true);
+                    }}
+                  />
+                </Field>
+                <Field label="Acuity">
+                  <select
+                    id="triage-acuity"
+                    className="odyssey-input"
+                    name="acuity"
+                    key={`${currentTriage?.id ?? "new"}-acuity`}
+                    value={triageAcuity}
+                    onChange={(e) => {
+                      setTriageAcuity(
+                        e.target.value as "routine" | "urgent" | "emergency",
+                      );
+                      setTriageDirty(true);
+                    }}
+                  >
+                    <option value="routine">Routine</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </Field>
+              </div>
+              <Field
+                label={
+                  <>
+                    Chief complaint
+                    {triageDebugMode ? (
+                      <span className="dev-field-badge">
+                        Dev Mode · Type ODC to randomize
+                      </span>
+                    ) : (
+                      <span className="dev-field-hint">
+                        Tip: Type ODC for Test Fill
+                      </span>
+                    )}
+                  </>
+                }
+              >
+                <textarea
+                  id="triage-chief-complaint"
+                  className="odyssey-input"
+                  name="chiefComplaint"
+                  rows={3}
+                  maxLength={2000}
+                  key={`${currentTriage?.id ?? "new"}-complaint`}
+                  value={triageChiefComplaint}
+                  onChange={(e) =>
+                    handleTriageTextChange("chiefComplaint", e.target.value)
+                  }
+                  placeholder="Primary reason for visit (Easter egg: Type 'ODC' to trigger Test Fill)"
+                />
+              </Field>
+              <Field
+                label={
+                  <>
+                    Triage notes
+                    {triageDebugMode && (
+                      <span className="dev-field-badge">Dev Mode</span>
+                    )}
+                  </>
+                }
+              >
+                <textarea
+                  id="triage-notes"
+                  className="odyssey-input"
+                  name="notes"
+                  rows={4}
+                  maxLength={5000}
+                  key={`${currentTriage?.id ?? "new"}-notes`}
+                  value={triageNotes}
+                  onChange={(e) =>
+                    handleTriageTextChange("notes", e.target.value)
+                  }
+                  placeholder="Initial nurse observations, physical appearance, mobility, precautions"
+                />
+              </Field>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                <Button type="submit" disabled={clinicalBusy}>
+                  {clinicalBusy
+                    ? "Saving…"
+                    : currentTriage
+                      ? "Save triage correction"
+                      : "Complete triage"}
+                </Button>
+                {triageDebugMode && (
+                  <Button
+                    id="odc-triage-quick-randomize-btn"
+                    type="button"
+                    variant="outline"
+                    onClick={applyTestFillTriage}
+                    title="Randomize triage vital signs and assessment"
+                  >
+                    ⚡ Test Fill (Randomize)
+                  </Button>
+                )}
+              </div>
+            </form>
+          </Card>
+        </section>
+      )}
+
+          {activeTab === "chart" && !selectedEncounterId && (
+            <div className="vesper-empty-card" style={{ marginTop: "24px" }}>
+              <div className="vesper-empty-icon-wrap">
+                <Stethoscope size={32} />
+              </div>
+              <h2 className="vesper-card__title" style={{ fontSize: "1.25rem", margin: "8px 0" }}>
+                No Active Consultation
+              </h2>
+              <p className="vesper-card__subtitle" style={{ maxWidth: "440px", margin: "0 auto 24px", lineHeight: "1.5" }}>
+                There is no patient currently open in consultation. Select an arrived patient from your Daily Queue to start a new consultation or resume an in-progress visit.
+              </p>
+              <button
+                type="button"
+                className="vesper-btn-primary"
+                onClick={() => setActiveTab("queue")}
+              >
+                Open Daily Queue
+              </button>
+            </div>
+          )}
+
+          {activeTab === "chart" && selectedEncounterId && (
             <section aria-labelledby="chart-heading">
               <div className="section-heading">
                 <div>
@@ -2027,7 +2344,7 @@ export default function Home() {
             </section>
           )}
 
-          {(activeTab === "all" || activeTab === "schedule") && canPrescribe && (
+          {activeTab === "schedule" && canPrescribe && (
             <section>
               <div className="section-heading">
                 <div>

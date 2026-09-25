@@ -1,9 +1,22 @@
 "use client";
 
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  FileText,
+  FlaskConical,
+  HandCoins,
+  LayoutDashboard,
+  LogOut,
+  Stethoscope,
+  Users,
+  Video,
+} from "lucide-react";
 import Link from "next/link";
-import { Button, DepartmentTag } from "@odyssey/ui";
+import React from "react";
 
-export type WorkspaceTab = "all" | "schedule" | "queue" | "chart" | "diagnostics";
+export type WorkspaceTab = "all" | "queue" | "chart" | "diagnostics" | "schedule";
 
 interface WorkspaceHeaderProps {
   signedInAs: string | null;
@@ -27,39 +40,125 @@ const tabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: "schedule", label: "Availability" },
 ];
 
-export function WorkspaceHeader({ signedInAs, department, liveStatus, activeTab, onTabChange, queueCount, notificationsCount, hasActiveEncounter, onSignOut }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({
+  signedInAs,
+  department,
+  liveStatus,
+  activeTab,
+  onTabChange,
+  queueCount,
+  notificationsCount,
+  hasActiveEncounter,
+  onSignOut,
+}: WorkspaceHeaderProps) {
+  // Extract doctor name from email or signedInAs
+  const doctorDisplayName = signedInAs
+    ? `Dr. ${signedInAs.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}`
+    : "Dr. Clinician";
+
+  const initials = doctorDisplayName
+    .replace(/^Dr\.\s*/, "")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase())
+    .slice(0, 2)
+    .join("") || "DR";
+
   return (
-    <header className="workspace-header">
-      <div className="workspace-header-bar">
-        <div className="workspace-title-group">
-          <p className="eyebrow">Provider workspace</p>
-          <h1>Clinical workspace</h1>
-          <div className="workspace-meta-badges">
-            <span>{signedInAs}</span>
-            {department ? <DepartmentTag>{department}</DepartmentTag> : null}
-            <span className="realtime-status">Queue: {liveStatus.toLowerCase()}</span>
+    <header className="vesper-provider-header">
+      {/* Top Header Row */}
+      <div className="vesper-provider-header__top">
+        <div className="vesper-provider-title-group">
+          <div className="vesper-doctor-avatar">{initials}</div>
+          <div>
+            <div className="vesper-provider-eyebrow-row">
+              <span className="vesper-provider-eyebrow">Provider Workspace</span>
+              {department && (
+                <span className="vesper-dept-tag">{department}</span>
+              )}
+              <span className="vesper-live-indicator">
+                <span className="vesper-live-dot" />
+                <span>Queue: {liveStatus.toLowerCase()}</span>
+              </span>
+            </div>
+            <h1 className="vesper-provider-h1">{doctorDisplayName}</h1>
           </div>
         </div>
-        <nav className="session-actions" aria-label="Account links">
-          <Link href="/teleconsult">Video rooms</Link>
-          <Link href="/payouts">Payouts</Link>
-          <Button size="sm" variant="ghost" onClick={onSignOut} aria-label="Log out" title="Log out">
-            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: "middle" }}>
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            Log out
-          </Button>
+
+        <nav className="vesper-provider-header__actions" aria-label="Quick links">
+          <Link
+            href="/teleconsult"
+            className="vesper-header-link"
+            title="Video Consultation Rooms"
+          >
+            <Video size={16} />
+            <span>Video rooms</span>
+          </Link>
+          <Link
+            href="/payouts"
+            className="vesper-header-link"
+            title="Doctor Payouts & Entitlements"
+          >
+            <HandCoins size={16} />
+            <span>Payouts</span>
+          </Link>
+          <button
+            type="button"
+            className="vesper-provider-logout-btn"
+            onClick={onSignOut}
+            aria-label="Sign out"
+            title="Sign out of clinical workspace"
+          >
+            <LogOut size={15} />
+            <span>Log out</span>
+          </button>
         </nav>
       </div>
-      <nav className="workspace-nav-tabs" aria-label="Provider workspace sections">
+
+      {/* Horizontal Tab Navigation (Matches Vesper Standard UI) */}
+      <nav
+        className="workspace-nav-tabs vesper-tab-bar"
+        aria-label="Doctor workspace sections"
+      >
         {tabs.map((tab) => {
-          const count = tab.id === "queue" ? queueCount : tab.id === "diagnostics" ? notificationsCount : 0;
+          const isActive = activeTab === tab.id;
+          const count =
+            tab.id === "queue"
+              ? queueCount
+              : tab.id === "diagnostics"
+              ? notificationsCount
+              : 0;
+
           return (
-            <Button key={tab.id} size="sm" variant={activeTab === tab.id ? "default" : "ghost"} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => onTabChange(tab.id)}>
-              {tab.label}{count ? ` (${count})` : ""}{tab.id === "chart" && hasActiveEncounter ? " — Active" : ""}
-            </Button>
+            <button
+              key={tab.id}
+              type="button"
+              className={`vesper-tab-btn ${
+                isActive ? "vesper-tab-btn--active" : "vesper-tab-btn--inactive"
+              }`}
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => onTabChange(tab.id)}
+            >
+              <span>{tab.label}</span>
+              {count > 0 && (
+                <span
+                  className={`vesper-tab-badge ${
+                    isActive ? "vesper-tab-badge--active" : "vesper-tab-badge--inactive"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
+              {tab.id === "chart" && hasActiveEncounter && (
+                <span
+                  className={`vesper-tab-badge ${
+                    isActive ? "vesper-tab-badge--active" : "vesper-tab-badge--highlight"
+                  }`}
+                >
+                  Active
+                </span>
+              )}
+            </button>
           );
         })}
       </nav>
