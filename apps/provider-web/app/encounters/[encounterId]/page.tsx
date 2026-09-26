@@ -1,5 +1,32 @@
 "use client";
 
+/**
+ * Odyssey Healthcare OS - Focused Encounter Recording Screen
+ *
+ * BREAKPOINT / ORIENTATION MATRIX:
+ * ---------------------------------------------------------------------------------------------------------------------
+ * Device / Breakpoint           | Documentation Mode | Macro Layout Structure | Panel Behavior
+ * ---------------------------------------------------------------------------------------------------------------------
+ * <768px (Phone)                | Auto-forced Simple | 1-Column Stacked       | Patient/vitals collapsible drawer,
+ *                               | (read-only switch) |                        | full-width SOAP note, stacked actions.
+ * ---------------------------------------------------------------------------------------------------------------------
+ * 768–1024px Portrait           | Doctor Selectable  | 2-Zone Vertical Stack  | Zone 1 (Top): Collapsible patient/vitals
+ * (Tablet Portrait, iPad P)     | (Persisted pref)   |                        | Zone 2 (Bottom): Documentation workspace
+ *                               |                    |                        | full width; figure & region stack.
+ * ---------------------------------------------------------------------------------------------------------------------
+ * 768–1024px Landscape          | Doctor Selectable  | 3-Column Grid          | Col 1 (22%, min 280px): Sticky vitals/pt
+ * (iPad / Tablet Landscape)     | (Persisted pref)   | (Proportional fr)      | Col 2 (1fr): Flex-scaled anatomy figure
+ *                               |                    |                        | Col 3 (26%, min 260px): Region panel.
+ * ---------------------------------------------------------------------------------------------------------------------
+ * 1024–1366px Landscape         | Doctor Selectable  | 3-Column Grid          | Vitals cards reflow 2-up in Col 1;
+ * (Small Laptop / iPad Pro L)   | (Persisted pref)   | (Expanded breathing)   | Orders form reflows to 2-col fields.
+ * ---------------------------------------------------------------------------------------------------------------------
+ * >1366px (Desktop)             | Doctor Selectable  | 3-Column Fluid Grid    | Middle documentation panel (1fr) grows
+ *                               | (Persisted pref)   | (Zero dead gutters)    | to absorb space without dead margins.
+ * ---------------------------------------------------------------------------------------------------------------------
+ * Sizing governed by @container encounter (inline-size) with @media (orientation: landscape) guards.
+ */
+
 import {
   createDiagnosticServiceRequest,
   createBrowserSupabaseClient,
@@ -63,6 +90,9 @@ import {
 } from "react";
 import { EncounterDevBar } from "../../components/EncounterDevBar";
 import { EncounterSoapEditor } from "../../components/EncounterSoapEditor";
+import { ClinicalDocumentationWorkspace } from "../../components/ClinicalDocumentationWorkspace";
+import { ClinicalOrdersAndCharges } from "../../components/ClinicalOrdersAndCharges";
+import { LongitudinalRecord } from "../../components/LongitudinalRecord";
 import {
   generateRandomEncounterData,
   isDeveloperModeActive,
@@ -200,7 +230,8 @@ export default function EncounterRecordingPage() {
   }, []);
 
   useEffect(() => {
-    const mobile = window.matchMedia("(max-width: 640px)");
+    // Phone threshold is strictly < 768px. Tablets (768px+) and desktop remain doctor-selectable.
+    const mobile = window.matchMedia("(max-width: 767px)");
     const update = () => setForceSimpleMode(mobile.matches);
     update();
     mobile.addEventListener("change", update);
@@ -896,35 +927,54 @@ export default function EncounterRecordingPage() {
       {encounter && patient && records && (
         <div className="encounter-layout">
           <aside className="encounter-context" aria-label="Patient details and vitals">
-            <ClinicalPatientCard
-              bloodType={patient.blood_type}
-              birthDate={patient.birth_date}
-              compact
-              displayName={patient.displayName}
-              gender={patient.gender}
-              photoUrl={patient.photo_url}
-              planName={jsonDisplay(activeCoverage?.payor) ?? activeCoverage?.coverage_type?.replaceAll("_", " ")}
-              policyNumber={activeCoverage?.subscriber_id}
-              qrPayload={createPatientQrPayload(organizationId ?? encounter.organization_id, patient.id)}
-            />
-            <ClinicalVitalsPanel readings={vitalReadings} />
+            <details className="encounter-context-drawer" open>
+              <summary className="encounter-context-drawer__summary">
+                <div className="encounter-context-drawer__header">
+                  <span className="eyebrow">Patient &amp; vitals</span>
+                  <strong>{patient.displayName}</strong>
+                  <span className="encounter-context-drawer__meta">{patientDetails}</span>
+                </div>
+                <span className="encounter-context-drawer__chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div className="encounter-context-drawer__content">
+                <ClinicalPatientCard
+                  bloodType={patient.blood_type}
+                  birthDate={patient.birth_date}
+                  compact
+                  displayName={patient.displayName}
+                  gender={patient.gender}
+                  photoUrl={patient.photo_url}
+                  planName={jsonDisplay(activeCoverage?.payor) ?? activeCoverage?.coverage_type?.replaceAll("_", " ")}
+                  policyNumber={activeCoverage?.subscriber_id}
+                  qrPayload={createPatientQrPayload(organizationId ?? encounter.organization_id, patient.id)}
+                />
+                <ClinicalVitalsPanel readings={vitalReadings} />
+              </div>
+            </details>
           </aside>
 
           <section className="encounter-recording" aria-labelledby="encounter-recording-heading">
-            <div className="encounter-modebar">
-              <div>
-                <p className="eyebrow">Documentation workspace</p>
-                <h2 id="encounter-recording-heading">{effectiveMode === "visual" ? "Visual assessment" : "SOAP note"}</h2>
-              </div>
-              <div className="encounter-mode-toggle" role="group" aria-label="Encounter documentation mode">
-                <button aria-pressed={effectiveMode === "visual"} disabled={forceSimpleMode} onClick={() => void selectEncounterMode("visual")} type="button">Visual</button>
-                <button aria-pressed={effectiveMode === "simple"} onClick={() => void selectEncounterMode("simple")} type="button">Simple</button>
-              </div>
-            </div>
-            {forceSimpleMode ? <p className="encounter-mode-note">Simple mode is used on compact phone viewports.</p> : null}
-
-            {effectiveMode === "visual" ? (
-              <section className="encounter-assessment-workspace" aria-label="Visual assessment workspace">
+            <ClinicalDocumentationWorkspace
+              forceSimpleMode={forceSimpleMode}
+              headingId="encounter-recording-heading"
+              mode={effectiveMode}
+              onModeChange={(mode) => void selectEncounterMode(mode)}
+              simpleContent={
+                <EncounterSoapEditor
+                  busy={busy}
+                  canEdit={encounter.status === "in_progress"}
+                  currentNoteId={currentSoapNote?.id}
+                  debugMode={debugMode}
+                  encounterId={encounterId}
+                  onChange={handleSoapChange}
+                  onSubmit={saveNote}
+                  onTestFillAll={() => applyTestFill("all")}
+                  onTestFillSoap={() => applyTestFill("soap")}
+                  value={soapInput}
+                />
+              }
+              visualContent={
+                <section className="encounter-assessment-workspace" aria-label="Visual assessment workspace">
                 <MusculoskeletalFigure
                   activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]}
                   anatomyView={anatomyView}
@@ -941,30 +991,20 @@ export default function EncounterRecordingPage() {
                   selectedRegion={selectedRegion}
                 />
               </section>
-            ) : (
-              <EncounterSoapEditor
-                busy={busy}
-                canEdit={encounter.status === "in_progress"}
-                currentNoteId={currentSoapNote?.id}
-                debugMode={debugMode}
-                encounterId={encounterId}
-                onChange={handleSoapChange}
-                onSubmit={saveNote}
-                onTestFillAll={() => applyTestFill("all")}
-                onTestFillSoap={() => applyTestFill("soap")}
-                value={soapInput}
-              />
-            )}
+              }
+            />
 
             {encounter.status === "in_progress" && (
-              <section className="encounter-actions" aria-labelledby="encounter-actions-heading">
-                <div className="encounter-section-heading">
-                  <div>
-                    <p className="eyebrow">Orders and charges</p>
-                    <h2 id="encounter-actions-heading">Encounter actions</h2>
-                  </div>
-                  <div className="encounter-heading-aside">
-                    {debugMode && (
+              <ClinicalOrdersAndCharges
+                actions={[
+                  ...(canPrescribe ? [{ id: "prescription" as const, label: "Prescription" }, { id: "certificate" as const, label: "Medical certificate" }] : []),
+                  ...(canOrderDiagnostics ? [{ id: "laboratory" as const, label: "Laboratory order" }, { id: "referral" as const, label: "Specialist referral" }] : []),
+                  ...(canTagInventory ? [{ id: "tagging" as const, label: "Item tagging" }] : []),
+                ]}
+                activeAction={activeAction}
+                onActionChange={setActiveAction}
+                headingAside={
+                    debugMode ? (
                       <Button
                         id="odc-orders-test-fill-btn"
                         size="sm"
@@ -975,27 +1015,9 @@ export default function EncounterRecordingPage() {
                       >
                         ⚡ Test Fill All Orders
                       </Button>
-                    )}
-                    <span>Permission-based</span>
-                  </div>
-                </div>
-                <div className="encounter-action-launcher" role="group" aria-label="Choose an encounter action">
-                  {canPrescribe ? (
-                    <button aria-pressed={activeAction === "prescription"} onClick={() => setActiveAction("prescription")} type="button">Prescription</button>
-                  ) : null}
-                  {canPrescribe ? (
-                    <button aria-pressed={activeAction === "certificate"} onClick={() => setActiveAction("certificate")} type="button">Medical certificate</button>
-                  ) : null}
-                  {canOrderDiagnostics ? (
-                    <button aria-pressed={activeAction === "laboratory"} onClick={() => setActiveAction("laboratory")} type="button">Laboratory order</button>
-                  ) : null}
-                  {canOrderDiagnostics ? (
-                    <button aria-pressed={activeAction === "referral"} onClick={() => setActiveAction("referral")} type="button">Specialist referral</button>
-                  ) : null}
-                  {canTagInventory ? (
-                    <button aria-pressed={activeAction === "tagging"} onClick={() => setActiveAction("tagging")} type="button">Item tagging</button>
-                  ) : null}
-                </div>
+                    ) : null
+                }
+              >
                 <div className="encounter-actions-grid">
                   {canPrescribe && activeAction === "prescription" && (
                     <section className="encounter-action-card">
@@ -1013,7 +1035,7 @@ export default function EncounterRecordingPage() {
                           </button>
                         )}
                       </div>
-                      <form className="stack" onSubmit={issueEncounterPrescription}>
+                      <form className="stack encounter-action-form" onSubmit={issueEncounterPrescription}>
                         <Field label="Medication">
                           <Input
                             id="odc-rx-medication"
@@ -1037,7 +1059,7 @@ export default function EncounterRecordingPage() {
                             required
                           />
                         </Field>
-                        <Field label="Note">
+                        <Field className="encounter-field-full" label="Note">
                           <Input
                             id="odc-rx-note"
                             name="note"
@@ -1046,7 +1068,7 @@ export default function EncounterRecordingPage() {
                             onChange={(e) => setRxNote(e.target.value)}
                           />
                         </Field>
-                        <Button disabled={busy} type="submit">Issue prescription</Button>
+                        <Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button>
                       </form>
                       <CurrentRecords title="Issued prescriptions" items={records.medicationRequests.filter((item) => item.encounter_id === encounterId)} render={(item) => <><strong>{item.medication_display ?? item.medication_code}</strong><p>{dosageText(item.dosage_instruction)}</p>{item.note && <p>{item.note}</p>}<Button className="encounter-export-button" onClick={() => previewPrescription(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
                     </section>
@@ -1067,7 +1089,7 @@ export default function EncounterRecordingPage() {
                           </button>
                         )}
                       </div>
-                      <form className="stack" onSubmit={issueEncounterCertificate}>
+                      <form className="stack encounter-action-form" onSubmit={issueEncounterCertificate}>
                         <Field label="Certificate title">
                           <Input
                             id="odc-cert-title"
@@ -1078,7 +1100,7 @@ export default function EncounterRecordingPage() {
                             required
                           />
                         </Field>
-                        <Field label="Statement">
+                        <Field className="encounter-field-full" label="Statement">
                           <textarea
                             id="odc-cert-statement"
                             className="odyssey-input"
@@ -1090,7 +1112,7 @@ export default function EncounterRecordingPage() {
                             required
                           />
                         </Field>
-                        <Button disabled={busy} type="submit">Issue certificate</Button>
+                        <Button className="encounter-form-submit" disabled={busy} type="submit">Issue certificate</Button>
                       </form>
                       <CurrentRecords title="Issued medical certificates" items={records.documentReferences.filter((item) => item.encounter_id === encounterId && item.type_code === "medical-certificate")} render={(item) => <><strong>{item.content_title ?? item.type_display ?? "Medical certificate"}</strong><p>{item.description ?? "No description recorded."}</p><Button className="encounter-export-button" onClick={() => previewCertificate(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
                     </section>
@@ -1111,7 +1133,7 @@ export default function EncounterRecordingPage() {
                           </button>
                         )}
                       </div>
-                      <form className="stack" onSubmit={createEncounterRequest}>
+                      <form className="stack encounter-action-form" onSubmit={createEncounterRequest}>
                         <input name="category" type="hidden" value="laboratory" />
                         <Field label="Laboratory service">
                           <select
@@ -1134,7 +1156,7 @@ export default function EncounterRecordingPage() {
                           value={labPriority}
                           onChange={(val) => setLabPriority(val)}
                         />
-                        <Field label="Clinical note">
+                        <Field className="encounter-field-full" label="Clinical note">
                           <textarea
                             id="odc-lab-note"
                             className="odyssey-input"
@@ -1145,7 +1167,7 @@ export default function EncounterRecordingPage() {
                             onChange={(e) => setLabNote(e.target.value)}
                           />
                         </Field>
-                        <Button disabled={busy} type="submit">Place lab order</Button>
+                        <Button className="encounter-form-submit" disabled={busy} type="submit">Place lab order</Button>
                       </form>
                     </section>
                   )}
@@ -1165,7 +1187,7 @@ export default function EncounterRecordingPage() {
                           </button>
                         )}
                       </div>
-                      <form className="stack" onSubmit={createEncounterRequest}>
+                      <form className="stack encounter-action-form" onSubmit={createEncounterRequest}>
                         <input name="category" type="hidden" value="referral" />
                         <Field label="Specialist" hint="The affiliated clinic or hospital is shown with each specialist.">
                           <select
@@ -1188,7 +1210,7 @@ export default function EncounterRecordingPage() {
                           value={referralPriority}
                           onChange={(val) => setReferralPriority(val as "routine" | "urgent" | "asap")}
                         />
-                        <Field label="Clinical note">
+                        <Field className="encounter-field-full" label="Clinical note">
                           <textarea
                             id="odc-referral-note"
                             className="odyssey-input"
@@ -1199,7 +1221,7 @@ export default function EncounterRecordingPage() {
                             onChange={(e) => setReferralNote(e.target.value)}
                           />
                         </Field>
-                        <Button disabled={busy} type="submit">Place referral</Button>
+                        <Button className="encounter-form-submit" disabled={busy} type="submit">Place referral</Button>
                       </form>
                     </section>
                   )}
@@ -1220,7 +1242,7 @@ export default function EncounterRecordingPage() {
                         )}
                       </div>
                       <p className="hint">Tagging holds the item for this patient and adds it to the draft bill.</p>
-                      <form className="stack" onSubmit={tagEncounterItem}>
+                      <form className="stack encounter-action-form" onSubmit={tagEncounterItem}>
                         <Field label="Department">
                           <select
                             id="odc-tag-department-select"
@@ -1272,7 +1294,7 @@ export default function EncounterRecordingPage() {
                             required
                           />
                         </Field>
-                        <Button disabled={busy} type="submit">Tag item</Button>
+                        <Button className="encounter-form-submit" disabled={busy} type="submit">Tag item</Button>
                       </form>
                       <CurrentRecords title="Tagged items" items={(inventory?.usages ?? []).filter((usage) => usage.encounter_id === encounterId)} render={(usage) => { const item = inventory?.items.find((candidate) => candidate.id === usage.item_id); return <><strong>{item?.name ?? "Item"}</strong><p>{Number(usage.quantity).toLocaleString()} {item?.unit_of_measure ?? "units"} · {usage.currency} {(Number(usage.unit_price) * Number(usage.quantity)).toFixed(2)}</p></>; }} />
                     </section>
@@ -1289,15 +1311,10 @@ export default function EncounterRecordingPage() {
                     {!records.medicationRequests.some((item) => item.encounter_id === encounterId) && !records.documentReferences.some((item) => item.encounter_id === encounterId && item.type_code === "medical-certificate") && !records.serviceRequests.some((item) => item.encounter_id === encounterId) && !(inventory?.usages ?? []).some((item) => item.encounter_id === encounterId) ? <li className="is-empty">No orders, documents, or tagged items yet.</li> : null}
                   </ul>
                 </section>
-              </section>
+              </ClinicalOrdersAndCharges>
             )}
 
-            <details className="encounter-history" id="medical-history-heading">
-              <summary>
-                <span><span className="eyebrow">Longitudinal record</span><strong>Previous medical history</strong></span>
-                <span>{priorEncounters.length} earlier {priorEncounters.length === 1 ? "encounter" : "encounters"}</span>
-              </summary>
-              <div className="encounter-history__content">
+            <LongitudinalRecord count={priorEncounters.length}>
                 <label className="encounter-history__search" htmlFor="encounter-history-search">
                   <span>Search earlier encounters</span>
                   <Input id="encounter-history-search" onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search diagnosis, medication, order…" type="search" value={historyQuery} />
@@ -1305,8 +1322,7 @@ export default function EncounterRecordingPage() {
                 {!priorEncounters.length ? <p className="hint">No earlier encounters are recorded at this clinic.</p> : filteredPriorEncounters.length ? filteredPriorEncounters.map((prior) => (
                   <HistoricalEncounter encounter={prior} key={prior.id} records={records} />
                 )) : <p className="hint">No earlier encounter matches this search.</p>}
-              </div>
-            </details>
+            </LongitudinalRecord>
           </section>
         </div>
       )}

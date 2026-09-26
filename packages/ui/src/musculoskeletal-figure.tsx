@@ -228,6 +228,7 @@ export function MusculoskeletalFigure({
           viewBox="0 0 280 560"
           role="group"
           aria-label={`${activeView} view musculoskeletal body map`}
+          preserveAspectRatio="xMidYMid meet"
         >
           <svg
             aria-hidden="true"

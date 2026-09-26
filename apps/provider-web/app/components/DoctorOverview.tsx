@@ -253,8 +253,31 @@ export function DoctorOverview({
                               <span className="vesper-patient-name">
                                 {item.patientName || "Unnamed Patient"}
                               </span>
-                              <div style={{ fontSize: "11px", color: "#94A3B8" }}>
-                                {item.service_type || "General Consultation"}
+                              <div className="vesper-patient-meta">
+                                <span className="vesper-service-name">
+                                  {item.service_type || "General Consultation"}
+                                </span>
+                                <span
+                                  className={`vesper-visit-mode ${
+                                    item.delivery_mode === "virtual"
+                                      ? "vesper-visit-mode--virtual"
+                                      : "vesper-visit-mode--in-person"
+                                  }`}
+                                  aria-label={
+                                    item.delivery_mode === "virtual"
+                                      ? "Teleconsult visit"
+                                      : "In-person visit"
+                                  }
+                                >
+                                  {item.delivery_mode === "virtual" ? (
+                                    <Video size={12} aria-hidden="true" />
+                                  ) : (
+                                    <Stethoscope size={12} aria-hidden="true" />
+                                  )}
+                                  {item.delivery_mode === "virtual"
+                                    ? "Teleconsult"
+                                    : "In person"}
+                                </span>
                               </div>
                             </div>
                           </div>

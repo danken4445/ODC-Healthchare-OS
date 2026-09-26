@@ -1096,6 +1096,53 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
   box-shadow: 0 0 0 3px #d1fae5;
 }
 
+/* Teleconsult composes the focused-encounter workspace beneath the live room. */
+.teleconsult-shell .provider-call-status {
+  margin: .75rem 0 1rem;
+  border-color: var(--odyssey-border);
+  border-radius: .5rem;
+  background: var(--odyssey-card);
+  color: var(--odyssey-muted-foreground);
+}
+.teleconsult-video-panel,
+.teleconsult-start-state {
+  margin-bottom: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--odyssey-border);
+  border-radius: .5rem;
+  background: var(--odyssey-card);
+}
+.teleconsult-video-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .85rem;
+}
+.teleconsult-video-panel__header h2,
+.teleconsult-video-panel__header p,
+.teleconsult-start-state h2,
+.teleconsult-start-state p { margin: 0; }
+.teleconsult-video-panel__header h2 { margin-top: .2rem; font-size: 1rem; }
+.teleconsult-video-panel__header > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.teleconsult-video-panel .odyssey-teleconsult-video {
+  min-height: clamp(20rem, 52vh, 38rem);
+  border-radius: .4rem;
+  box-shadow: none;
+}
+.teleconsult-start-state { display: grid; gap: .75rem; justify-items: start; }
+.teleconsult-start-state p { color: var(--odyssey-muted-foreground); line-height: 1.5; }
+.teleconsult-clinical-layout { margin-top: 0; }
+
+@media (max-width: 767px) {
+  .teleconsult-video-panel,
+  .teleconsult-start-state { padding: .85rem; }
+  .teleconsult-video-panel__header { align-items: stretch; flex-direction: column; }
+  .teleconsult-video-panel__header > div:last-child { justify-content: stretch; }
+  .teleconsult-video-panel__header > div:last-child .odyssey-button { flex: 1 1 8rem; }
+  .teleconsult-video-panel .odyssey-teleconsult-video { min-height: 24rem; }
+}
+
 .provider-call-layout {
   display: grid;
   align-items: stretch;
@@ -1399,10 +1446,19 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
   text-decoration: none;
 }
 
+:root {
+  --encounter-header-height: 5.25rem;
+  --encounter-sticky-top: 5.5rem;
+  --odyssey-anatomy-offset: 13.5rem;
+}
+
 .encounter-shell {
-  width: min(100% - 2rem, 100rem);
-  margin: 1rem auto;
+  width: calc(100% - clamp(1rem, 2.5vw, 2.5rem));
+  max-width: 125rem;
+  margin: 0.5rem auto 2rem;
   color: var(--odyssey-foreground);
+  container-type: inline-size;
+  container-name: encounter;
 }
 .encounter-header {
   position: sticky;
@@ -1425,9 +1481,12 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
 .encounter-completion-control { display: grid; justify-items: end; gap: .3rem; }
 .encounter-completion-control > span { max-width: 17rem; color: var(--odyssey-amber-text); font-size: .72rem; line-height: 1.35; text-align: right; }
 .encounter-status { min-height: 1.4rem; margin: .75rem 0; color: var(--odyssey-muted-foreground); font-size: .875rem; }
-.encounter-layout { display: grid; grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr); align-items: start; gap: 1rem; }
+.encounter-layout { display: grid; grid-template-columns: 1fr; align-items: start; gap: 1rem; min-width: 0; }
 .encounter-context, .encounter-recording { min-width: 0; }
-.encounter-context { position: sticky; top: 6.75rem; display: grid; gap: 1rem; }
+.encounter-context { position: static; display: grid; gap: 1rem; }
+.encounter-context-drawer { display: contents; }
+.encounter-context-drawer__summary { display: none !important; }
+.encounter-context-drawer__content { display: grid; gap: 1rem; }
 .encounter-recording { display: grid; gap: 1rem; }
 .encounter-context-section { padding: 1.1rem; border-bottom: 1px solid var(--odyssey-border); }
 .encounter-context-section:last-child { border-bottom: 0; }
@@ -1455,14 +1514,15 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
 .encounter-note-form textarea:focus { outline: 3px solid color-mix(in srgb, var(--odyssey-focus) 30%, transparent); border-color: var(--odyssey-primary); }
 .encounter-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .75rem; }
 .encounter-note-actions p { margin: 0; color: var(--odyssey-muted-foreground); font-size: .78rem; }
-.encounter-assessment-workspace { display: grid; grid-template-columns: minmax(23rem, 1.2fr) minmax(18rem, .8fr); align-items: start; gap: 1rem; }
-.encounter-assessment-workspace .odyssey-anatomy { --odyssey-anatomy-height: clamp(24rem, 52dvh, 32rem); }
+.encounter-assessment-workspace { display: grid; grid-template-columns: 1fr; align-items: start; gap: 1rem; min-width: 0; }
+.encounter-assessment-workspace .odyssey-anatomy { height: fit-content; min-height: 0; }
 .encounter-actions { margin-top: 0; }
 .encounter-action-launcher { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
 .encounter-action-launcher button { min-height: 2.75rem; padding: .45rem .75rem; border: 1px solid var(--odyssey-border); border-radius: .35rem; background: var(--odyssey-background); color: var(--odyssey-foreground); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; }
 .encounter-action-launcher button[aria-pressed="true"] { border-color: var(--odyssey-primary); background: var(--odyssey-primary); color: var(--odyssey-primary-foreground); }
 .encounter-action-launcher button:focus-visible { outline: 3px solid var(--odyssey-focus); outline-offset: 2px; }
-.encounter-actions-grid { display: grid; grid-template-columns: minmax(0, 42rem); gap: 1rem; margin-top: 1rem; }
+.encounter-actions-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; width: 100%; }
+.encounter-action-card form.stack, .encounter-action-form { display: grid; grid-template-columns: 1fr; gap: 0.85rem; }
 .encounter-action-card { min-width: 0; padding: 1rem; border: 1px solid var(--odyssey-border); border-radius: .4rem; background: var(--odyssey-background); }
 .encounter-action-card h3 { margin: 0 0 1rem; font-size: .95rem; }
 .encounter-action-card .hint { margin-top: -.4rem; font-size: .8rem; line-height: 1.4; }
@@ -1810,32 +1870,380 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
   }
 }
 
-@media (max-width: 1199px) {
-  .encounter-layout { grid-template-columns: 1fr; gap: 1rem; }
-  .encounter-context { position: static; grid-template-columns: minmax(16rem, .9fr) minmax(20rem, 1.1fr); align-items: start; }
+/* --------------------------------------------------------------------------
+   Responsive Encounter Layout Optimization
+   Matrix:
+   - <768px (Phone): 1-column stacked, Simple Mode forced.
+   - 768–1024px Portrait (Tablet portrait): 2-zone stack (top = collapsible vitals, bottom = workspace).
+   - 768–1024px Landscape (iPad/tablet landscape): 3-column proportional grid (22% / 1fr / 26%).
+   - 1024–1366px Landscape (Small laptop / iPad Pro landscape): same 3-column grid, vitals flow 2-up, orders 2-col.
+   - >1366px (Desktop): 3-column grid with fluid 1fr middle workspace absorbing all extra space.
+   -------------------------------------------------------------------------- */
+
+/*
+ * 768–1024px Portrait (Tablet Portrait):
+ * Two-zone stack: Vitals/patient panel on top (collapsible), documentation workspace full width below.
+ */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .encounter-layout {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+  .encounter-context {
+    position: static;
+    grid-column: 1;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .encounter-context-drawer {
+    display: block;
+    background: var(--odyssey-card);
+    border: 1px solid var(--odyssey-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+  .encounter-context-drawer__summary {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 2.875rem;
+    padding: 0.75rem 1rem;
+    background: var(--odyssey-muted);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 700;
+  }
+  .encounter-context-drawer__summary:focus-visible {
+    outline: 3px solid var(--odyssey-focus);
+    outline-offset: -2px;
+  }
+  .encounter-context-drawer__header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .encounter-context-drawer__header .eyebrow {
+    margin: 0;
+  }
+  .encounter-context-drawer__meta {
+    color: var(--odyssey-muted-foreground);
+    font-size: 0.8125rem;
+    font-weight: normal;
+  }
+  .encounter-context-drawer__chevron {
+    color: var(--odyssey-primary);
+    font-size: 1.1rem;
+    font-weight: 700;
+    transition: transform 0.2s ease;
+  }
+  .encounter-context-drawer[open] .encounter-context-drawer__chevron {
+    transform: rotate(180deg);
+  }
+  .encounter-context-drawer__content {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1fr) minmax(18rem, 1.4fr);
+    gap: 1rem;
+    padding: 1rem;
+    border-top: 1px solid var(--odyssey-border);
+  }
+  .encounter-recording {
+    grid-column: 1;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .encounter-assessment-workspace {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .encounter-assessment-workspace .odyssey-anatomy {
+    min-height: 0;
+  }
 }
 
-@media (max-width: 900px), (orientation: portrait) and (max-width: 1199px) {
-  .encounter-assessment-workspace { grid-template-columns: 1fr; }
-  .encounter-assessment-workspace .odyssey-anatomy { --odyssey-anatomy-height: clamp(23rem, 48dvh, 30rem); }
+/*
+ * Landscape Proportional 3-Column Grid:
+ * 768–1024px Landscape, 1024–1366px Landscape, and >1366px Desktop
+ * Columns sized by fr ratio not fixed px:
+ * Col 1: minmax(280px, 22%) - Patient details & vitals (sticky)
+ * Col 2: minmax(0, 1fr) - Middle documentation workspace (absorbs extra width)
+ * Col 3: minmax(260px, 26%) - Region assessment panel
+ */
+@media (min-width: 768px) and (orientation: landscape), (min-width: 1025px) {
+  .encounter-layout {
+    grid-template-columns: minmax(280px, 22%) minmax(0, 1fr) minmax(260px, 26%);
+    align-items: start;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+  }
+
+  .encounter-context {
+    position: sticky;
+    top: var(--encounter-sticky-top);
+    max-height: calc(100vh - var(--encounter-sticky-top) - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    grid-column: 1;
+  }
+
+  .encounter-context .odyssey-clinical-vitals {
+    max-height: calc(100vh - var(--encounter-sticky-top) - 12rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .encounter-recording {
+    grid-column: 2 / 4;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 26%);
+    grid-template-columns: subgrid;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    align-items: start;
+    min-width: 0;
+  }
+
+  .encounter-modebar,
+  .encounter-mode-note {
+    grid-column: 1 / -1;
+  }
+
+  .encounter-assessment-workspace {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 26%);
+    grid-template-columns: subgrid;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    align-items: start;
+    min-width: 0;
+  }
+
+  .encounter-assessment-workspace > .odyssey-anatomy {
+    grid-column: 1;
+    min-width: 0;
+    height: fit-content;
+  }
+
+  .encounter-assessment-workspace > .odyssey-region-panel {
+    grid-column: 2;
+    min-width: 0;
+    height: fit-content;
+  }
+
+  .encounter-soap-editor {
+    grid-column: 1 / -1;
+  }
+
+  .encounter-actions,
+  .encounter-history {
+    grid-column: 1 / -1;
+  }
 }
 
-@media (max-width: 760px) {
-  .encounter-shell { width: 100%; margin: 0; padding: .85rem; }
-  .encounter-header, .encounter-note-actions { align-items: stretch; flex-direction: column; }
-  .encounter-header-actions { justify-content: space-between; flex-wrap: wrap; }
-  .encounter-completion-control { justify-items: start; }
-  .encounter-completion-control > span { max-width: none; text-align: left; }
-  .encounter-context { grid-template-columns: 1fr; }
-  .encounter-modebar { align-items: stretch; flex-direction: column; }
-  .encounter-mode-toggle { width: 100%; }
-  .encounter-note-form textarea { min-height: 20rem; }
-  .encounter-actions-grid { grid-template-columns: 1fr; }
-  .encounter-action-launcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .encounter-action-launcher button { min-width: 0; }
-  .encounter-history > summary { align-items: flex-start; }
-  .encounter-history > summary > span:last-child { white-space: normal; text-align: right; }
-  .history-encounter summary { align-items: flex-start; }
+/*
+ * Container Queries on .encounter-shell (container-name: encounter)
+ * Enables autonomous reflow when container width changes (e.g. sidebars or drawers)
+ */
+@container encounter (min-width: 960px) {
+  .encounter-layout {
+    grid-template-columns: minmax(280px, 22%) minmax(0, 1fr) minmax(260px, 26%);
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+  }
+  .encounter-context {
+    position: sticky;
+    top: var(--encounter-sticky-top);
+    max-height: calc(100vh - var(--encounter-sticky-top) - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    grid-column: 1;
+  }
+  .encounter-recording {
+    grid-column: 2 / 4;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 26%);
+    grid-template-columns: subgrid;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+  }
+  .encounter-modebar,
+  .encounter-mode-note,
+  .encounter-soap-editor,
+  .encounter-actions,
+  .encounter-history {
+    grid-column: 1 / -1;
+  }
+  .encounter-assessment-workspace {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 26%);
+    grid-template-columns: subgrid;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    align-items: start;
+  }
+  .encounter-assessment-workspace > .odyssey-anatomy {
+    grid-column: 1;
+    min-width: 0;
+    height: fit-content;
+  }
+  .encounter-assessment-workspace > .odyssey-region-panel {
+    grid-column: 2;
+    min-width: 0;
+    height: fit-content;
+  }
+}
+
+@container encounter (max-width: 767px) {
+  .encounter-layout {
+    grid-template-columns: 1fr;
+  }
+  .encounter-context {
+    position: static;
+    grid-column: 1;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .encounter-recording {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .encounter-assessment-workspace {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .encounter-assessment-workspace > .odyssey-anatomy,
+  .encounter-assessment-workspace > .odyssey-region-panel {
+    grid-column: 1;
+  }
+}
+
+/* Orders and Charges form 2-column reflow above 900px */
+@container encounter (min-width: 900px) {
+  .encounter-action-card form.stack,
+  .encounter-action-form {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+    gap: 1rem;
+  }
+  .encounter-action-card form.stack > .encounter-field-full,
+  .encounter-action-card form.stack > button[type="submit"],
+  .encounter-action-form > .encounter-field-full,
+  .encounter-action-form > button[type="submit"] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+  .encounter-action-card form.stack,
+  .encounter-action-form {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+    gap: 1rem;
+  }
+  .encounter-action-card form.stack > .encounter-field-full,
+  .encounter-action-card form.stack > button[type="submit"],
+  .encounter-action-form > .encounter-field-full,
+  .encounter-action-form > button[type="submit"] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Phone Layout (<768px): Single column, stacked sections */
+@media (max-width: 767px) {
+  .encounter-shell {
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem;
+  }
+  .encounter-header,
+  .encounter-note-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .encounter-header-actions {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .encounter-completion-control {
+    justify-items: start;
+  }
+  .encounter-completion-control > span {
+    max-width: none;
+    text-align: left;
+  }
+  .encounter-context {
+    grid-template-columns: 1fr;
+  }
+  .encounter-context-drawer {
+    display: block;
+    background: var(--odyssey-card);
+    border: 1px solid var(--odyssey-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+  .encounter-context-drawer__summary {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--odyssey-muted);
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85rem;
+  }
+  .encounter-context-drawer__header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .encounter-context-drawer__chevron {
+    color: var(--odyssey-primary);
+    font-size: 1rem;
+    transition: transform 0.2s ease;
+  }
+  .encounter-context-drawer[open] .encounter-context-drawer__chevron {
+    transform: rotate(180deg);
+  }
+  .encounter-context-drawer__content {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    padding: 0.85rem;
+    border-top: 1px solid var(--odyssey-border);
+  }
+  .encounter-modebar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .encounter-mode-toggle {
+    width: 100%;
+  }
+  .encounter-note-form textarea {
+    min-height: 20rem;
+  }
+  .encounter-actions-grid {
+    grid-template-columns: 1fr;
+  }
+  .encounter-action-launcher {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .encounter-action-launcher button {
+    min-width: 0;
+  }
+  .encounter-history > summary {
+    align-items: flex-start;
+  }
+  .encounter-history > summary > span:last-child {
+    white-space: normal;
+    text-align: right;
+  }
+  .history-encounter summary {
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 1050px) {
@@ -2358,6 +2766,44 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
   font-weight: 600;
   color: #0f172a;
   font-size: 13px;
+}
+
+.vesper-patient-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.vesper-service-name {
+  color: #94a3b8;
+}
+
+.vesper-visit-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.vesper-visit-mode--virtual {
+  background: var(--odyssey-blue-booked-bg);
+  border-color: var(--odyssey-blue-booked-border);
+  color: var(--odyssey-blue-booked-text);
+}
+
+.vesper-visit-mode--in-person {
+  background: var(--odyssey-slate-blocked-bg);
+  border-color: var(--odyssey-slate-blocked-border);
+  color: var(--odyssey-slate-blocked-text);
 }
 
 .vesper-date-text {

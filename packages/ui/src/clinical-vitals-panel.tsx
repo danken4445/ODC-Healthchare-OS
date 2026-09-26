@@ -503,8 +503,10 @@ function VitalCard({ reading }: { reading: ClinicalVitalReading }) {
 
 export function ClinicalVitalsPanel({
   readings,
+  emptyMessage = "No vital signs have been recorded for this patient.",
 }: {
   readings: ClinicalVitalReading[];
+  emptyMessage?: string;
 }) {
   const latestTime = readings.reduce<string | null>((latest, reading) => {
     if (!reading.recordedAt) return latest;
@@ -532,17 +534,10 @@ export function ClinicalVitalsPanel({
           </span>
         ) : null}
       </div>
-      {hasReadings ? (
-        <div className="odyssey-clinical-vitals__grid">
-          {readings.map((reading) => (
-            <VitalCard key={reading.id} reading={reading} />
-          ))}
-        </div>
-      ) : (
-        <p className="odyssey-clinical-vitals__empty">
-          No vital signs have been recorded for this patient.
-        </p>
-      )}
+      {!hasReadings ? <p className="odyssey-clinical-vitals__empty">{emptyMessage}</p> : null}
+      <div className="odyssey-clinical-vitals__grid">
+        {readings.map((reading) => <VitalCard key={reading.id} reading={reading} />)}
+      </div>
     </section>
   );
 }

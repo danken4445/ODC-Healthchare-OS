@@ -501,7 +501,7 @@ h2 {
 }
 .odyssey-clinical-vitals__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   gap: 0.55rem;
 }
 .odyssey-clinical-vitals__card {
@@ -717,27 +717,33 @@ h2 {
   }
 }
 .odyssey-anatomy {
-  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  height: fit-content;
+  max-height: 32rem;
+  min-height: 0;
+  padding: 0.75rem clamp(0.5rem, 1vw, 1rem);
+  box-sizing: border-box;
 }
 .odyssey-anatomy__heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 .odyssey-anatomy__heading > span {
   color: var(--odyssey-muted-foreground);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 .odyssey-anatomy__views {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
-  margin: 0.9rem 0;
+  margin: 0.5rem 0;
 }
 .odyssey-anatomy__views button {
-  min-height: 2.75rem;
-  padding: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
   border: 1px solid var(--odyssey-border);
   border-radius: 0.35rem;
   background: var(--odyssey-background);
@@ -757,17 +763,23 @@ h2 {
   outline-offset: 2px;
 }
 .odyssey-anatomy__canvas {
-  display: grid;
-  min-height: var(--odyssey-anatomy-height, 31rem);
-  place-items: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: clamp(14rem, 28vh, 20rem);
+  max-height: 21rem;
   overflow: hidden;
   border-radius: 0.4rem;
   background: var(--odyssey-background);
+  box-sizing: border-box;
 }
 .odyssey-anatomy__canvas > svg {
   display: block;
-  width: min(100%, 25rem);
-  height: var(--odyssey-anatomy-height, 31rem);
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
   max-height: 100%;
   isolation: isolate;
 }
@@ -804,8 +816,8 @@ h2 {
 .odyssey-anatomy__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 0.7rem;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
   color: var(--odyssey-muted-foreground);
   font-size: 0.7rem;
 }
@@ -840,6 +852,8 @@ h2 {
 .odyssey-region-panel__history {
   border-top: 1px solid var(--odyssey-border);
   padding-top: 0.9rem;
+  max-height: 14rem;
+  overflow-y: auto;
 }
 .odyssey-region-panel__history > div {
   display: flex;
@@ -929,10 +943,14 @@ h2 {
     width: 5.5rem !important;
     height: 5.5rem !important;
   }
-  .odyssey-anatomy__canvas,
+  .odyssey-anatomy__canvas {
+    height: clamp(13rem, 25vh, 17rem);
+    max-height: 17rem;
+    min-height: 0;
+  }
   .odyssey-anatomy__canvas > svg {
-    min-height: 27rem;
-    height: 27rem;
+    width: 100%;
+    height: 100%;
   }
 }
 .odyssey-card--queue-card {
