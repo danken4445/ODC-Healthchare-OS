@@ -614,22 +614,23 @@ test("virtual booking → shared room → encounter → doctor payout", async ({
     adminEmail,
     adminPassword,
   );
-  const billableRow = billingPage
+  const invoiceRow = billingPage
     .getByRole("row")
     .filter({ hasText: patientName })
     .first();
-  await billableRow.getByRole("button", { name: "Generate Billing" }).click();
-  await expect(billingPage.getByRole("status")).toContainText(
-    "Billing event created",
-  );
-  await billingPage.getByRole("tab", { name: /Billing Events/ }).click();
-  await billingPage
-    .getByRole("row")
-    .filter({ hasText: patientName })
-    .first()
-    .getByRole("button", { name: "Finalize" })
-    .click();
-  await expect(billingPage.getByRole("status")).toContainText("Finalized");
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("link", { name: "Open" }).click();
+  await expect(billingPage.getByRole("heading", { name: "Charge ledger" })).toBeVisible();
+  await expect(billingPage.getByRole("cell", { name: "Syringe 5 mL" })).toBeVisible();
+  if (await billingPage.getByRole("button", { name: "Create payment attempt" }).isVisible()) {
+    await billingPage.getByLabel("Reference").fill("SYNTHETIC-E2E-PAYMENT");
+    await billingPage.getByRole("button", { name: "Create payment attempt" }).click();
+    await expect(billingPage.getByRole("status")).toContainText("Payment attempt created");
+    await billingPage.getByRole("button", { name: "Confirm full payment received" }).click();
+    await expect(billingPage.getByRole("status")).toContainText("Payment confirmed");
+  } else {
+    await expect(billingPage.getByText("No Balance Billing", { exact: false })).toBeVisible();
+  }
 
   await billingPage.goto("http://127.0.0.1:3002/payouts");
   const payoutRow = billingPage

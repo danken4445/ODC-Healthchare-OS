@@ -50,7 +50,6 @@ import {
   InvoiceStatusBadge,
   PayorTypeBadge,
   CurrencyDisplay,
-  QrPaymentCode,
   Select,
   buildClinicalVitalReadings,
   ClinicalPatientCard,
@@ -68,6 +67,7 @@ import { BookingStepHeader } from "./components/BookingStepHeader";
 import { ServiceCard } from "./components/ServiceCard";
 import { AvailableSlotsCalendar } from "./components/AvailableSlotsCalendar";
 import { PatientProfileEditor } from "./components/PatientProfileEditor";
+import { PatientVisitInvoiceQr } from "./components/PatientVisitInvoiceQr";
 
 const localTestPassword = "LocalOnly-2026!";
 
@@ -1006,7 +1006,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {invoice.payor_type === "philhealth_nbb" ? (
+                  {invoice.billing_mode === "nbb" ? (
                     <div
                       style={{
                         padding: "0.75rem",
@@ -1104,9 +1104,16 @@ export default function Home() {
                     </tfoot>
                   </table>
 
-                  {invoice.status !== "paid" &&
-                    invoice.balance_due > 0 &&
-                    invoice.qr_payment_token && (
+                  {invoice.billing_mode === "standard" && invoice.status !== "paid" && invoice.balance_due > 0 ? (
+                    <div role="alert" style={{ padding: "0.75rem", margin: "1rem 0", color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "0.35rem" }}>
+                      <strong>Payment required to confirm this visit.</strong>
+                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.875rem" }}>The appointment remains pending until the full balance is confirmed by the clinic. Partial payments are not accepted.</p>
+                    </div>
+                  ) : null}
+                  {invoice.appointment_status === "pending" && invoice.payment_due_at ? (
+                    <p style={{ color: "#92400e", fontWeight: 700 }}>Reservation expires {new Date(invoice.payment_due_at).toLocaleString()} if payment is not confirmed.</p>
+                  ) : null}
+                  {invoice.appointment_id && (
                       <div
                         style={{
                           display: "flex",
@@ -1119,11 +1126,9 @@ export default function Home() {
                           borderRadius: "var(--odyssey-radius)",
                         }}
                       >
-                        <QrPaymentCode
-                          token={invoice.qr_payment_token}
-                          size={160}
-                        />
-                        <p
+                        <PatientVisitInvoiceQr invoiceId={invoice.id} />
+                        <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--odyssey-muted-foreground)" }}>This short-lived code is for the clinic billing desk, not direct e-wallet payment.</p>
+                        <p hidden
                           style={{
                             margin: 0,
                             fontSize: "0.85rem",

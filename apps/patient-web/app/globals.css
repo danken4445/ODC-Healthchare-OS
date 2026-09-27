@@ -851,3 +851,13 @@ section > .stack, section > .inline-form { display: grid; gap: 1rem; }
     grid-template-columns: 1fr;
   }
 }
+
+.patient-visit-qr {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  max-width: 24rem;
+  text-align: center;
+}
+.patient-visit-qr p { margin: 0; color: var(--odyssey-muted-foreground); font-size: 0.85rem; line-height: 1.5; }
+.patient-visit-qr small { color: var(--odyssey-muted-foreground); }

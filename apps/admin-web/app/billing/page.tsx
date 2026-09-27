@@ -1,6 +1,5 @@
-"use client";
+import { BillingWorkspaceScreen } from "../../components/billing-workspace";
 
-import { RecordsScreen } from "../../components/records-screen";
-import { billingConfig } from "../../lib/admin-data";
-
-export default function BillingPage() { return <RecordsScreen config={billingConfig} />; }
+export default function BillingPage() {
+  return <BillingWorkspaceScreen />;
+}

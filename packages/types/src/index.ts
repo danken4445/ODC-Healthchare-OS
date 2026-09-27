@@ -131,6 +131,8 @@ export type InvoiceStatus = "draft" | "issued" | "paid" | "partially_paid" | "vo
 export type PaymentMethod = "cash" | "card" | "qr_ewallet" | "bank_transfer" | "check";
 export type PaymentStatus = "pending" | "confirmed" | "failed" | "refunded";
 export type PosSaleStatus = "open" | "completed" | "void";
+export type BillingMode = "standard" | "nbb";
+export type BillingLinePaymentStatus = "unpaid" | "paid" | "written_off" | "voided";
 
 /**
  * App-facing FHIR-shaped summaries. These intentionally exclude raw storage
@@ -609,6 +611,7 @@ export type InventoryUsageSummary = Pick<
   | "used_at"
 > & {
   actorName?: string | null;
+  billingStatus?: "unbilled" | "paid" | "no-balance-billing";
 };
 
 export type InventoryHoldSummary = Pick<
@@ -647,6 +650,8 @@ export interface InventoryWorkspace {
   usages: InventoryUsageSummary[];
   movements: InventoryStockMovementSummary[];
 }
+
+export type InventoryViewMode = "visual" | "simple";
 
 export interface InventoryItemInput {
   organizationId: string;
@@ -896,8 +901,11 @@ export interface BillingEventSummary {
   id: string;
   organization_id: string;
   encounter_id: string | null;
+  appointment_id: string | null;
   patient_id: string | null;
   payor_type: PayorType;
+  billing_mode: BillingMode;
+  billing_mode_source: string | null;
   status: BillingEventStatus;
   coverage_id: string | null;
   finalized_at: string | null;
@@ -917,6 +925,11 @@ export interface BillingLineItemSummary {
   unit_price: number;
   currency: string;
   line_total: number;
+  payment_status: BillingLinePaymentStatus;
+  billing_mode: BillingMode | null;
+  payor_type: PayorType | null;
+  tagged_at: string | null;
+  void_reason: string | null;
 }
 
 export interface InvoiceSummary {
@@ -936,6 +949,10 @@ export interface InvoiceSummary {
   paid_at: string | null;
   patient_name: string;
   qr_payment_token: string | null;
+  billing_mode: BillingMode;
+  payor_type: PayorType;
+  appointment_id: string | null;
+  encounter_id: string | null;
 }
 
 export interface PaymentSummary {
@@ -1012,7 +1029,31 @@ export interface PatientInvoice {
   paid_at: string | null;
   qr_payment_token: string | null;
   payor_type: PayorType;
+  billing_mode: BillingMode;
+  billing_mode_source: string | null;
+  appointment_id: string | null;
+  appointment_status: AppointmentStatus | null;
+  payment_due_at: string | null;
   line_items: BillingLineItemSummary[];
+}
+
+export interface InvoiceQrResolution {
+  status: "active" | "paid" | "expired" | "not_found";
+  invoice_id?: string;
+  invoice_number?: string;
+  patient_name?: string;
+  billing_mode?: BillingMode;
+  payor_type?: PayorType;
+  total_due?: number;
+  amount_paid?: number;
+  balance_due?: number;
+  expires_at?: string;
+}
+
+export interface InvoiceDetail {
+  invoice: InvoiceSummary & { billing_mode_source: string | null };
+  line_items: BillingLineItemSummary[];
+  payments: PaymentSummary[];
 }
 
 export interface PaymentInput {

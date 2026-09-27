@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Odyssey Inventory Hierarchy",
+  "type": "object",
+  "required": ["id", "name", "activeStockCount", "alertCount", "alertLevel", "departments"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "activeStockCount": { "type": "number", "minimum": 0, "description": "Physical stock only." },
+    "alertCount": { "type": "integer", "minimum": 0, "description": "Computed from physical stock thresholds only." },
+    "alertLevel": { "enum": ["none", "low", "critical"] },
+    "departments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/department" }
+    }
+  },
+  "$defs": {
+    "department": {
+      "type": "object",
+      "required": ["id", "name", "activeStockCount", "alertCount", "alertLevel", "categories", "searchIndex"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "activeStockCount": { "type": "number", "minimum": 0 },
+        "alertCount": { "type": "integer", "minimum": 0 },
+        "alertLevel": { "enum": ["none", "low", "critical"] },
+        "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } },
+        "searchIndex": {
+          "type": "array",
+          "description": "Department-scoped autocomplete entries, not a hospital-wide item load.",
+          "items": { "type": "object", "required": ["itemId", "label", "categoryId", "tokens"], "properties": { "itemId": { "type": "string", "format": "uuid" }, "label": { "type": "string" }, "categoryId": { "type": "string", "format": "uuid" }, "tokens": { "type": "array", "items": { "type": "string" } } } }
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "required": ["id", "name", "activeStockCount", "alertCount", "alertLevel", "sampleMetrics", "items"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "activeStockCount": { "type": "number", "minimum": 0 },
+        "alertCount": { "type": "integer", "minimum": 0 },
+        "alertLevel": { "enum": ["none", "low", "critical"] },
+        "sampleMetrics": { "type": "array", "description": "Actual timestamped physical-ledger usage samples, never decorative values.", "items": { "type": "object", "required": ["at", "quantity"], "properties": { "at": { "type": "string", "format": "date-time" }, "quantity": { "type": "number" } } } },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["id", "name", "physicalStock", "unitPrice", "taggedToPatientId", "billingStatus"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "physicalStock": { "type": "number", "minimum": 0 },
+        "unitPrice": { "type": "number", "minimum": 0 },
+        "taggedToPatientId": { "type": ["string", "null"], "format": "uuid" },
+        "billingStatus": { "enum": ["unbilled", "paid", "no-balance-billing"] }
+      }
+    }
+  }
+}

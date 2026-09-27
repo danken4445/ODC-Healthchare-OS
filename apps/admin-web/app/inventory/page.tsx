@@ -6,7 +6,9 @@ import {
   createInventoryItem,
   getCurrentStaffDepartment,
   getInventoryWorkspace,
+  getMyInventoryViewMode,
   listInventoryEncounters,
+  saveMyInventoryViewMode,
   subscribeToInventory,
   tagInventoryUsage,
   transferDepartmentStock,
@@ -14,6 +16,7 @@ import {
 } from "@odyssey/supabase-client";
 import type {
   InventoryEncounterOption,
+  InventoryViewMode,
   InventoryWorkspace,
 } from "@odyssey/types";
 import {
@@ -29,6 +32,7 @@ import {
 import Link from "next/link";
 import { useAdminData } from "../../components/admin-data-context";
 import { AdminSignIn } from "../../components/admin-sign-in";
+import { InventoryHierarchy } from "../../components/inventory-hierarchy";
 import {
   useCallback,
   useEffect,
@@ -127,6 +131,9 @@ export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState("receive");
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [pricingItemId, setPricingItemId] = useState("");
+  const [preferredViewMode, setPreferredViewMode] =
+    useState<InventoryViewMode>("visual");
+  const [forceSimpleMode, setForceSimpleMode] = useState(false);
 
   /* ─── Derived data ────────────────────────────────────────── */
   const itemTotals = useMemo(
@@ -272,6 +279,29 @@ export default function InventoryPage() {
     return unsubscribe;
   }, [client, loadInventory, organizationId, signedInAs]);
 
+  useEffect(() => {
+    if (!signedInAs || !organizationId) return;
+    let current = true;
+    void getMyInventoryViewMode(client, organizationId).then((result) => {
+      if (current && !result.error) setPreferredViewMode(result.data);
+    });
+    const media = window.matchMedia("(max-width: 767px)");
+    const updateViewportMode = () => setForceSimpleMode(media.matches);
+    updateViewportMode();
+    media.addEventListener("change", updateViewportMode);
+    return () => {
+      current = false;
+      media.removeEventListener("change", updateViewportMode);
+    };
+  }, [client, organizationId, signedInAs]);
+
+  async function selectInventoryViewMode(mode: InventoryViewMode) {
+    if (forceSimpleMode && mode === "visual") return;
+    setPreferredViewMode(mode);
+    const result = await saveMyInventoryViewMode(client, organizationId, mode);
+    if (result.error) setStatus(`Could not save view preference: ${result.error.message}`);
+  }
+
   /* ─── Handlers ────────────────────────────────────────────── */
   async function runForm(
     event: FormEvent<HTMLFormElement>,
@@ -411,6 +441,15 @@ export default function InventoryPage() {
       </section>
 
       {/* ── Department Stock Ledger ─────────────────────────── */}
+      <InventoryHierarchy
+        mode={forceSimpleMode ? "simple" : preferredViewMode}
+        onModeChange={(mode) => void selectInventoryViewMode(mode)}
+        workspace={workspace}
+      />
+      {forceSimpleMode ? (
+        <p className="inventory-compact-note">Simple Mode is used on compact phone viewports. Your saved preference remains unchanged.</p>
+      ) : null}
+
       <section>
         <div className="section-heading">
           <div>

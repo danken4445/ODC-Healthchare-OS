@@ -20,6 +20,8 @@ export type {
   AppointmentNotificationProviderProps,
 } from "./appointment-notifications";
 export { PatientQrCode } from "./patient-qr-code";
+export { QrCameraScanner } from "./qr-camera-scanner";
+export type { QrCameraScannerProps, QrCameraState } from "./qr-camera-scanner";
 export { ClinicalPatientCard } from "./clinical-patient-card";
 export { ClinicalVitalsPanel, buildClinicalVitalReadings } from "./clinical-vitals-panel";
 export type { ClinicalVitalReading } from "./clinical-vitals-panel";

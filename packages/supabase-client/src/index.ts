@@ -59,6 +59,7 @@ import {
   type InventoryItemSummary,
   type InventoryHoldSummary,
   type InventoryUsageInput,
+  type InventoryViewMode,
   type InventoryWorkspace,
   type Json,
   type DiagnosticServiceRequestInput,
@@ -76,6 +77,8 @@ import {
   type BillingLineItemSummary,
   type BillableEncounter,
   type PatientInvoice,
+  type InvoiceDetail,
+  type InvoiceQrResolution,
   type PayorType,
   type PaymentMethod,
   type FacilityBillingMode,
@@ -244,7 +247,9 @@ export async function getOrganizationPatient(
 
   if (error) return failure(error);
   return success(
-    data ? toPatientSummary(data as unknown as Omit<PatientSummary, "displayName">) : null,
+    data
+      ? toPatientSummary(data as unknown as Omit<PatientSummary, "displayName">)
+      : null,
   );
 }
 
@@ -489,9 +494,12 @@ export async function getSpecialistOptions(
   client: SupabaseClient<Database>,
   organizationId: string,
 ): Promise<SupabaseResult<SpecialistOption[]>> {
-  const { data, error } = await client.rpc("get_specialist_options" as never, {
-    p_organization_id: organizationId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "get_specialist_options" as never,
+    {
+      p_organization_id: organizationId,
+    } as never,
+  );
   if (error) return failure(error);
   return success(
     ((data as any[] | null) ?? []).map((row: any) => ({
@@ -547,27 +555,59 @@ export async function getLaboratoryServices(
   client: SupabaseClient<Database>,
   organizationId: string,
 ): Promise<SupabaseResult<LaboratoryServiceSummary[]>> {
-  const { data, error } = await client.rpc("list_laboratory_services" as never, {
-    p_organization_id: organizationId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "list_laboratory_services" as never,
+    {
+      p_organization_id: organizationId,
+    } as never,
+  );
   if (error) return failure(error);
-  return success(((data as any[] | null) ?? []).map((row: any) => ({
-    id: row.id, code: row.code, name: row.name, labCost: Number(row.lab_cost), active: row.active,
-  })));
+  return success(
+    ((data as any[] | null) ?? []).map((row: any) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      labCost: Number(row.lab_cost),
+      active: row.active,
+    })),
+  );
 }
 
 export async function saveLaboratoryService(
   client: SupabaseClient<Database>,
-  input: { id?: string | null; organizationId: string; name: string; labCost: number; active?: boolean },
+  input: {
+    id?: string | null;
+    organizationId: string;
+    name: string;
+    labCost: number;
+    active?: boolean;
+  },
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("save_laboratory_service" as never, {
-    p_service_id: input.id ?? null,
-    p_organization_id: input.organizationId,
-    p_name: input.name,
-    p_lab_cost: input.labCost,
-    p_active: input.active ?? true,
-  } as never);
+  const { data, error } = await client.rpc(
+    "save_laboratory_service" as never,
+    {
+      p_service_id: input.id ?? null,
+      p_organization_id: input.organizationId,
+      p_name: input.name,
+      p_lab_cost: input.labCost,
+      p_active: input.active ?? true,
+    } as never,
+  );
   return error ? failure(error) : success(data as string);
+}
+
+export async function deleteLaboratoryService(
+  client: SupabaseClient<Database>,
+  input: { id: string; organizationId: string },
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc(
+    "delete_laboratory_service" as never,
+    {
+      p_service_id: input.id,
+      p_organization_id: input.organizationId,
+    } as never,
+  );
+  return error ? failure(error) : success(undefined);
 }
 
 export async function recordDiagnosticReport(
@@ -669,17 +709,23 @@ export async function saveMyEncounterViewMode(
   client: SupabaseClient<Database>,
   mode: EncounterViewMode,
 ): Promise<SupabaseResult<void>> {
-  const { error } = await client.rpc("save_my_encounter_view_mode", { p_mode: mode });
+  const { error } = await client.rpc("save_my_encounter_view_mode", {
+    p_mode: mode,
+  });
   return error ? failure(error) : success(undefined);
 }
 
 export async function getMyTeleconsultWorkspacePreference(
   client: SupabaseClient<Database>,
 ): Promise<SupabaseResult<TeleconsultWorkspacePreference>> {
-  const { data, error } = await client.rpc("get_my_teleconsult_workspace_preference");
+  const { data, error } = await client.rpc(
+    "get_my_teleconsult_workspace_preference",
+  );
   if (error) return failure(error);
-  const preference = data && typeof data === "object" && !Array.isArray(data) ? data : {};
-  const splitRatio = typeof preference.split_ratio === "number" ? preference.split_ratio : 55;
+  const preference =
+    data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const splitRatio =
+    typeof preference.split_ratio === "number" ? preference.split_ratio : 55;
   return success({
     chartCollapsed: preference.chart_collapsed === true,
     splitRatio: Math.min(70, Math.max(45, splitRatio)),
@@ -690,10 +736,13 @@ export async function saveMyTeleconsultWorkspacePreference(
   client: SupabaseClient<Database>,
   preference: TeleconsultWorkspacePreference,
 ): Promise<SupabaseResult<void>> {
-  const { error } = await client.rpc("save_my_teleconsult_workspace_preference", {
-    p_chart_collapsed: preference.chartCollapsed,
-    p_split_ratio: preference.splitRatio,
-  });
+  const { error } = await client.rpc(
+    "save_my_teleconsult_workspace_preference",
+    {
+      p_chart_collapsed: preference.chartCollapsed,
+      p_split_ratio: preference.splitRatio,
+    },
+  );
   return error ? failure(error) : success(undefined);
 }
 
@@ -709,31 +758,38 @@ export async function recordEncounterRegionDiagnosis(
     code?: string | null;
   },
 ): Promise<SupabaseResult<EncounterRegionDiagnosis>> {
-  const { data, error } = await client.rpc("record_encounter_region_diagnosis", {
-    p_encounter_id: input.encounterId,
-    p_region_code: input.regionCode,
-    p_region_display: input.regionDisplay,
-    p_anatomy_view: input.anatomyView,
-    p_diagnosis_text: input.diagnosisText,
-    p_code_system: input.codeSystem ?? undefined,
-    p_code: input.code ?? undefined,
-  });
+  const { data, error } = await client.rpc(
+    "record_encounter_region_diagnosis",
+    {
+      p_encounter_id: input.encounterId,
+      p_region_code: input.regionCode,
+      p_region_display: input.regionDisplay,
+      p_anatomy_view: input.anatomyView,
+      p_diagnosis_text: input.diagnosisText,
+      p_code_system: input.codeSystem ?? undefined,
+      p_code: input.code ?? undefined,
+    },
+  );
   if (error) return failure(error);
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return failure({ message: "The diagnosis record was not returned." });
   }
   const record = data as Record<string, Json | undefined>;
   const condition = record.condition;
-  const conditionRecord = condition && typeof condition === "object" && !Array.isArray(condition)
-    ? condition as Record<string, Json | undefined>
-    : null;
+  const conditionRecord =
+    condition && typeof condition === "object" && !Array.isArray(condition)
+      ? (condition as Record<string, Json | undefined>)
+      : null;
   return success({
     id: String(record.id ?? ""),
     encounterId: input.encounterId,
     regionCode: String(record.regionCode ?? input.regionCode),
     regionDisplay: String(record.regionDisplay ?? input.regionDisplay),
     anatomyView: input.anatomyView,
-    diagnosisText: typeof conditionRecord?.text === "string" ? conditionRecord.text : input.diagnosisText,
+    diagnosisText:
+      typeof conditionRecord?.text === "string"
+        ? conditionRecord.text
+        : input.diagnosisText,
     codeSystem: input.codeSystem ?? null,
     code: input.code ?? null,
     recordedAt: String(record.recordedAt ?? new Date().toISOString()),
@@ -749,7 +805,9 @@ export async function getPatientCoverages(
     p_organization_id: organizationId,
     p_patient_id: patientId,
   });
-  return error ? failure(error) : success((data ?? []) as unknown as CoverageSummary[]);
+  return error
+    ? failure(error)
+    : success((data ?? []) as unknown as CoverageSummary[]);
 }
 
 /** Records an immutable nurse triage assessment before the doctor may start. */
@@ -780,27 +838,38 @@ export async function issuePrescription(
   client: SupabaseClient<Database>,
   input: PrescriptionInput,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("issue_prescription" as never, {
-    p_encounter_id: input.encounterId,
-    p_medication: input.medication,
-    p_dosage: input.dosage,
-    p_note: input.note ?? undefined,
-    p_template_id: input.templateId ?? null,
-    p_template_version: input.templateVersion ?? null,
-  } as never);
+  const { data, error } = await client.rpc(
+    "issue_prescription" as never,
+    {
+      p_encounter_id: input.encounterId,
+      p_medication: input.medication,
+      p_dosage: input.dosage,
+      p_note: input.note ?? undefined,
+      p_template_id: input.templateId ?? null,
+      p_template_version: input.templateVersion ?? null,
+    } as never,
+  );
   return error ? failure(error) : success(data);
 }
 
 export async function issuePrescriptionRegimen(
   client: SupabaseClient<Database>,
-  input: { encounterId: string; medications: PrescriptionRegimenItem[]; templateId?: string | null; templateVersion?: number | null },
+  input: {
+    encounterId: string;
+    medications: PrescriptionRegimenItem[];
+    templateId?: string | null;
+    templateVersion?: number | null;
+  },
 ): Promise<SupabaseResult<string[]>> {
-  const { data, error } = await client.rpc("issue_prescription_regimen" as never, {
-    p_encounter_id: input.encounterId,
-    p_medications: input.medications as unknown as Json,
-    p_template_id: input.templateId ?? null,
-    p_template_version: input.templateVersion ?? null,
-  } as never);
+  const { data, error } = await client.rpc(
+    "issue_prescription_regimen" as never,
+    {
+      p_encounter_id: input.encounterId,
+      p_medications: input.medications as unknown as Json,
+      p_template_id: input.templateId ?? null,
+      p_template_version: input.templateVersion ?? null,
+    } as never,
+  );
   return error ? failure(error) : success((data ?? []) as unknown as string[]);
 }
 
@@ -808,13 +877,16 @@ export async function issueMedicalCertificate(
   client: SupabaseClient<Database>,
   input: MedicalCertificateInput,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("issue_medical_certificate" as never, {
-    p_encounter_id: input.encounterId,
-    p_title: input.title,
-    p_statement: input.statement,
-    p_template_id: input.templateId ?? null,
-    p_template_version: input.templateVersion ?? null,
-  } as never);
+  const { data, error } = await client.rpc(
+    "issue_medical_certificate" as never,
+    {
+      p_encounter_id: input.encounterId,
+      p_title: input.title,
+      p_statement: input.statement,
+      p_template_id: input.templateId ?? null,
+      p_template_version: input.templateVersion ?? null,
+    } as never,
+  );
   return error ? failure(error) : success(data);
 }
 
@@ -1052,7 +1124,7 @@ export async function getInventoryWorkspace(
     }
   })();
 
-  const [departments, items, stock, holds, usages] = await Promise.all([
+  const [departments, items, stock, holds, usages, billingStatuses] = await Promise.all([
     client
       .from("departments")
       .select(departmentSummaryColumns)
@@ -1078,6 +1150,9 @@ export async function getInventoryWorkspace(
       .eq("organization_id", organizationId)
       .order("used_at", { ascending: false })
       .limit(100),
+    client.rpc("get_inventory_usage_billing_statuses" as never, {
+      p_organization_id: organizationId,
+    } as never),
     staffNamesPromise,
   ]);
   const baseError = [departments, items, stock, holds, usages].find(
@@ -1104,6 +1179,14 @@ export async function getInventoryWorkspace(
     }));
   }
 
+  const billingStatusByUsageId = new Map<string, "unbilled" | "paid" | "no-balance-billing">();
+  if (!billingStatuses.error && Array.isArray(billingStatuses.data)) {
+    for (const row of billingStatuses.data as Array<{ usage_id?: string; billing_status?: string }>) {
+      if (row.usage_id && (row.billing_status === "unbilled" || row.billing_status === "paid" || row.billing_status === "no-balance-billing")) {
+        billingStatusByUsageId.set(row.usage_id, row.billing_status);
+      }
+    }
+  }
   const usageRows = (
     (usages.data ?? []) as unknown as Array<
       InventoryWorkspace["usages"][number]
@@ -1111,6 +1194,7 @@ export async function getInventoryWorkspace(
   ).map((u) => ({
     ...u,
     actorName: u.tagged_by ? (nameMap.get(u.tagged_by) ?? null) : null,
+    billingStatus: billingStatusByUsageId.get(u.id) ?? "unbilled",
   }));
 
   return success({
@@ -1122,6 +1206,30 @@ export async function getInventoryWorkspace(
     usages: usageRows,
     movements,
   });
+}
+
+/** Persists the admin inventory navigation preference per user and organization. */
+export async function getMyInventoryViewMode(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<InventoryViewMode>> {
+  const { data, error } = await client.rpc("get_my_inventory_view_mode" as never, {
+    p_organization_id: organizationId,
+  } as never);
+  if (error) return failure(error);
+  return success(data === "simple" ? "simple" : "visual");
+}
+
+export async function saveMyInventoryViewMode(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  mode: InventoryViewMode,
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("save_my_inventory_view_mode" as never, {
+    p_organization_id: organizationId,
+    p_mode: mode,
+  } as never);
+  return error ? failure(error) : success(undefined);
 }
 
 export async function createDepartment(
@@ -1867,9 +1975,12 @@ export async function resolvePatientTeleconsultClinic(
   client: SupabaseClient<Database>,
   appointmentId: string,
 ): Promise<SupabaseResult<string | null>> {
-  const { data, error } = await client.rpc("resolve_patient_teleconsult_clinic", {
-    p_appointment_id: appointmentId,
-  });
+  const { data, error } = await client.rpc(
+    "resolve_patient_teleconsult_clinic",
+    {
+      p_appointment_id: appointmentId,
+    },
+  );
   return error ? failure(error) : success(data);
 }
 
@@ -1946,7 +2057,10 @@ export function getSpecificDayRange(dateInput: Date | string): DayRange {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-export function getUpcomingDayRange(from: Date = new Date(), daysAhead = 60): DayRange {
+export function getUpcomingDayRange(
+  from: Date = new Date(),
+  daysAhead = 60,
+): DayRange {
   const start = new Date(from);
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
@@ -1972,7 +2086,9 @@ export async function getDailyAppointmentQueue(
     query = query.gte("start_at", new Date().toISOString());
   } else {
     const defaultRange = getLocalDayRange();
-    query = query.gte("start_at", defaultRange.start).lt("start_at", defaultRange.end);
+    query = query
+      .gte("start_at", defaultRange.start)
+      .lt("start_at", defaultRange.end);
   }
 
   const { data: appointments, error: appointmentError } = await query
@@ -2179,7 +2295,9 @@ export function subscribeToAppointmentBookings(
   // Deduplication cache with 10-second TTL
   const seenKeys = new Set<string>();
   const deliverEvent = (event: AppointmentBookingEvent) => {
-    const key = event.appointmentId ? `id:${event.appointmentId}` : `ts:${Math.floor((event.timestamp || Date.now()) / 1000)}`;
+    const key = event.appointmentId
+      ? `id:${event.appointmentId}`
+      : `ts:${Math.floor((event.timestamp || Date.now()) / 1000)}`;
     if (seenKeys.has(key)) return;
     seenKeys.add(key);
     setTimeout(() => seenKeys.delete(key), 10_000);
@@ -2195,16 +2313,24 @@ export function subscribeToAppointmentBookings(
       event: "INSERT",
       schema: "public",
       table: "appointments",
-      ...(organizationId ? { filter: `organization_id=eq.${organizationId}` } : {}),
+      ...(organizationId
+        ? { filter: `organization_id=eq.${organizationId}` }
+        : {}),
     },
     (payload) => {
       const row = (payload.new || {}) as Record<string, unknown>;
       deliverEvent({
         appointmentId: typeof row.id === "string" ? row.id : undefined,
-        organizationId: typeof row.organization_id === "string" ? row.organization_id : undefined,
-        patientId: typeof row.patient_id === "string" ? row.patient_id : undefined,
-        deliveryMode: typeof row.delivery_mode === "string" ? row.delivery_mode : undefined,
-        serviceType: typeof row.service_type === "string" ? row.service_type : undefined,
+        organizationId:
+          typeof row.organization_id === "string"
+            ? row.organization_id
+            : undefined,
+        patientId:
+          typeof row.patient_id === "string" ? row.patient_id : undefined,
+        deliveryMode:
+          typeof row.delivery_mode === "string" ? row.delivery_mode : undefined,
+        serviceType:
+          typeof row.service_type === "string" ? row.service_type : undefined,
         startAt: typeof row.start_at === "string" ? row.start_at : undefined,
         status: typeof row.status === "string" ? row.status : "booked",
         timestamp: Date.now(),
@@ -2217,7 +2343,10 @@ export function subscribeToAppointmentBookings(
   });
 
   let bc: BroadcastChannel | null = null;
-  if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+  if (
+    typeof window !== "undefined" &&
+    typeof BroadcastChannel !== "undefined"
+  ) {
     try {
       bc = new BroadcastChannel("odyssey_appointment_booking");
       bc.onmessage = (msgEvent) => {
@@ -2375,7 +2504,8 @@ export async function getBillableEncounters(
       period_end: (row.period_end as string) ?? null,
       status: row.status as BillableEncounter["status"],
       service_name: (row.service_name as string) ?? null,
-      service_price: row.service_price != null ? Number(row.service_price) : null,
+      service_price:
+        row.service_price != null ? Number(row.service_price) : null,
     })),
   );
 }
@@ -2398,6 +2528,11 @@ export async function getBillingLineItems(
       unit_price: Number(row.unit_price),
       currency: row.currency as string,
       line_total: Number(row.line_total),
+      payment_status: (row.payment_status as BillingLineItemSummary["payment_status"]) ?? "unpaid",
+      billing_mode: (row.billing_mode as BillingLineItemSummary["billing_mode"]) ?? null,
+      payor_type: (row.payor_type as BillingLineItemSummary["payor_type"]) ?? null,
+      tagged_at: (row.tagged_at as string) ?? null,
+      void_reason: (row.void_reason as string) ?? null,
     })),
   );
 }
@@ -2420,12 +2555,20 @@ export async function generateBillingEvent(
 export async function finalizeBillingEvent(
   client: SupabaseClient<Database>,
   billingEventId: string,
-): Promise<SupabaseResult<{ route: string; invoice_id?: string; claim_id?: string }>> {
+): Promise<
+  SupabaseResult<{ route: string; invoice_id?: string; claim_id?: string }>
+> {
   const { data, error } = await client.rpc("finalize_billing_event", {
     p_billing_event_id: billingEventId,
   });
   if (error) return failure(error);
-  return success(data as unknown as { route: string; invoice_id?: string; claim_id?: string });
+  return success(
+    data as unknown as {
+      route: string;
+      invoice_id?: string;
+      claim_id?: string;
+    },
+  );
 }
 
 export async function recordPayment(
@@ -2443,6 +2586,74 @@ export async function recordPayment(
   });
   if (error) return failure(error);
   return success(data as string);
+}
+
+export async function createPaymentAttempt(
+  client: SupabaseClient<Database>,
+  invoiceId: string,
+  method: PaymentMethod,
+  reference?: string,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("create_payment_attempt" as never, {
+    p_invoice_id: invoiceId,
+    p_method: method,
+    p_reference: reference ?? null,
+  } as never);
+  return error ? failure(error) : success(data as string);
+}
+
+export async function confirmPaymentAttempt(
+  client: SupabaseClient<Database>,
+  paymentId: string,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("confirm_payment_attempt" as never, {
+    p_payment_id: paymentId,
+  } as never);
+  return error ? failure(error) : success(data as string);
+}
+
+export async function resolveInvoiceQr(
+  client: SupabaseClient<Database>,
+  payload: string,
+): Promise<SupabaseResult<InvoiceQrResolution>> {
+  const { data, error } = await client.rpc("resolve_invoice_qr" as never, {
+    p_qr_payload: payload,
+  } as never);
+  return error ? failure(error) : success(data as unknown as InvoiceQrResolution);
+}
+
+export async function getInvoiceDetail(
+  client: SupabaseClient<Database>,
+  invoiceId: string,
+): Promise<SupabaseResult<InvoiceDetail>> {
+  const { data, error } = await client.rpc("get_invoice_detail" as never, {
+    p_invoice_id: invoiceId,
+  } as never);
+  return error ? failure(error) : success(data as unknown as InvoiceDetail);
+}
+
+export async function getVisitInvoiceQr(
+  client: SupabaseClient<Database>,
+  invoiceId: string,
+): Promise<SupabaseResult<{ payload: string; expires_at: string; invoice_id: string }>> {
+  const { data, error } = await client.rpc("get_visit_invoice_qr" as never, {
+    p_invoice_id: invoiceId,
+  } as never);
+  return error
+    ? failure(error)
+    : success(data as unknown as { payload: string; expires_at: string; invoice_id: string });
+}
+
+export async function voidBillingLineItem(
+  client: SupabaseClient<Database>,
+  lineItemId: string,
+  reason: string,
+): Promise<SupabaseResult<undefined>> {
+  const { error } = await client.rpc("void_billing_line_item" as never, {
+    p_line_item_id: lineItemId,
+    p_reason: reason,
+  } as never);
+  return error ? failure(error) : success(undefined);
 }
 
 export async function createPosSale(
@@ -2573,7 +2784,7 @@ export async function getGovernancePatients(
   );
   if (error) return failure(error);
   return success(
-    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+    ((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
       patientId: row.patient_id as string,
       displayName: row.display_name as string,
       walkInId: (row.walk_in_id as string) ?? null,
@@ -2584,7 +2795,7 @@ export async function getGovernancePatients(
       encounterCount: Number(row.encounter_count),
       appointmentCount: Number(row.appointment_count),
       lastActivityAt: row.last_activity_at as string,
-    }))),
+    })),
   );
 }
 
@@ -2619,7 +2830,8 @@ export async function identifyPatientByQr(
   );
   if (error) return failure(error);
   const row = ((data as unknown as Array<Record<string, unknown>>) ?? [])[0];
-  if (!row) return failure({ message: "No active patient matches this QR code." });
+  if (!row)
+    return failure({ message: "No active patient matches this QR code." });
   return success({
     patientId: row.patient_id as string,
     displayName: row.display_name as string,
@@ -2645,7 +2857,7 @@ export async function importGovernancePatients(
   );
   if (error) return failure(error);
   return success(
-    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+    ((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
       patientId: (row.patient_id as string) ?? "",
       rowNumber: Number(row.row_number),
       displayName: row.display_name as string,
@@ -2654,7 +2866,7 @@ export async function importGovernancePatients(
       error: (row.error as string) ?? null,
       birthDate: null,
       gender: null,
-    }))),
+    })),
   );
 }
 
@@ -2674,7 +2886,7 @@ export async function getPatientAuditTrail(
   );
   if (error) return failure(error);
   return success(
-    (((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+    ((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
       id: row.id as string,
       occurredAt: row.occurred_at as string,
       actorName: row.actor_name as string,
@@ -2683,7 +2895,7 @@ export async function getPatientAuditTrail(
       resourceType: row.resource_type as string,
       recordId: row.record_id as string,
       metadata: row.metadata as Json,
-    }))),
+    })),
   );
 }
 
@@ -2710,7 +2922,8 @@ export async function getOrganizationBranding(
     supportPhone: (data.support_phone as string) ?? null,
     clinicVisitMessage: (data.clinic_visit_message as string) ?? null,
     teleconsultMessage: (data.teleconsult_message as string) ?? null,
-    bookingConfirmationMessage: (data.booking_confirmation_message as string) ?? null,
+    bookingConfirmationMessage:
+      (data.booking_confirmation_message as string) ?? null,
   });
 }
 
@@ -2729,9 +2942,13 @@ export async function saveOrganizationBranding(
     support_email: input.supportEmail ?? "",
     support_phone: input.supportPhone ?? "",
   };
-  if (input.clinicVisitMessage !== undefined) updatePayload.clinic_visit_message = input.clinicVisitMessage;
-  if (input.teleconsultMessage !== undefined) updatePayload.teleconsult_message = input.teleconsultMessage;
-  if (input.bookingConfirmationMessage !== undefined) updatePayload.booking_confirmation_message = input.bookingConfirmationMessage;
+  if (input.clinicVisitMessage !== undefined)
+    updatePayload.clinic_visit_message = input.clinicVisitMessage;
+  if (input.teleconsultMessage !== undefined)
+    updatePayload.teleconsult_message = input.teleconsultMessage;
+  if (input.bookingConfirmationMessage !== undefined)
+    updatePayload.booking_confirmation_message =
+      input.bookingConfirmationMessage;
 
   const { error: directError } = await untyped
     .from("organization_branding")
@@ -2739,7 +2956,10 @@ export async function saveOrganizationBranding(
     .eq("organization_id", organizationId);
 
   if (!directError) {
-    await untyped.from("organizations").update({ name: input.displayName }).eq("id", organizationId);
+    await untyped
+      .from("organizations")
+      .update({ name: input.displayName })
+      .eq("id", organizationId);
     return success(organizationId);
   }
 
@@ -2766,9 +2986,12 @@ export async function getOrganizationFacilityClassification(
   client: SupabaseClient<Database>,
   organizationId: string,
 ): Promise<SupabaseResult<FacilityClassification>> {
-  const { data, error } = await client.rpc("get_organization_facility_classification", {
-    p_organization_id: organizationId,
-  });
+  const { data, error } = await client.rpc(
+    "get_organization_facility_classification",
+    {
+      p_organization_id: organizationId,
+    },
+  );
 
   if (!error && data) {
     const res = data as unknown as {
@@ -2813,7 +3036,11 @@ export async function getOrganizationFacilityClassification(
         .from("roles")
         .select("name")
         .in("id", roleIds);
-      canManage = Boolean(roles?.some((r: { name: string }) => r.name === "admin" || r.name === "owner"));
+      canManage = Boolean(
+        roles?.some(
+          (r: { name: string }) => r.name === "admin" || r.name === "owner",
+        ),
+      );
     }
 
     if (!canManage) {
@@ -2838,11 +3065,20 @@ export async function setOrganizationFacilityClassification(
   client: SupabaseClient<Database>,
   organizationId: string,
   payorType: PayorType,
-): Promise<SupabaseResult<{ organizationId: string; defaultPayorType: PayorType; isGovernmentNoBilling: boolean }>> {
-  const { data, error } = await client.rpc("set_organization_facility_classification", {
-    p_organization_id: organizationId,
-    p_payor_type: payorType,
-  });
+): Promise<
+  SupabaseResult<{
+    organizationId: string;
+    defaultPayorType: PayorType;
+    isGovernmentNoBilling: boolean;
+  }>
+> {
+  const { data, error } = await client.rpc(
+    "set_organization_facility_classification",
+    {
+      p_organization_id: organizationId,
+      p_payor_type: payorType,
+    },
+  );
 
   if (!error && data) {
     const res = data as unknown as {
@@ -2885,7 +3121,9 @@ export async function getDocumentTemplates(
   const untyped = client as unknown as SupabaseClient;
   const { data, error } = await untyped
     .from("document_templates")
-    .select("id, organization_id, code, name, category, description, body, version, active, updated_at")
+    .select(
+      "id, organization_id, code, name, category, description, body, version, active, updated_at",
+    )
     .eq("organization_id", organizationId)
     .order("name");
   if (error) return failure(error);
@@ -2905,47 +3143,78 @@ export async function getDocumentTemplates(
   );
 }
 
-function asTemplateContent(value: unknown): ClinicalDocumentTemplate["content"] {
-  const record = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const brandingRecord = record.branding && typeof record.branding === "object" && !Array.isArray(record.branding)
-    ? record.branding as Record<string, unknown>
-    : null;
-  const branding = brandingRecord && (brandingRecord.source === "none" || brandingRecord.source === "personal" || brandingRecord.source === "clinic")
-    ? {
-      source: brandingRecord.source as "none" | "personal" | "clinic",
-      ...(typeof brandingRecord.headerLogoPath === "string" ? { headerLogoPath: brandingRecord.headerLogoPath } : {}),
-      ...(typeof brandingRecord.watermarkPath === "string" ? { watermarkPath: brandingRecord.watermarkPath } : {}),
-    }
-    : undefined;
-  const certificate = record.certificate && typeof record.certificate === "object" && !Array.isArray(record.certificate)
-    ? record.certificate as Record<string, unknown>
-    : null;
+function asTemplateContent(
+  value: unknown,
+): ClinicalDocumentTemplate["content"] {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const brandingRecord =
+    record.branding &&
+    typeof record.branding === "object" &&
+    !Array.isArray(record.branding)
+      ? (record.branding as Record<string, unknown>)
+      : null;
+  const branding =
+    brandingRecord &&
+    (brandingRecord.source === "none" ||
+      brandingRecord.source === "personal" ||
+      brandingRecord.source === "clinic")
+      ? {
+          source: brandingRecord.source as "none" | "personal" | "clinic",
+          ...(typeof brandingRecord.headerLogoPath === "string"
+            ? { headerLogoPath: brandingRecord.headerLogoPath }
+            : {}),
+          ...(typeof brandingRecord.watermarkPath === "string"
+            ? { watermarkPath: brandingRecord.watermarkPath }
+            : {}),
+        }
+      : undefined;
+  const certificate =
+    record.certificate &&
+    typeof record.certificate === "object" &&
+    !Array.isArray(record.certificate)
+      ? (record.certificate as Record<string, unknown>)
+      : null;
   const medications = Array.isArray(record.medications)
     ? record.medications.flatMap((line) => {
-      if (!line || typeof line !== "object" || Array.isArray(line)) return [];
-      const item = line as Record<string, unknown>;
-      return [{
-        name: typeof item.name === "string" ? item.name : "",
-        dosage: typeof item.dosage === "string" ? item.dosage : "",
-        frequency: typeof item.frequency === "string" ? item.frequency : "",
-        duration: typeof item.duration === "string" ? item.duration : "",
-        notes: typeof item.notes === "string" ? item.notes : "",
-      }];
-    })
+        if (!line || typeof line !== "object" || Array.isArray(line)) return [];
+        const item = line as Record<string, unknown>;
+        return [
+          {
+            name: typeof item.name === "string" ? item.name : "",
+            dosage: typeof item.dosage === "string" ? item.dosage : "",
+            frequency: typeof item.frequency === "string" ? item.frequency : "",
+            duration: typeof item.duration === "string" ? item.duration : "",
+            notes: typeof item.notes === "string" ? item.notes : "",
+          },
+        ];
+      })
     : [];
   return {
     html: typeof record.html === "string" ? record.html : "",
     medications,
     ...(branding ? { branding } : {}),
-    ...(certificate ? {
-      certificate: {
-        variant: certificate.variant === "fitness_to_work" || certificate.variant === "fitness_to_travel" ? certificate.variant : "general",
-        remarks: typeof certificate.remarks === "string" ? certificate.remarks : "",
-        restDays: typeof certificate.restDays === "string" ? certificate.restDays : "",
-      },
-    } : {}),
+    ...(certificate
+      ? {
+          certificate: {
+            variant:
+              certificate.variant === "fitness_to_work" ||
+              certificate.variant === "fitness_to_travel"
+                ? certificate.variant
+                : "general",
+            remarks:
+              typeof certificate.remarks === "string"
+                ? certificate.remarks
+                : "",
+            restDays:
+              typeof certificate.restDays === "string"
+                ? certificate.restDays
+                : "",
+          },
+        }
+      : {}),
   };
 }
 
@@ -2954,26 +3223,54 @@ export async function searchIcd10Reference(
   client: SupabaseClient<Database>,
   query: string,
 ): Promise<SupabaseResult<Icd10ReferenceCondition[]>> {
-  const { data, error } = await client.rpc("search_icd10_reference" as never, { p_query: query } as never);
+  const { data, error } = await client.rpc(
+    "search_icd10_reference" as never,
+    { p_query: query } as never,
+  );
   if (error) return failure(error);
-  return success((Array.isArray(data) ? data : []).flatMap((row) => {
-    if (!row || typeof row !== "object") return [];
-    const item = row as Record<string, unknown>;
-    return typeof item.code === "string" && typeof item.description === "string"
-      ? [{ code: item.code, description: item.description, category: typeof item.category === "string" ? item.category : null }]
-      : [];
-  }));
+  return success(
+    (Array.isArray(data) ? data : []).flatMap((row) => {
+      if (!row || typeof row !== "object") return [];
+      const item = row as Record<string, unknown>;
+      return typeof item.code === "string" &&
+        typeof item.description === "string"
+        ? [
+            {
+              code: item.code,
+              description: item.description,
+              category:
+                typeof item.category === "string" ? item.category : null,
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 export async function getClinicalTemplateAssetContext(
   client: SupabaseClient<Database>,
   organizationId: string,
-): Promise<SupabaseResult<{ practitionerId: string; clinicLogoUrl: string | null }>> {
-  const { data, error } = await client.rpc("get_clinical_template_asset_context" as never, { p_organization_id: organizationId } as never);
+): Promise<
+  SupabaseResult<{ practitionerId: string; clinicLogoUrl: string | null }>
+> {
+  const { data, error } = await client.rpc(
+    "get_clinical_template_asset_context" as never,
+    { p_organization_id: organizationId } as never,
+  );
   if (error) return failure(error);
-  const row = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
-  if (typeof row.practitionerId !== "string") return failure({ message: "Template asset context is unavailable." } as never);
-  return success({ practitionerId: row.practitionerId, clinicLogoUrl: typeof row.clinicLogoUrl === "string" ? row.clinicLogoUrl : null });
+  const row =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  if (typeof row.practitionerId !== "string")
+    return failure({
+      message: "Template asset context is unavailable.",
+    } as never);
+  return success({
+    practitionerId: row.practitionerId,
+    clinicLogoUrl:
+      typeof row.clinicLogoUrl === "string" ? row.clinicLogoUrl : null,
+  });
 }
 
 export async function getClinicalDocumentTemplates(
@@ -2984,32 +3281,42 @@ export async function getClinicalDocumentTemplates(
   const untyped = client as unknown as SupabaseClient;
   let query = untyped
     .from("document_templates")
-    .select("id, organization_id, owner_doctor_id, category, name, condition_system, condition_code, condition_display, structured_body, is_default, status, version, updated_at")
+    .select(
+      "id, organization_id, owner_doctor_id, category, name, condition_system, condition_code, condition_display, structured_body, is_default, status, version, updated_at",
+    )
     .eq("organization_id", organizationId)
     .order("is_default", { ascending: false })
     .order("updated_at", { ascending: false });
   if (type) query = query.eq("category", type);
   const { data, error } = await query;
   if (error) return failure(error);
-  return success((data ?? []).flatMap((row) => {
-    const templateType = row.category;
-    if (templateType !== "medical_certificate" && templateType !== "prescription") return [];
-    return [{
-      id: row.id as string,
-      organizationId: row.organization_id as string,
-      ownerDoctorId: row.owner_doctor_id as string | null,
-      type: templateType,
-      title: row.name as string,
-      conditionSystem: row.condition_system as string | null,
-      conditionCode: row.condition_code as string | null,
-      conditionDisplay: row.condition_display as string | null,
-      content: asTemplateContent(row.structured_body),
-      isDefault: Boolean(row.is_default),
-      status: row.status as ClinicalDocumentTemplate["status"],
-      version: Number(row.version),
-      updatedAt: row.updated_at as string,
-    }];
-  }));
+  return success(
+    (data ?? []).flatMap((row) => {
+      const templateType = row.category;
+      if (
+        templateType !== "medical_certificate" &&
+        templateType !== "prescription"
+      )
+        return [];
+      return [
+        {
+          id: row.id as string,
+          organizationId: row.organization_id as string,
+          ownerDoctorId: row.owner_doctor_id as string | null,
+          type: templateType,
+          title: row.name as string,
+          conditionSystem: row.condition_system as string | null,
+          conditionCode: row.condition_code as string | null,
+          conditionDisplay: row.condition_display as string | null,
+          content: asTemplateContent(row.structured_body),
+          isDefault: Boolean(row.is_default),
+          status: row.status as ClinicalDocumentTemplate["status"],
+          version: Number(row.version),
+          updatedAt: row.updated_at as string,
+        },
+      ];
+    }),
+  );
 }
 
 export async function saveClinicalDocumentTemplate(
@@ -3017,19 +3324,22 @@ export async function saveClinicalDocumentTemplate(
   organizationId: string,
   input: ClinicalDocumentTemplateInput,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("save_clinical_document_template" as never, {
-    p_organization_id: organizationId,
-    p_template_id: input.id ?? null,
-    p_type: input.type,
-    p_title: input.title,
-    p_scope: input.scope,
-    p_condition_system: input.conditionSystem ?? null,
-    p_condition_code: input.conditionCode ?? null,
-    p_condition_display: input.conditionDisplay ?? null,
-    p_structured_body: input.content as unknown as Json,
-    p_is_default: input.isDefault,
-    p_status: input.status,
-  } as never);
+  const { data, error } = await client.rpc(
+    "save_clinical_document_template" as never,
+    {
+      p_organization_id: organizationId,
+      p_template_id: input.id ?? null,
+      p_type: input.type,
+      p_title: input.title,
+      p_scope: input.scope,
+      p_condition_system: input.conditionSystem ?? null,
+      p_condition_code: input.conditionCode ?? null,
+      p_condition_display: input.conditionDisplay ?? null,
+      p_structured_body: input.content as unknown as Json,
+      p_is_default: input.isDefault,
+      p_status: input.status,
+    } as never,
+  );
   return error ? failure(error) : success(data as unknown as string);
 }
 
@@ -3038,10 +3348,13 @@ export async function archiveClinicalDocumentTemplate(
   organizationId: string,
   templateId: string,
 ): Promise<SupabaseResult<void>> {
-  const { error } = await client.rpc("archive_clinical_document_template" as never, {
-    p_organization_id: organizationId,
-    p_template_id: templateId,
-  } as never);
+  const { error } = await client.rpc(
+    "archive_clinical_document_template" as never,
+    {
+      p_organization_id: organizationId,
+      p_template_id: templateId,
+    } as never,
+  );
   return error ? failure(error) : success(undefined);
 }
 
@@ -3049,21 +3362,39 @@ export async function getEncounterTemplateContext(
   client: SupabaseClient<Database>,
   encounterId: string,
 ): Promise<SupabaseResult<EncounterTemplateContext>> {
-  const { data, error } = await client.rpc("get_encounter_template_context" as never, {
-    p_encounter_id: encounterId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "get_encounter_template_context" as never,
+    {
+      p_encounter_id: encounterId,
+    } as never,
+  );
   if (error) return failure(error);
-  const record = data && typeof data === "object" && !Array.isArray(data)
-    ? data as Record<string, unknown>
-    : {};
-  const values = record.values && typeof record.values === "object" && !Array.isArray(record.values)
-    ? Object.fromEntries(Object.entries(record.values as Record<string, unknown>).flatMap(([key, value]) => typeof value === "string" ? [[key, value]] : []))
-    : {};
+  const record =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  const values =
+    record.values &&
+    typeof record.values === "object" &&
+    !Array.isArray(record.values)
+      ? Object.fromEntries(
+          Object.entries(record.values as Record<string, unknown>).flatMap(
+            ([key, value]) => (typeof value === "string" ? [[key, value]] : []),
+          ),
+        )
+      : {};
   return success({
     values,
-    diagnosisSystem: typeof record.diagnosisSystem === "string" ? record.diagnosisSystem : null,
-    diagnosisCode: typeof record.diagnosisCode === "string" ? record.diagnosisCode : null,
-    diagnosisDisplay: typeof record.diagnosisDisplay === "string" ? record.diagnosisDisplay : null,
+    diagnosisSystem:
+      typeof record.diagnosisSystem === "string"
+        ? record.diagnosisSystem
+        : null,
+    diagnosisCode:
+      typeof record.diagnosisCode === "string" ? record.diagnosisCode : null,
+    diagnosisDisplay:
+      typeof record.diagnosisDisplay === "string"
+        ? record.diagnosisDisplay
+        : null,
   });
 }
 
@@ -3158,7 +3489,11 @@ export async function getAllClinicServices(
 export async function saveAdminClinicService(
   client: SupabaseClient<Database>,
   organizationId: string,
-  input: ClinicServiceInput & { id?: string; currency: string; active: boolean },
+  input: ClinicServiceInput & {
+    id?: string;
+    currency: string;
+    active: boolean;
+  },
 ): Promise<SupabaseResult<string>> {
   const { data, error } = await client.rpc(
     "save_admin_clinic_service" as never,
