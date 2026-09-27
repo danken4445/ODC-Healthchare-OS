@@ -28,6 +28,21 @@ export type { BodyRegionDefinition } from "./musculoskeletal-figure";
 export { MusculoskeletalRegionPanel } from "./musculoskeletal-region-panel";
 export { AccessState } from "./access-state";
 export type { AccessStateProps, AccessStateVariant } from "./access-state";
+export {
+  SaveConfirmedModal,
+  TriageSaveConfirmedModal,
+  EncounterSaveConfirmedModal,
+  buildTriageSaveSummary,
+  buildEncounterSaveSummary,
+} from "./save-confirmed-modal";
+export type {
+  SaveConfirmedModalProps,
+  SaveConfirmedBadgeVariant,
+  SaveSummaryItem,
+  TriageSaveConfirmedModalProps,
+  TriageVitalsSummary,
+  EncounterSaveConfirmedModalProps,
+} from "./save-confirmed-modal";
 
 export function cn(
   ...values: Array<string | false | null | undefined>

@@ -67,6 +67,7 @@ test("generateRandomEncounterData blends in real clinic resources when available
     departments: [{ id: "dept-1", code: "CLINIC", name: "Outpatient Clinic", active: true }],
     items: [{ id: "item-1", code: "MASK", name: "Surgical Mask", unit_of_measure: "piece", active: true }],
     stock: [{ id: "stock-1", department_id: "dept-1", item_id: "item-1", quantity: "100", batch_number: "B1", expiry_date: null, status: "available" }],
+    holds: [],
     usages: [],
   };
 
@@ -81,6 +82,21 @@ test("generateRandomEncounterData blends in real clinic resources when available
   assert.equal(data.referral.specialistRoleId, "spec-role-1", "Should pick available specialist role ID");
   assert.equal(data.inventory.stockId, "stock-1", "Should pick available stock ID");
   assert.equal(data.inventory.departmentId, "dept-1", "Should pick matching department ID");
+});
+
+test("generateRandomEncounterData excludes inventory held for other patients", () => {
+  const data = generateRandomEncounterData({
+    inventory: {
+      departments: [],
+      items: [],
+      stock: [{ id: "stock-1", department_id: "dept-1", item_id: "item-1", quantity: 1 }],
+      holds: [{ id: "hold-1", stock_id: "stock-1", encounter_id: "other-encounter", quantity: 1, status: "held", held_at: "2026-09-27T00:00:00Z" }],
+      usages: [],
+      movements: [],
+    } as any,
+  });
+
+  assert.equal(data.inventory.stockId, "", "Fully held stock must not be selected by test fill");
 });
 
 test("isDeveloperModeActive and setDeveloperModeActive handle missing window gracefully", () => {

@@ -34,6 +34,7 @@ interface DoctorOverviewProps {
   diagnostics: DiagnosticsWorkspace | null;
   clinicalRecords: OrganizationClinicalRecords | null;
   activeEncounterId: string | null;
+  isNurse?: boolean;
   onStartConsultation: (appointment: AppointmentQueueItem) => void;
   onOpenTriage: (appointment: AppointmentQueueItem) => void;
   onNavigateTab: (tab: WorkspaceTab) => void;
@@ -78,11 +79,12 @@ export function DoctorOverview({
   diagnostics,
   clinicalRecords,
   activeEncounterId,
+  isNurse = false,
   onStartConsultation,
   onOpenTriage,
   onNavigateTab,
 }: DoctorOverviewProps) {
-  // Metrics computation for Doctor's Stat Cards
+  // Metrics computation for Clinician / Nurse Stat Cards
   const todayQueueCount = queue.length;
   const waitingCount = queue.filter(
     (a) =>
@@ -90,6 +92,13 @@ export function DoctorOverview({
       a.status !== "cancelled" &&
       a.encounterStatus !== "finished"
   ).length;
+  const pendingTriageCount = queue.filter(
+    (a) =>
+      a.status !== "fulfilled" &&
+      a.status !== "cancelled" &&
+      a.triageStatus !== "complete"
+  ).length;
+  const triagedCount = queue.filter((a) => a.triageStatus === "complete").length;
   const activeConsultCount = activeEncounterId ? 1 : 0;
   const pendingDiagnosticsCount =
     diagnostics?.serviceRequests.filter(
@@ -109,7 +118,7 @@ export function DoctorOverview({
 
   return (
     <div className="vesper-dashboard-content" style={{ marginTop: "20px" }}>
-      {/* 4 Doctor Stat Cards Row */}
+      {/* 4 Stat Cards Row */}
       <section className="vesper-kpi-grid">
         {/* Card 1: Today's Queue */}
         <div className="vesper-stat-card">
@@ -133,53 +142,73 @@ export function DoctorOverview({
           </div>
         </div>
 
-        {/* Card 2: Waiting for Doctor */}
+        {/* Card 2: Waiting for Doctor / Pending Triage */}
         <div className="vesper-stat-card">
           <div className="vesper-stat-card__top">
-            <span className="vesper-stat-card__label">Waiting in Queue</span>
+            <span className="vesper-stat-card__label">
+              {isNurse ? "Pending Triage" : "Waiting in Queue"}
+            </span>
             <div className="vesper-stat-card__icon-badge">
               <Clock size={16} />
             </div>
           </div>
           <div className="vesper-stat-card__bottom">
             <div className="vesper-stat-card__value-group">
-              <span className="vesper-stat-card__value">{waitingCount}</span>
+              <span className="vesper-stat-card__value">
+                {isNurse ? pendingTriageCount : waitingCount}
+              </span>
               <span className="vesper-stat-card__unit">waiting</span>
             </div>
             <div className="vesper-stat-card__delta-group">
               <span className="vesper-stat-card__delta-pill vesper-stat-card__delta-pill--positive">
-                Ready for consult
+                {isNurse ? "Needs vitals" : "Ready for consult"}
               </span>
               <span className="vesper-stat-card__delta-context">Triage queue</span>
             </div>
           </div>
         </div>
 
-        {/* Card 3: Active Consultation */}
+        {/* Card 3: Active Consultation / Triage Completed */}
         <div className="vesper-stat-card">
           <div className="vesper-stat-card__top">
-            <span className="vesper-stat-card__label">In Consultation</span>
+            <span className="vesper-stat-card__label">
+              {isNurse ? "Triage Completed" : "In Consultation"}
+            </span>
             <div className="vesper-stat-card__icon-badge">
-              <UserCheck size={16} />
+              {isNurse ? <CheckCircle2 size={16} /> : <UserCheck size={16} />}
             </div>
           </div>
           <div className="vesper-stat-card__bottom">
             <div className="vesper-stat-card__value-group">
-              <span className="vesper-stat-card__value">{activeConsultCount}</span>
-              <span className="vesper-stat-card__unit">active</span>
+              <span className="vesper-stat-card__value">
+                {isNurse ? triagedCount : activeConsultCount}
+              </span>
+              <span className="vesper-stat-card__unit">
+                {isNurse ? "triaged" : "active"}
+              </span>
             </div>
             <div className="vesper-stat-card__delta-group">
               <span
                 className={`vesper-stat-card__delta-pill ${
-                  activeConsultCount > 0
+                  (isNurse ? triagedCount > 0 : activeConsultCount > 0)
                     ? "vesper-stat-card__delta-pill--positive"
                     : "vesper-stat-card__delta-pill--neutral"
                 }`}
               >
-                {activeConsultCount > 0 ? "In Room" : "Room open"}
+                {isNurse
+                  ? triagedCount > 0
+                    ? "Vitals recorded"
+                    : "Awaiting triage"
+                  : activeConsultCount > 0
+                    ? "In Room"
+                    : "Room open"}
               </span>
               <span className="vesper-stat-card__delta-context">
-                {activeConsultCount > 0 ? "Chart active" : "Ready for next"}
+                {isNurse
+                  ? "Ready for doctor"
+                  : activeConsultCount > 0
+                    ? "Chart active"
+                    : "Ready for next"}
               </span>
             </div>
           </div>
@@ -216,7 +245,9 @@ export function DoctorOverview({
             <div>
               <h2 className="vesper-card__title">Up Next in Queue</h2>
               <p className="vesper-card__subtitle">
-                Patients waiting for triage or outpatient consultation
+                {isNurse
+                  ? "Patients waiting for nurse triage and vital signs assessment"
+                  : "Patients waiting for triage or outpatient consultation"}
               </p>
             </div>
             <button
@@ -305,13 +336,25 @@ export function DoctorOverview({
                           </span>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="vesper-action-link"
-                            onClick={() => onStartConsultation(item)}
-                          >
-                            {isInProgress ? "Resume" : "Start Consult"}
-                          </button>
+                          {isNurse ? (
+                            <button
+                              type="button"
+                              className="vesper-action-link"
+                              onClick={() => onOpenTriage(item)}
+                            >
+                              {item.triageStatus === "complete"
+                                ? "Review Triage"
+                                : "Record Triage"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="vesper-action-link"
+                              onClick={() => onStartConsultation(item)}
+                            >
+                              {isInProgress ? "Resume" : "Start Consult"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -479,70 +522,140 @@ export function DoctorOverview({
             <div>
               <h2 className="vesper-card__title">Clinical Shortcuts</h2>
               <p className="vesper-card__subtitle">
-                Quick actions and provider resources
+                {isNurse ? "Quick actions and nursing care tools" : "Quick actions and provider resources"}
               </p>
             </div>
           </div>
 
           <div style={{ padding: "4px 0" }}>
             <div className="vesper-contact-list">
-              <Link href="/teleconsult" className="vesper-contact-item" style={{ textDecoration: "none" }}>
-                <Video size={16} className="vesper-text-teal" />
-                <div style={{ flex: 1 }}>
-                  <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
-                    Launch Video Teleconsultation
-                  </strong>
-                  <span style={{ color: "#64748B", fontSize: "12px" }}>
-                    Open WebRTC peer video room for scheduled virtual visits
-                  </span>
-                </div>
-                <ExternalLink size={14} style={{ color: "#94A3B8" }} />
-              </Link>
+              {isNurse ? (
+                <>
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("queue")}
+                  >
+                    <Users size={16} className="vesper-text-blue" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Live Patient Queue & Triage
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Record vital signs, review patient check-ins, and manage triage queue
+                      </span>
+                    </div>
+                  </div>
 
-              <Link href="/payouts" className="vesper-contact-item" style={{ textDecoration: "none" }}>
-                <HandCoins size={16} className="vesper-text-emerald" />
-                <div style={{ flex: 1 }}>
-                  <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
-                    Doctor Payouts & Entitlements
-                  </strong>
-                  <span style={{ color: "#64748B", fontSize: "12px" }}>
-                    Review settled consultation fees and revenue share balances
-                  </span>
-                </div>
-                <ExternalLink size={14} style={{ color: "#94A3B8" }} />
-              </Link>
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("diagnostics")}
+                  >
+                    <FlaskConical size={16} className="vesper-text-teal" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Diagnostics Hub & Lab Orders
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Review clinic diagnostic requests, laboratory orders, and imaging results
+                      </span>
+                    </div>
+                  </div>
 
-              <div
-                className="vesper-contact-item"
-                style={{ cursor: "pointer" }}
-                onClick={() => onNavigateTab("queue")}
-              >
-                <Users size={16} className="vesper-text-blue" />
-                <div style={{ flex: 1 }}>
-                  <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
-                    Live Patient Queue Board
-                  </strong>
-                  <span style={{ color: "#64748B", fontSize: "12px" }}>
-                    Manage triage vital signs and consultation call sequence
-                  </span>
-                </div>
-              </div>
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("queue")}
+                  >
+                    <Clock size={16} className="vesper-text-amber" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Arrived Triage Worklist
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Perform clinical intake and vital signs assessments for today&apos;s visits
+                      </span>
+                    </div>
+                  </div>
 
-              <div
-                className="vesper-contact-item"
-                style={{ cursor: "pointer" }}
-                onClick={() => onNavigateTab("schedule")}
-              >
-                <CalendarDays size={16} className="vesper-text-amber" />
-                <div style={{ flex: 1 }}>
-                  <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
-                    Weekly Availability Studio
-                  </strong>
-                  <span style={{ color: "#64748B", fontSize: "12px" }}>
-                    Configure bookable clinic hours, duration, and teleconsult modes
-                  </span>
-                </div>
-              </div>
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("queue")}
+                  >
+                    <FileText size={16} className="vesper-text-emerald" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Clinical Triage Records
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        View vitals history, observations, and handoff to attending physician
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link href="/teleconsult" className="vesper-contact-item" style={{ textDecoration: "none" }}>
+                    <Video size={16} className="vesper-text-teal" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Launch Video Teleconsultation
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Open WebRTC peer video room for scheduled virtual visits
+                      </span>
+                    </div>
+                    <ExternalLink size={14} style={{ color: "#94A3B8" }} />
+                  </Link>
+
+                  <Link href="/payouts" className="vesper-contact-item" style={{ textDecoration: "none" }}>
+                    <HandCoins size={16} className="vesper-text-emerald" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Doctor Payouts & Entitlements
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Review settled consultation fees and revenue share balances
+                      </span>
+                    </div>
+                    <ExternalLink size={14} style={{ color: "#94A3B8" }} />
+                  </Link>
+
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("queue")}
+                  >
+                    <Users size={16} className="vesper-text-blue" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Live Patient Queue Board
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Manage triage vital signs and consultation call sequence
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    className="vesper-contact-item"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onNavigateTab("schedule")}
+                  >
+                    <CalendarDays size={16} className="vesper-text-amber" />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ display: "block", color: "#0F172A", fontSize: "13px" }}>
+                        Weekly Availability Studio
+                      </strong>
+                      <span style={{ color: "#64748B", fontSize: "12px" }}>
+                        Configure bookable clinic hours, duration, and teleconsult modes
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

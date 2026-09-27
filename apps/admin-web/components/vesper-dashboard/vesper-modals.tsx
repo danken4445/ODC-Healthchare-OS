@@ -529,7 +529,7 @@ export function PatientDetailModal({
                 onClick={onClose}
               >
                 <Video size={15} />
-                <span>Start Video Consult</span>
+                <span>Teleconsult Schedule</span>
               </Link>
               <Link
                 href="/laboratory-services"

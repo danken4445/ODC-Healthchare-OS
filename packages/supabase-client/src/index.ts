@@ -16,8 +16,14 @@ import {
   type Database,
   type DateRange,
   type DocumentReferenceSummary,
+  type ClinicalDocumentTemplate,
+  type ClinicalDocumentTemplateInput,
+  type ClinicalDocumentTemplateType,
+  type Icd10ReferenceCondition,
+  type EncounterTemplateContext,
   type EncounterSummary,
   type EncounterViewMode,
+  type TeleconsultWorkspacePreference,
   type EncounterRegionDiagnosis,
   type AnatomyView,
   type CoverageSummary,
@@ -26,6 +32,7 @@ import {
   type MedicalCertificateInput,
   type PatientProfileInput,
   type PrescriptionInput,
+  type PrescriptionRegimenItem,
   type SoapObservationInput,
   type SoapNoteInput,
   type TriageVitalSignsInput,
@@ -50,6 +57,7 @@ import {
   type InventoryItemInput,
   type InventoryItemPricingInput,
   type InventoryItemSummary,
+  type InventoryHoldSummary,
   type InventoryUsageInput,
   type InventoryWorkspace,
   type Json,
@@ -132,6 +140,8 @@ const inventoryItemSummaryColumns =
   "id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active";
 const departmentStockSummaryColumns =
   "id, organization_id, item_id, department_id, quantity, reorder_level, updated_at";
+const inventoryHoldSummaryColumns =
+  "id, stock_id, encounter_id, quantity, status, held_at";
 const inventoryUsageSummaryColumns =
   "id, organization_id, stock_id, item_id, department_id, encounter_id, patient_id, quantity, unit_cost, unit_price, currency, tagged_by, used_at";
 const inventoryMovementSummaryColumns =
@@ -661,6 +671,30 @@ export async function saveMyEncounterViewMode(
   return error ? failure(error) : success(undefined);
 }
 
+export async function getMyTeleconsultWorkspacePreference(
+  client: SupabaseClient<Database>,
+): Promise<SupabaseResult<TeleconsultWorkspacePreference>> {
+  const { data, error } = await client.rpc("get_my_teleconsult_workspace_preference");
+  if (error) return failure(error);
+  const preference = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const splitRatio = typeof preference.split_ratio === "number" ? preference.split_ratio : 55;
+  return success({
+    chartCollapsed: preference.chart_collapsed === true,
+    splitRatio: Math.min(70, Math.max(45, splitRatio)),
+  });
+}
+
+export async function saveMyTeleconsultWorkspacePreference(
+  client: SupabaseClient<Database>,
+  preference: TeleconsultWorkspacePreference,
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("save_my_teleconsult_workspace_preference", {
+    p_chart_collapsed: preference.chartCollapsed,
+    p_split_ratio: preference.splitRatio,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
 export async function recordEncounterRegionDiagnosis(
   client: SupabaseClient<Database>,
   input: {
@@ -744,24 +778,41 @@ export async function issuePrescription(
   client: SupabaseClient<Database>,
   input: PrescriptionInput,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("issue_prescription", {
+  const { data, error } = await client.rpc("issue_prescription" as never, {
     p_encounter_id: input.encounterId,
     p_medication: input.medication,
     p_dosage: input.dosage,
     p_note: input.note ?? undefined,
-  });
+    p_template_id: input.templateId ?? null,
+    p_template_version: input.templateVersion ?? null,
+  } as never);
   return error ? failure(error) : success(data);
+}
+
+export async function issuePrescriptionRegimen(
+  client: SupabaseClient<Database>,
+  input: { encounterId: string; medications: PrescriptionRegimenItem[]; templateId?: string | null; templateVersion?: number | null },
+): Promise<SupabaseResult<string[]>> {
+  const { data, error } = await client.rpc("issue_prescription_regimen" as never, {
+    p_encounter_id: input.encounterId,
+    p_medications: input.medications as unknown as Json,
+    p_template_id: input.templateId ?? null,
+    p_template_version: input.templateVersion ?? null,
+  } as never);
+  return error ? failure(error) : success((data ?? []) as unknown as string[]);
 }
 
 export async function issueMedicalCertificate(
   client: SupabaseClient<Database>,
   input: MedicalCertificateInput,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("issue_medical_certificate", {
+  const { data, error } = await client.rpc("issue_medical_certificate" as never, {
     p_encounter_id: input.encounterId,
     p_title: input.title,
     p_statement: input.statement,
-  });
+    p_template_id: input.templateId ?? null,
+    p_template_version: input.templateVersion ?? null,
+  } as never);
   return error ? failure(error) : success(data);
 }
 
@@ -999,7 +1050,7 @@ export async function getInventoryWorkspace(
     }
   })();
 
-  const [departments, items, stock, usages] = await Promise.all([
+  const [departments, items, stock, holds, usages] = await Promise.all([
     client
       .from("departments")
       .select(departmentSummaryColumns)
@@ -1015,6 +1066,11 @@ export async function getInventoryWorkspace(
       .select(departmentStockSummaryColumns)
       .eq("organization_id", organizationId),
     client
+      .from("inventory_holds")
+      .select(inventoryHoldSummaryColumns)
+      .eq("organization_id", organizationId)
+      .eq("status", "held"),
+    client
       .from("inventory_usages")
       .select(inventoryUsageSummaryColumns)
       .eq("organization_id", organizationId)
@@ -1022,7 +1078,7 @@ export async function getInventoryWorkspace(
       .limit(100),
     staffNamesPromise,
   ]);
-  const baseError = [departments, items, stock, usages].find(
+  const baseError = [departments, items, stock, holds, usages].find(
     (result) => result.error,
   )?.error;
   if (baseError) return failure(baseError);
@@ -1060,6 +1116,7 @@ export async function getInventoryWorkspace(
       []) as unknown as InventoryWorkspace["departments"],
     items: (items.data ?? []) as unknown as InventoryWorkspace["items"],
     stock: (stock.data ?? []) as unknown as InventoryWorkspace["stock"],
+    holds: (holds.data ?? []) as unknown as InventoryHoldSummary[],
     usages: usageRows,
     movements,
   });
@@ -1349,8 +1406,14 @@ export async function requestMagicLink(
 export async function signOut(
   client: SupabaseClient<Database>,
 ): Promise<SupabaseResult<undefined>> {
-  const { error } = await client.auth.signOut();
-  if (error) return failure(error);
+  try {
+    const { error } = await client.auth.signOut();
+    if (error) {
+      await client.auth.signOut({ scope: "local" }).catch(() => {});
+    }
+  } catch {
+    await client.auth.signOut({ scope: "local" }).catch(() => {});
+  }
   return success(undefined);
 }
 
@@ -2722,6 +2785,168 @@ export async function getDocumentTemplates(
       updatedAt: row.updated_at as string,
     })),
   );
+}
+
+function asTemplateContent(value: unknown): ClinicalDocumentTemplate["content"] {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const brandingRecord = record.branding && typeof record.branding === "object" && !Array.isArray(record.branding)
+    ? record.branding as Record<string, unknown>
+    : null;
+  const branding = brandingRecord && (brandingRecord.source === "none" || brandingRecord.source === "personal" || brandingRecord.source === "clinic")
+    ? {
+      source: brandingRecord.source as "none" | "personal" | "clinic",
+      ...(typeof brandingRecord.headerLogoPath === "string" ? { headerLogoPath: brandingRecord.headerLogoPath } : {}),
+      ...(typeof brandingRecord.watermarkPath === "string" ? { watermarkPath: brandingRecord.watermarkPath } : {}),
+    }
+    : undefined;
+  const certificate = record.certificate && typeof record.certificate === "object" && !Array.isArray(record.certificate)
+    ? record.certificate as Record<string, unknown>
+    : null;
+  const medications = Array.isArray(record.medications)
+    ? record.medications.flatMap((line) => {
+      if (!line || typeof line !== "object" || Array.isArray(line)) return [];
+      const item = line as Record<string, unknown>;
+      return [{
+        name: typeof item.name === "string" ? item.name : "",
+        dosage: typeof item.dosage === "string" ? item.dosage : "",
+        frequency: typeof item.frequency === "string" ? item.frequency : "",
+        duration: typeof item.duration === "string" ? item.duration : "",
+        notes: typeof item.notes === "string" ? item.notes : "",
+      }];
+    })
+    : [];
+  return {
+    html: typeof record.html === "string" ? record.html : "",
+    medications,
+    ...(branding ? { branding } : {}),
+    ...(certificate ? {
+      certificate: {
+        variant: certificate.variant === "fitness_to_work" || certificate.variant === "fitness_to_travel" ? certificate.variant : "general",
+        remarks: typeof certificate.remarks === "string" ? certificate.remarks : "",
+        restDays: typeof certificate.restDays === "string" ? certificate.restDays : "",
+      },
+    } : {}),
+  };
+}
+
+/** Shared PhilHealth reference data is global read-only lookup data, never tenant-owned. */
+export async function searchIcd10Reference(
+  client: SupabaseClient<Database>,
+  query: string,
+): Promise<SupabaseResult<Icd10ReferenceCondition[]>> {
+  const { data, error } = await client.rpc("search_icd10_reference" as never, { p_query: query } as never);
+  if (error) return failure(error);
+  return success((Array.isArray(data) ? data : []).flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const item = row as Record<string, unknown>;
+    return typeof item.code === "string" && typeof item.description === "string"
+      ? [{ code: item.code, description: item.description, category: typeof item.category === "string" ? item.category : null }]
+      : [];
+  }));
+}
+
+export async function getClinicalTemplateAssetContext(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<{ practitionerId: string; clinicLogoUrl: string | null }>> {
+  const { data, error } = await client.rpc("get_clinical_template_asset_context" as never, { p_organization_id: organizationId } as never);
+  if (error) return failure(error);
+  const row = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+  if (typeof row.practitionerId !== "string") return failure({ message: "Template asset context is unavailable." } as never);
+  return success({ practitionerId: row.practitionerId, clinicLogoUrl: typeof row.clinicLogoUrl === "string" ? row.clinicLogoUrl : null });
+}
+
+export async function getClinicalDocumentTemplates(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  type?: ClinicalDocumentTemplateType,
+): Promise<SupabaseResult<ClinicalDocumentTemplate[]>> {
+  const untyped = client as unknown as SupabaseClient;
+  let query = untyped
+    .from("document_templates")
+    .select("id, organization_id, owner_doctor_id, category, name, condition_system, condition_code, condition_display, structured_body, is_default, status, version, updated_at")
+    .eq("organization_id", organizationId)
+    .order("is_default", { ascending: false })
+    .order("updated_at", { ascending: false });
+  if (type) query = query.eq("category", type);
+  const { data, error } = await query;
+  if (error) return failure(error);
+  return success((data ?? []).flatMap((row) => {
+    const templateType = row.category;
+    if (templateType !== "medical_certificate" && templateType !== "prescription") return [];
+    return [{
+      id: row.id as string,
+      organizationId: row.organization_id as string,
+      ownerDoctorId: row.owner_doctor_id as string | null,
+      type: templateType,
+      title: row.name as string,
+      conditionSystem: row.condition_system as string | null,
+      conditionCode: row.condition_code as string | null,
+      conditionDisplay: row.condition_display as string | null,
+      content: asTemplateContent(row.structured_body),
+      isDefault: Boolean(row.is_default),
+      status: row.status as ClinicalDocumentTemplate["status"],
+      version: Number(row.version),
+      updatedAt: row.updated_at as string,
+    }];
+  }));
+}
+
+export async function saveClinicalDocumentTemplate(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  input: ClinicalDocumentTemplateInput,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("save_clinical_document_template" as never, {
+    p_organization_id: organizationId,
+    p_template_id: input.id ?? null,
+    p_type: input.type,
+    p_title: input.title,
+    p_scope: input.scope,
+    p_condition_system: input.conditionSystem ?? null,
+    p_condition_code: input.conditionCode ?? null,
+    p_condition_display: input.conditionDisplay ?? null,
+    p_structured_body: input.content as unknown as Json,
+    p_is_default: input.isDefault,
+    p_status: input.status,
+  } as never);
+  return error ? failure(error) : success(data as unknown as string);
+}
+
+export async function archiveClinicalDocumentTemplate(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  templateId: string,
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("archive_clinical_document_template" as never, {
+    p_organization_id: organizationId,
+    p_template_id: templateId,
+  } as never);
+  return error ? failure(error) : success(undefined);
+}
+
+export async function getEncounterTemplateContext(
+  client: SupabaseClient<Database>,
+  encounterId: string,
+): Promise<SupabaseResult<EncounterTemplateContext>> {
+  const { data, error } = await client.rpc("get_encounter_template_context" as never, {
+    p_encounter_id: encounterId,
+  } as never);
+  if (error) return failure(error);
+  const record = data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : {};
+  const values = record.values && typeof record.values === "object" && !Array.isArray(record.values)
+    ? Object.fromEntries(Object.entries(record.values as Record<string, unknown>).flatMap(([key, value]) => typeof value === "string" ? [[key, value]] : []))
+    : {};
+  return success({
+    values,
+    diagnosisSystem: typeof record.diagnosisSystem === "string" ? record.diagnosisSystem : null,
+    diagnosisCode: typeof record.diagnosisCode === "string" ? record.diagnosisCode : null,
+    diagnosisDisplay: typeof record.diagnosisDisplay === "string" ? record.diagnosisDisplay : null,
+  });
 }
 
 export async function saveDocumentTemplate(

@@ -43,6 +43,7 @@ import {
   updateReferralStatus,
   type DayRange,
 } from "@odyssey/supabase-client";
+import { getHumanNameDisplay } from "@odyssey/types";
 import type {
   AppointmentQueueItem,
   AppointmentSlotSummary,
@@ -61,8 +62,11 @@ import {
   Button,
   Card,
   DataTable,
+  EncounterSaveConfirmedModal,
   Field,
   Input,
+  TriageSaveConfirmedModal,
+  type TriageVitalsSummary,
 } from "@odyssey/ui";
 import {
   useCallback,
@@ -161,8 +165,10 @@ export default function Home() {
   const [startingId, setStartingId] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState("Offline");
   const [status, setStatus] = useState(
-    "Sign in as the assigned doctor to see today's queue.",
+    "Sign in as the assigned doctor or nurse to see today's queue.",
   );
+  const [roleCodes, setRoleCodes] = useState<string[]>([]);
+  const [practitionerName, setPractitionerName] = useState<string | null>(null);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [serviceBusy, setServiceBusy] = useState(false);
   const [editingService, setEditingService] =
@@ -196,6 +202,31 @@ export default function Home() {
   const [triageToast, setTriageToast] = useState<string | null>(null);
   const [triageProfileName, setTriageProfileName] = useState<string | null>(null);
 
+  // Determine if the signed-in user is a Nurse
+  const isNurse = useMemo(() => {
+    if (
+      roleCodes.includes("nurse") &&
+      !roleCodes.includes("doctor") &&
+      !roleCodes.includes("specialist")
+    ) {
+      return true;
+    }
+    if (canTriage && !canPrescribe) {
+      return true;
+    }
+    if (signedInAs?.toLowerCase().includes("nurse")) {
+      return true;
+    }
+    return false;
+  }, [roleCodes, canTriage, canPrescribe, signedInAs]);
+
+  // Ensure Nurse accounts cannot navigate to doctor-specific tabs
+  useEffect(() => {
+    if (isNurse && (activeTab === "chart" || activeTab === "schedule")) {
+      setActiveTab("queue");
+    }
+  }, [isNurse, activeTab]);
+
   // Controlled form states for Triage
   const [triageSystolic, setTriageSystolic] = useState("");
   const [triageDiastolic, setTriageDiastolic] = useState("");
@@ -212,6 +243,20 @@ export default function Home() {
   const [triageChiefComplaint, setTriageChiefComplaint] = useState("");
   const [triageNotes, setTriageNotes] = useState("");
   const [triageDirty, setTriageDirty] = useState(false);
+  const [triageSaveConfirmation, setTriageSaveConfirmation] = useState<{
+    patientName: string;
+    appointmentId: string;
+    vitals: TriageVitalsSummary;
+    chiefComplaint: string | null;
+    notes: string | null;
+    isCorrection: boolean;
+  } | null>(null);
+  const [encounterSaveConfirmation, setEncounterSaveConfirmation] = useState<{
+    patientName: string;
+    encounterId: string;
+    noteSnippet: string;
+    timestamp: Date;
+  } | null>(null);
 
   useEffect(() => {
     if (isDeveloperModeActive()) {
@@ -227,6 +272,7 @@ export default function Home() {
   const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(false);
   const [canRecordLabResults, setCanRecordLabResults] = useState(false);
   const [canUpdateReferrals, setCanUpdateReferrals] = useState(false);
+  const [canManageTemplates, setCanManageTemplates] = useState(false);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
 
   const ownedServices = services.filter(
@@ -596,6 +642,7 @@ export default function Home() {
       orderPermission,
       labPermission,
       referralPermission,
+      templatePermission,
     ] = await Promise.all([
       hasOrganizationPermission(
         createBrowserSupabaseClient(),
@@ -627,6 +674,11 @@ export default function Home() {
         result.data,
         "can_update_referrals",
       ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_manage_document_templates",
+      ),
     ]);
     if (
       inventoryPermission.error ||
@@ -635,6 +687,7 @@ export default function Home() {
       orderPermission.error ||
       labPermission.error ||
       referralPermission.error
+      || templatePermission.error
     )
       return setStatus(
         `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message}`,
@@ -649,6 +702,26 @@ export default function Home() {
     setCanOrderDiagnostics(orderPermission.data);
     setCanRecordLabResults(labPermission.data);
     setCanUpdateReferrals(referralPermission.data);
+    setCanManageTemplates(templatePermission.data);
+
+    // Fetch practitioner display name if available
+    try {
+      const userResult = await createBrowserSupabaseClient().auth.getUser();
+      if (userResult.data?.user?.id) {
+        const { data: practitionerData } = await createBrowserSupabaseClient()
+          .from("practitioners")
+          .select("name")
+          .eq("auth_user_id", userResult.data.user.id)
+          .eq("organization_id", result.data)
+          .maybeSingle();
+        if (practitionerData?.name) {
+          setPractitionerName(getHumanNameDisplay(practitionerData.name));
+        }
+      }
+    } catch {
+      // Fall through to signedInAs display
+    }
+
     await Promise.all([
       loadQueue(result.data),
       loadAvailability(result.data),
@@ -685,6 +758,7 @@ export default function Home() {
         "This account is not authorized for the Provider workspace. Use the portal assigned to your role.",
       );
     }
+    setRoleCodes(accessResult.data.roleCodes ?? []);
     setSignedInAs(emailAddress);
     setStatus("Signed in. Loading your assigned clinic queue.");
     await loadStaffClinic();
@@ -703,32 +777,68 @@ export default function Home() {
     router.push(`/encounters/${result.data}`);
   }
 
+  function handleQueueConsultation(appointment: AppointmentQueueItem) {
+    if (appointment.delivery_mode === "virtual") {
+      router.push(`/teleconsult/${appointment.id}`);
+      return;
+    }
+
+    if (appointment.encounterStatus === "in_progress") {
+      const encounter = clinicalRecords?.encounters.find(
+        (item) => item.appointment_id === appointment.id,
+      );
+      if (encounter) {
+        router.push(`/encounters/${encounter.id}`);
+      } else {
+        void handleStart(appointment.id);
+      }
+      return;
+    }
+
+    void handleStart(appointment.id);
+  }
+
   async function handleTriage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTriageAppointmentId) return;
     const fields = new FormData(event.currentTarget);
     setClinicalBusy(true);
+
+    const systolicBp = Number(triageSystolic || fields.get("systolicBp"));
+    const diastolicBp = Number(triageDiastolic || fields.get("diastolicBp"));
+    const pulseBpm = Number(triagePulse || fields.get("pulseBpm"));
+    const respiratoryRate = Number(triageRespiratory || fields.get("respiratoryRate"));
+    const temperatureC = Number(triageTemp || fields.get("temperatureC"));
+    const oxygenSaturation = Number(triageOxygen || fields.get("oxygenSaturation"));
+    const weightKg = (triageWeight || fields.get("weightKg"))
+      ? Number(triageWeight || fields.get("weightKg"))
+      : null;
+    const heightCm = (triageHeight || fields.get("heightCm"))
+      ? Number(triageHeight || fields.get("heightCm"))
+      : null;
+    const painScore = (triagePain || fields.get("painScore"))
+      ? Number(triagePain || fields.get("painScore"))
+      : null;
+    const acuity = (triageAcuity || String(fields.get("acuity"))) as
+      "routine" | "urgent" | "emergency";
+    const chiefComplaint = (triageChiefComplaint || String(fields.get("chiefComplaint") ?? "")).trim() || null;
+    const notes = (triageNotes || String(fields.get("notes") ?? "")).trim() || null;
+    const isCorrection = Boolean(currentTriage);
+
     const result = await recordTriageVitalSigns(createBrowserSupabaseClient(), {
       appointmentId: selectedTriageAppointmentId,
-      systolicBp: Number(triageSystolic || fields.get("systolicBp")),
-      diastolicBp: Number(triageDiastolic || fields.get("diastolicBp")),
-      pulseBpm: Number(triagePulse || fields.get("pulseBpm")),
-      respiratoryRate: Number(triageRespiratory || fields.get("respiratoryRate")),
-      temperatureC: Number(triageTemp || fields.get("temperatureC")),
-      oxygenSaturation: Number(triageOxygen || fields.get("oxygenSaturation")),
-      weightKg: (triageWeight || fields.get("weightKg"))
-        ? Number(triageWeight || fields.get("weightKg"))
-        : null,
-      heightCm: (triageHeight || fields.get("heightCm"))
-        ? Number(triageHeight || fields.get("heightCm"))
-        : null,
-      painScore: (triagePain || fields.get("painScore"))
-        ? Number(triagePain || fields.get("painScore"))
-        : null,
-      acuity: (triageAcuity || String(fields.get("acuity"))) as
-        "routine" | "urgent" | "emergency",
-      chiefComplaint: (triageChiefComplaint || String(fields.get("chiefComplaint") ?? "")).trim() || null,
-      notes: (triageNotes || String(fields.get("notes") ?? "")).trim() || null,
+      systolicBp,
+      diastolicBp,
+      pulseBpm,
+      respiratoryRate,
+      temperatureC,
+      oxygenSaturation,
+      weightKg,
+      heightCm,
+      painScore,
+      acuity,
+      chiefComplaint,
+      notes,
       supersedesId: currentTriage?.id,
     });
     setClinicalBusy(false);
@@ -737,10 +847,32 @@ export default function Home() {
     setTriageDirty(false);
     setTriageToast(null);
     setStatus(
-      currentTriage
+      isCorrection
         ? "Triage vital-sign correction saved."
         : "Triage complete. The appointment is ready for the doctor.",
     );
+
+    // Show Confirmed Save Modal for Triage
+    setTriageSaveConfirmation({
+      patientName: selectedTriageAppointment?.patientName || "Patient",
+      appointmentId: selectedTriageAppointmentId,
+      vitals: {
+        systolicBp,
+        diastolicBp,
+        pulseBpm,
+        respiratoryRate,
+        temperatureC,
+        oxygenSaturation,
+        weightKg,
+        heightCm,
+        painScore,
+        acuity,
+      },
+      chiefComplaint,
+      notes,
+      isCorrection,
+    });
+
     await Promise.all([loadClinicalRecords(), loadQueue()]);
   }
 
@@ -749,10 +881,11 @@ export default function Home() {
     if (!selectedEncounterId) return;
     const form = event.currentTarget;
     const fields = new FormData(form);
+    const noteText = String(fields.get("text") ?? "");
     setClinicalBusy(true);
     const result = await saveSoapNote(createBrowserSupabaseClient(), {
       encounterId: selectedEncounterId,
-      text: String(fields.get("text") ?? ""),
+      text: noteText,
       supersedesId: currentSoapNote?.id,
     });
     setClinicalBusy(false);
@@ -762,6 +895,15 @@ export default function Home() {
     setStatus(
       currentSoapNote ? "SOAP note revision saved." : "SOAP note saved.",
     );
+
+    // Show Confirmed Save Modal for Encounter SOAP Note
+    setEncounterSaveConfirmation({
+      patientName: selectedAppointment?.patientName || "Patient",
+      encounterId: selectedEncounterId,
+      noteSnippet: noteText,
+      timestamp: new Date(),
+    });
+
     await loadClinicalRecords();
   }
 
@@ -981,11 +1123,15 @@ export default function Home() {
   }
 
   async function handleSignOut() {
-    const result = await signOut(createBrowserSupabaseClient());
-    if (result.error)
-      return setStatus(`Sign-out failed: ${result.error.message}`);
+    try {
+      await signOut(createBrowserSupabaseClient());
+    } catch {
+      // Continue clearing client state even if remote sign-out fails
+    }
     setSignedInAs(null);
     setOrganizationId(null);
+    setRoleCodes([]);
+    setPractitionerName(null);
     setQueue([]);
     setSlots([]);
     setServices([]);
@@ -1107,43 +1253,60 @@ export default function Home() {
         <>
           <WorkspaceHeader
             signedInAs={signedInAs}
+            practitionerName={practitionerName}
+            isNurse={isNurse}
             organizationId={organizationId}
             department={currentDepartmentName}
             roleId={providerRoleId}
             liveStatus={liveStatus}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={(tab) => {
+              if (isNurse && (tab === "chart" || tab === "schedule")) {
+                setActiveTab("queue");
+              } else {
+                setActiveTab(tab);
+              }
+            }}
             queueCount={queue.length}
             notificationsCount={diagnostics?.notifications.length ?? 0}
             hasActiveEncounter={Boolean(selectedEncounterId)}
+            canManageTemplates={canManageTemplates && !isNurse}
             onSignOut={handleSignOut}
           />
 
-          {/* Vesper Doctor Overview Dashboard */}
+          {/* Vesper Clinical Overview Dashboard */}
           {activeTab === "all" && (
             <DoctorOverview
-              doctorName={signedInAs ?? "Clinician"}
+              doctorName={
+                practitionerName ||
+                (signedInAs
+                  ? isNurse
+                    ? signedInAs.split("@")[0].toLowerCase().includes("nurse")
+                      ? "Nurse"
+                      : `Nurse ${signedInAs.split("@")[0]}`
+                    : `Dr. ${signedInAs.split("@")[0]}`
+                  : isNurse
+                    ? "Nurse"
+                    : "Clinician")
+              }
               department={currentDepartmentName}
               queue={queue}
               diagnostics={diagnostics}
               clinicalRecords={clinicalRecords}
               activeEncounterId={selectedEncounterId}
-              onStartConsultation={(appointment) => {
-                if (appointment.encounterStatus === "in_progress") {
-                  const encounter = clinicalRecords?.encounters.find(
-                    (item) => item.appointment_id === appointment.id,
-                  );
-                  if (encounter) router.push(`/encounters/${encounter.id}`);
-                  else void handleStart(appointment.id);
-                } else {
-                  void handleStart(appointment.id);
-                }
-              }}
+              isNurse={isNurse}
+              onStartConsultation={handleQueueConsultation}
               onOpenTriage={(appointment) => {
                 setSelectedTriageAppointmentId(appointment.id);
                 setActiveTab("queue");
               }}
-              onNavigateTab={(tab) => setActiveTab(tab)}
+              onNavigateTab={(tab) => {
+                if (isNurse && (tab === "chart" || tab === "schedule")) {
+                  setActiveTab("queue");
+                } else {
+                  setActiveTab(tab);
+                }
+              }}
             />
           )}
 
@@ -1339,7 +1502,9 @@ export default function Home() {
             <section aria-labelledby="queue-heading" style={{ marginTop: "1rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
                 <div>
-                  <h1 id="queue-heading" style={{ fontSize: "1.5rem", margin: 0 }}>My queue today</h1>
+                  <h1 id="queue-heading" style={{ fontSize: "1.5rem", margin: 0 }}>
+                    {isNurse ? "Nurse triage queue" : "My queue today"}
+                  </h1>
                   <h2 style={{ fontSize: "1.05rem", margin: "0.2rem 0 0 0", color: "var(--odyssey-muted-foreground)" }}>Live queue</h2>
                 </div>
               </div>
@@ -1458,9 +1623,13 @@ export default function Home() {
                 header: "Status",
                 cell: (appointment) =>
                   appointment.encounterStatus === "in_progress" ? (
-                    <span className="encounter-status">In progress</span>
+                    <span className="encounter-status">
+                      {isNurse ? "In doctor consult" : "In progress"}
+                    </span>
                   ) : appointment.delivery_mode === "virtual" ? (
-                    <span className="encounter-status">Virtual visit</span>
+                    <span className="encounter-status">
+                      {isNurse ? "Virtual consult (Doctor)" : "Virtual visit"}
+                    </span>
                   ) : appointment.triageStatus === "complete" ? (
                     <span className="encounter-status">Triage complete</span>
                   ) : appointment.status !== "arrived" ? (
@@ -1472,14 +1641,55 @@ export default function Home() {
                   ) : canPrescribe ? (
                     <AppointmentStatusBadge status={appointment.status} />
                   ) : (
-                    <span className="hint">Awaiting triage</span>
+                    <span className="hint">
+                      {isNurse ? "Ready for triage" : "Awaiting triage"}
+                    </span>
                   ),
               },
               {
                 id: "action",
                 header: "",
-                cell: (appointment) =>
-                  appointment.delivery_mode === "virtual" ? (
+                cell: (appointment) => {
+                  if (isNurse) {
+                    if (appointment.encounterStatus === "in_progress") {
+                      return <span className="hint">In consultation with doctor</span>;
+                    }
+                    if (appointment.delivery_mode === "virtual") {
+                      return <span className="hint">Virtual consult (Doctor)</span>;
+                    }
+                    if (appointment.status === "arrived") {
+                      if (appointment.triageStatus !== "complete") {
+                        return (
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              setSelectedTriageAppointmentId(appointment.id)
+                            }
+                          >
+                            Record triage for {appointment.patientName}
+                          </Button>
+                        );
+                      }
+                      return (
+                        <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setSelectedTriageAppointmentId(appointment.id)
+                            }
+                          >
+                            Review triage
+                          </Button>
+                          <span className="hint">Ready for doctor</span>
+                        </div>
+                      );
+                    }
+                    return <span className="hint">Awaiting check-in</span>;
+                  }
+
+                  // Doctor actions
+                  return appointment.delivery_mode === "virtual" ? (
                     <span className="table-actions">
                       <Link href={`/teleconsult/${appointment.id}`}>
                         <Button size="sm">
@@ -1549,7 +1759,8 @@ export default function Home() {
                         ? "Starting…"
                         : "Mark in progress"}
                     </Button>
-                  ),
+                  );
+                },
               },
             ]}
           />
@@ -1870,7 +2081,7 @@ export default function Home() {
         </section>
       )}
 
-          {activeTab === "chart" && !selectedEncounterId && (
+          {activeTab === "chart" && !isNurse && !selectedEncounterId && (
             <div className="vesper-empty-card" style={{ marginTop: "24px" }}>
               <div className="vesper-empty-icon-wrap">
                 <Stethoscope size={32} />
@@ -1891,7 +2102,7 @@ export default function Home() {
             </div>
           )}
 
-          {activeTab === "chart" && selectedEncounterId && (
+          {activeTab === "chart" && !isNurse && selectedEncounterId && (
             <section aria-labelledby="chart-heading">
               <div className="section-heading">
                 <div>
@@ -2344,7 +2555,7 @@ export default function Home() {
             </section>
           )}
 
-          {activeTab === "schedule" && canPrescribe && (
+          {activeTab === "schedule" && !isNurse && canPrescribe && (
             <section>
               <div className="section-heading">
                 <div>
@@ -2523,6 +2734,43 @@ export default function Home() {
           )}
         </>
       )}
+      {/* Reusable Confirmed Save Modal for Triage */}
+      {triageSaveConfirmation && (
+        <TriageSaveConfirmedModal
+          isOpen={Boolean(triageSaveConfirmation)}
+          onClose={() => setTriageSaveConfirmation(null)}
+          patientName={triageSaveConfirmation.patientName}
+          appointmentId={triageSaveConfirmation.appointmentId}
+          vitals={triageSaveConfirmation.vitals}
+          chiefComplaint={triageSaveConfirmation.chiefComplaint}
+          notes={triageSaveConfirmation.notes}
+          isCorrection={triageSaveConfirmation.isCorrection}
+          onReturnToQueue={() => {
+            setTriageSaveConfirmation(null);
+            setSelectedTriageAppointmentId(null);
+            setActiveTab("queue");
+          }}
+          onKeepEditing={() => {
+            setTriageSaveConfirmation(null);
+          }}
+        />
+      )}
+
+      {/* Reusable Confirmed Save Modal for Encounter SOAP Note */}
+      {encounterSaveConfirmation && (
+        <EncounterSaveConfirmedModal
+          isOpen={Boolean(encounterSaveConfirmation)}
+          onClose={() => setEncounterSaveConfirmation(null)}
+          patientName={encounterSaveConfirmation.patientName}
+          encounterId={encounterSaveConfirmation.encounterId}
+          noteSnippet={encounterSaveConfirmation.noteSnippet}
+          timestamp={encounterSaveConfirmation.timestamp}
+          onContinueEncounter={() => {
+            setEncounterSaveConfirmation(null);
+          }}
+        />
+      )}
+
       {status && (
         <div className="floating-toast">
           <span style={{ fontSize: "1.1rem" }}>🩺</span>

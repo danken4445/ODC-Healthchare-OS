@@ -1076,6 +1076,63 @@ export type Database = {
           },
         ];
       };
+      inventory_holds: {
+        Row: {
+          billing_event_id: string | null;
+          currency: string;
+          department_id: string;
+          dispensed_at: string | null;
+          held_at: string;
+          held_by: string;
+          id: string;
+          encounter_id: string;
+          item_id: string;
+          organization_id: string;
+          patient_id: string;
+          quantity: number;
+          status: string;
+          stock_id: string;
+          unit_cost: number;
+          unit_price: number;
+        };
+        Insert: {
+          billing_event_id?: string | null;
+          currency: string;
+          department_id: string;
+          dispensed_at?: string | null;
+          held_at?: string;
+          held_by: string;
+          id?: string;
+          encounter_id: string;
+          item_id: string;
+          organization_id: string;
+          patient_id: string;
+          quantity: number;
+          status?: string;
+          stock_id: string;
+          unit_cost: number;
+          unit_price: number;
+        };
+        Update: {
+          billing_event_id?: string | null;
+          currency?: string;
+          department_id?: string;
+          dispensed_at?: string | null;
+          held_at?: string;
+          held_by?: string;
+          id?: string;
+          encounter_id?: string;
+          item_id?: string;
+          organization_id?: string;
+          patient_id?: string;
+          quantity?: number;
+          status?: string;
+          stock_id?: string;
+          unit_cost?: number;
+          unit_price?: number;
+        };
+        Relationships: [];
+      };
       inventory_usages: {
         Row: {
           created_at: string;
@@ -1647,18 +1704,24 @@ export type Database = {
       provider_preferences: {
         Row: {
           created_at: string;
+          teleconsult_chart_collapsed: boolean;
+          teleconsult_split_ratio: number;
           encounter_view_mode: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
           created_at?: string;
+          teleconsult_chart_collapsed?: boolean;
+          teleconsult_split_ratio?: number;
           encounter_view_mode?: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
           created_at?: string;
+          teleconsult_chart_collapsed?: boolean;
+          teleconsult_split_ratio?: number;
           encounter_view_mode?: string;
           updated_at?: string;
           user_id?: string;
@@ -2042,6 +2105,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string;
       };
+      get_my_teleconsult_workspace_preference: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
       get_patient_coverages: {
         Args: { p_organization_id: string; p_patient_id: string };
         Returns: {
@@ -2071,6 +2138,10 @@ export type Database = {
       };
       save_my_encounter_view_mode: {
         Args: { p_mode: string };
+        Returns: undefined;
+      };
+      save_my_teleconsult_workspace_preference: {
+        Args: { p_chart_collapsed: boolean; p_split_ratio: number };
         Returns: undefined;
       };
       add_soap_note: {

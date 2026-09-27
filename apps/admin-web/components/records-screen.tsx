@@ -27,7 +27,7 @@ const datasetsWithRowActions = new Set([
 ]);
 
 export function RecordsScreen({ config, actionHref }: { config: RecordsConfig; actionHref?: string }) {
-  const { email } = useAdminData();
+  const { email, loading: authLoading } = useAdminData();
   const [revision, setRevision] = useState(0);
   const { data, error, loading, summaries } = useAdminRecords(config.dataset, revision);
   const refresh = useCallback(() => setRevision((current) => current + 1), []);
@@ -35,7 +35,7 @@ export function RecordsScreen({ config, actionHref }: { config: RecordsConfig; a
     (row: DataRow) => <RecordRowActions dataset={config.dataset} onChanged={refresh} row={row} />,
     [config.dataset, refresh],
   );
-  if (!email && error) return <AdminSignIn />;
+  if (!authLoading && !email) return <AdminSignIn />;
   return (
     <>
       <PageHeader

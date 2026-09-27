@@ -18,6 +18,7 @@ function formatTime(value: string): string {
 export default function ProviderTeleconsultPage() {
   const [rooms, setRooms] = useState<TeleconsultAppointment[]>([]);
   const [status, setStatus] = useState("Loading assigned meeting rooms…");
+  const [isRestricted, setIsRestricted] = useState(false);
 
   async function loadRooms() {
     const client = createBrowserSupabaseClient();
@@ -25,6 +26,12 @@ export default function ProviderTeleconsultPage() {
     if (access.error || !access.data.allowed || !access.data.organizationIds[0]) {
       await signOut(client);
       setStatus("Sign in through the provider workspace to view meeting rooms.");
+      return;
+    }
+    const roleCodes = access.data.roleCodes ?? [];
+    if (roleCodes.includes("nurse") && !roleCodes.includes("doctor") && !roleCodes.includes("specialist")) {
+      setIsRestricted(true);
+      setStatus("Video teleconsultation rooms are reserved for doctors conducting virtual visits.");
       return;
     }
     const result = await getTeleconsultAppointments(client, access.data.organizationIds[0]);
@@ -39,6 +46,21 @@ export default function ProviderTeleconsultPage() {
   }
 
   useEffect(() => { void loadRooms(); }, []);
+
+  if (isRestricted) {
+    return (
+      <main>
+        <p className="eyebrow">Nurse Workspace</p>
+        <h1>Access Restricted</h1>
+        <p role="status">{status}</p>
+        <div style={{ marginTop: "1.5rem" }}>
+          <Link href="/">
+            <Button>Return to Nurse Workspace</Button>
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main>

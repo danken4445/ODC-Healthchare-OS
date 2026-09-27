@@ -464,9 +464,11 @@ export default function Home() {
   }
 
   async function handleSignOut() {
-    const result = await signOut(createBrowserSupabaseClient());
-    if (result.error)
-      return setStatus(`Sign-out failed: ${result.error.message}`);
+    try {
+      await signOut(createBrowserSupabaseClient());
+    } catch {
+      // Continue clearing client state even if remote sign-out fails
+    }
     setSignedInAs(null);
     setRecords(null);
     setLiveStatus("Offline");

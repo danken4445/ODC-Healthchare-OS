@@ -211,18 +211,20 @@ function AdminShellContent({ children }: { children: ReactNode }) {
         </nav>
 
         {/* Pinned Logout at bottom of sidebar per Section 1 tokens */}
-        <div className="sidebar__footer">
-          <button
-            className="sidebar__logout-button"
-            type="button"
-            onClick={() => void handleLogOut()}
-            title="Log out"
-            aria-label="Log out"
-          >
-            <LogOut aria-hidden="true" size={16} />
-            <span>Logout</span>
-          </button>
-        </div>
+        {email && (
+          <div className="sidebar__footer">
+            <button
+              className="sidebar__logout-button"
+              type="button"
+              onClick={() => void handleLogOut()}
+              title="Log out"
+              aria-label="Log out"
+            >
+              <LogOut aria-hidden="true" size={16} />
+              <span>Logout</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}

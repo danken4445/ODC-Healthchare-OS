@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 export default function ProviderPayoutsPage() {
   const [payouts, setPayouts] = useState<DoctorPayoutSummary[]>([]);
   const [status, setStatus] = useState("Loading your payout ledger…");
+  const [isRestricted, setIsRestricted] = useState(false);
   const pending = useMemo(() => payouts.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.payout_amount, 0), [payouts]);
   const paid = useMemo(() => payouts.filter((item) => item.status === "paid").reduce((sum, item) => sum + item.payout_amount, 0), [payouts]);
 
@@ -32,6 +33,12 @@ export default function ProviderPayoutsPage() {
         setStatus("Sign in through the provider workspace to view payouts.");
         return;
       }
+      const roleCodes = access.data?.roleCodes ?? [];
+      if (roleCodes.includes("nurse") && !roleCodes.includes("doctor") && !roleCodes.includes("specialist")) {
+        setIsRestricted(true);
+        setStatus("Doctor payouts and revenue share ledgers are restricted to physician accounts.");
+        return;
+      }
       const result = await getDoctorPayouts(client, clinicId);
       if (result.error) return setStatus(`Unable to load payouts: ${result.error.message}`);
       setPayouts(result.data);
@@ -39,6 +46,21 @@ export default function ProviderPayoutsPage() {
     }
     void load();
   }, []);
+
+  if (isRestricted) {
+    return (
+      <main>
+        <p className="eyebrow">Nurse Workspace</p>
+        <h1>Access Restricted</h1>
+        <p role="status">{status}</p>
+        <div style={{ marginTop: "1.5rem" }}>
+          <Link href="/">
+            <Button>Return to Nurse Workspace</Button>
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main>

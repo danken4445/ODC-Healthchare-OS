@@ -25,7 +25,7 @@ import { SummaryStrip } from "./summary-strip";
 import { Tabs, TabsContent } from "./ui/tabs";
 
 export function StaffManagementScreen() {
-  const { client, email, error: accessError, isSuperadmin, organization, permissions } = useAdminData();
+  const { client, email, error: accessError, isSuperadmin, loading: authLoading, organization, permissions } = useAdminData();
   const [revision, setRevision] = useState(0);
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [roles, setRoles] = useState<ClinicRoleDefinition[]>([]);
@@ -80,7 +80,7 @@ export function StaffManagementScreen() {
     access: role.permissions.length ? role.permissions.slice(0, 3).map((permission) => permissionLabels.get(permission) ?? permission).join(", ") + (role.permissions.length > 3 ? ` +${role.permissions.length - 3}` : "") : "No access enabled",
   })), [roles, staffRecords.data]);
 
-  if (!email && (accessError || staffRecords.error)) return <AdminSignIn />;
+  if (!authLoading && !email) return <AdminSignIn />;
   const summaryItems = [
     { label: "Staff accounts", value: staffRecords.data.length.toLocaleString(), detail: "Assigned to this clinic" },
     { label: "Active departments", value: departments.filter((department) => department.active).length.toLocaleString(), detail: `${departments.length} total departments` },

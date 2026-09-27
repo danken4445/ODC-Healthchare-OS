@@ -12,14 +12,14 @@ import { SummaryStrip } from "./summary-strip";
 import { Button } from "./ui/button";
 
 export function AnalyticsDashboard({ network = false }: { network?: boolean }) {
-  const { email } = useAdminData();
+  const { email, loading: authLoading } = useAdminData();
   const { activity, comparison, error, exceptions, loading, summaries } = useAdminAnalytics(network);
   const today = new Date();
   const periodStart = new Date(today);
   periodStart.setDate(periodStart.getDate() - 29);
   const periodLabel = `${new Intl.DateTimeFormat("en-PH", { day: "2-digit", month: "short" }).format(periodStart)} - ${new Intl.DateTimeFormat("en-PH", { day: "2-digit", month: "short", year: "numeric" }).format(today)}`;
 
-  if (!email && error) return <AdminSignIn />;
+  if (!authLoading && !email) return <AdminSignIn />;
 
   return (
     <>

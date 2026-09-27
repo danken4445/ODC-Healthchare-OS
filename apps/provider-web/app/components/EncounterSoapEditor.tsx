@@ -4,12 +4,15 @@ import { Button } from "@odyssey/ui";
 import type { FormEvent } from "react";
 
 interface EncounterSoapEditorProps {
+  autosaveState: "idle" | "pending" | "saving" | "saved" | "error";
   busy: boolean;
   canEdit: boolean;
   currentNoteId?: string | null;
   debugMode: boolean;
   encounterId: string;
+  lastSavedAt: string | null;
   onChange: (value: string) => void;
+  onRetryAutosave: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTestFillAll: () => void;
   onTestFillSoap: () => void;
@@ -17,17 +20,30 @@ interface EncounterSoapEditorProps {
 }
 
 export function EncounterSoapEditor({
+  autosaveState,
   busy,
   canEdit,
   currentNoteId,
   debugMode,
   encounterId,
+  lastSavedAt,
   onChange,
+  onRetryAutosave,
   onSubmit,
   onTestFillAll,
   onTestFillSoap,
   value,
 }: EncounterSoapEditorProps) {
+  const autosaveMessage = autosaveState === "pending"
+    ? "Changes will save automatically."
+    : autosaveState === "saving"
+      ? "Saving changes…"
+      : autosaveState === "saved"
+        ? `Saved${lastSavedAt ? ` at ${lastSavedAt}` : ""}.`
+        : autosaveState === "error"
+          ? "Changes were not saved."
+          : "Changes save automatically.";
+
   return (
     <section
       className="encounter-soap-editor"
@@ -79,7 +95,10 @@ export function EncounterSoapEditor({
           required
         />
         <div className="encounter-note-actions">
-          <p>Saved notes are versioned in the patient record.</p>
+          <div className="encounter-note-save-status" role="status" aria-live="polite">
+            <p>{autosaveMessage}</p>
+            <span>Saved notes are versioned in the patient record.</span>
+          </div>
           <div className="encounter-note-btn-group">
             {debugMode ? (
               <Button
@@ -92,8 +111,13 @@ export function EncounterSoapEditor({
                 ⚡ Test Fill All
               </Button>
             ) : null}
-            <Button disabled={busy || !canEdit} type="submit">
-              {busy ? "Saving…" : "Save consultation note"}
+            {autosaveState === "error" ? (
+              <Button disabled={busy || !canEdit} onClick={onRetryAutosave} type="button" variant="outline">
+                Retry save
+              </Button>
+            ) : null}
+            <Button disabled={busy || !canEdit || autosaveState === "saving"} type="submit">
+              {autosaveState === "saving" ? "Saving…" : "Save now"}
             </Button>
           </div>
         </div>

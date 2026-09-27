@@ -6,6 +6,7 @@ import {
   createDiagnosticServiceRequest,
   createPatientQrPayload,
   getMyEncounterViewMode,
+  getMyTeleconsultWorkspacePreference,
   getOrganizationClinicalRecords,
   getOrganizationPatient,
   getPortalAccess,
@@ -14,20 +15,24 @@ import {
   hasOrganizationPermission,
   issueMedicalCertificate,
   issuePrescription,
+  issuePrescriptionRegimen,
   recordEncounterRegionDiagnosis,
   saveMyEncounterViewMode,
+  saveMyTeleconsultWorkspacePreference,
   saveSoapNote,
   signOut,
   startAppointmentEncounter,
 } from "@odyssey/supabase-client";
-import { getEncounterRegionDiagnoses, type AnatomyView, type EncounterRegionDiagnosis, type EncounterViewMode, type OrganizationClinicalRecords, type PatientSummary, type SpecialistOption, type TeleconsultAppointment } from "@odyssey/types";
+import { getEncounterRegionDiagnoses, type AnatomyView, type EncounterRegionDiagnosis, type EncounterViewMode, type OrganizationClinicalRecords, type PatientSummary, type SpecialistOption, type TeleconsultAppointment, type TeleconsultWorkspacePreference } from "@odyssey/types";
 import { Badge, buildClinicalVitalReadings, Button, ClinicalPatientCard, ClinicalVitalsPanel, Field, Input, MUSCULOSKELETAL_REGIONS, MusculoskeletalFigure, MusculoskeletalRegionPanel, TeleconsultWebRtcRoom, type BodyRegionDefinition } from "@odyssey/ui";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClinicalDocumentationWorkspace } from "../../components/ClinicalDocumentationWorkspace";
 import { ClinicalOrdersAndCharges } from "../../components/ClinicalOrdersAndCharges";
 import { EncounterSoapEditor } from "../../components/EncounterSoapEditor";
 import { LongitudinalRecord } from "../../components/LongitudinalRecord";
+import { ClinicalTemplatePicker, type TemplateApplication } from "../../components/template-studio";
+import { TeleconsultSplitWorkspace } from "../../components/TeleconsultSplitWorkspace";
 import { generateRandomEncounterData, isDeveloperModeActive, setDeveloperModeActive } from "../../components/encounter-test-data";
 
 type TeleconsultAction = "prescription" | "certificate" | "referral";
@@ -57,7 +62,16 @@ export default function ProviderTeleconsultRoomPage() {
   const [debugMode, setDebugMode] = useState(false);
   const [soapInput, setSoapInput] = useState("");
   const [soapDirty, setSoapDirty] = useState(false);
+  const [soapAutosaveState, setSoapAutosaveState] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [soapLastSavedAt, setSoapLastSavedAt] = useState<Date | null>(null);
+  const [latestSoapNoteId, setLatestSoapNoteId] = useState<string | null>(null);
+  const [soapAutosaveRevision, setSoapAutosaveRevision] = useState(0);
+  const soapInputRef = useRef("");
+  const latestSoapNoteIdRef = useRef<string | null>(null);
+  const lastSavedSoapTextRef = useRef("");
+  const soapSaveInFlightRef = useRef(false);
   const [preferredMode, setPreferredMode] = useState<EncounterViewMode>("visual");
+  const [teleconsultWorkspacePreference, setTeleconsultWorkspacePreference] = useState<TeleconsultWorkspacePreference>({ chartCollapsed: false, splitRatio: 55 });
   const [forceSimpleMode, setForceSimpleMode] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<BodyRegionDefinition>(MUSCULOSKELETAL_REGIONS.find((region) => region.code === "chest") ?? { code: "chest", display: "Chest" });
   const [anatomyView, setAnatomyView] = useState<AnatomyView>("front");
@@ -71,6 +85,8 @@ export default function ProviderTeleconsultRoomPage() {
   const [rxNote, setRxNote] = useState("");
   const [certTitle, setCertTitle] = useState("Medical Certificate");
   const [certStatement, setCertStatement] = useState("");
+  const [prescriptionTemplate, setPrescriptionTemplate] = useState<TemplateApplication | null>(null);
+  const [certificateTemplate, setCertificateTemplate] = useState<TemplateApplication | null>(null);
   const [specialistRoleId, setSpecialistRoleId] = useState("");
   const [referralNote, setReferralNote] = useState("");
 
@@ -106,14 +122,16 @@ export default function ProviderTeleconsultRoomPage() {
     if (!room.encounter_id || !records) return;
     const currentEncounter = records.encounters.find((item) => item.id === room.encounter_id);
     if (!currentEncounter) return;
-    const [patientResult, preferenceResult, prescribeResult, referralResult] = await Promise.all([
+    const [patientResult, preferenceResult, workspacePreferenceResult, prescribeResult, referralResult] = await Promise.all([
       getOrganizationPatient(client, clinicId, currentEncounter.patient_id),
       getMyEncounterViewMode(client),
+      getMyTeleconsultWorkspacePreference(client),
       hasOrganizationPermission(client, clinicId, "can_start_consultation"),
       hasOrganizationPermission(client, clinicId, "can_order_diagnostics"),
     ]);
     if (patientResult.data) setPatient(patientResult.data);
     if (!preferenceResult.error) setPreferredMode(preferenceResult.data);
+    if (!workspacePreferenceResult.error) setTeleconsultWorkspacePreference(workspacePreferenceResult.data);
     setCanPrescribe(Boolean(prescribeResult.data));
     setCanRefer(Boolean(referralResult.data));
     if (referralResult.data) {
@@ -132,7 +150,39 @@ export default function ProviderTeleconsultRoomPage() {
   const priorEncounters = useMemo(() => (clinicalRecords?.encounters ?? []).filter((item) => item.patient_id === encounter?.patient_id && item.id !== appointment?.encounter_id).sort((a, b) => (b.period_start ?? "").localeCompare(a.period_start ?? "")), [appointment?.encounter_id, clinicalRecords?.encounters, encounter?.patient_id]);
   const effectiveMode: EncounterViewMode = forceSimpleMode ? "simple" : preferredMode;
 
-  useEffect(() => { if (currentSoapNote && !soapDirty) setSoapInput(clinicalText(currentSoapNote.value)); }, [currentSoapNote, soapDirty]);
+  useEffect(() => {
+    if (currentSoapNote && !soapDirty && (!latestSoapNoteIdRef.current || currentSoapNote.id === latestSoapNoteIdRef.current)) {
+      const text = clinicalText(currentSoapNote.value);
+      setSoapInput(text); soapInputRef.current = text; lastSavedSoapTextRef.current = text;
+      latestSoapNoteIdRef.current = currentSoapNote.id; setLatestSoapNoteId(currentSoapNote.id);
+    }
+  }, [currentSoapNote, soapDirty]);
+  useEffect(() => { soapInputRef.current = soapInput; }, [soapInput]);
+
+  const persistSoapNote = useCallback(async (source: "auto" | "manual") => {
+    const text = soapInputRef.current.trim();
+    const encounterId = appointment?.encounter_id;
+    if (!text || !encounterId || soapSaveInFlightRef.current) return false;
+    soapSaveInFlightRef.current = true; setSoapAutosaveState("saving");
+    const result = await saveSoapNote(createBrowserSupabaseClient(), { encounterId, text, supersedesId: latestSoapNoteIdRef.current ?? undefined });
+    soapSaveInFlightRef.current = false;
+    if (result.error) { setSoapAutosaveState("error"); setStatus(`Unable to save consultation note: ${result.error.message}`); return false; }
+    latestSoapNoteIdRef.current = result.data; lastSavedSoapTextRef.current = text;
+    setLatestSoapNoteId(result.data); setSoapLastSavedAt(new Date());
+    const hasNewerChanges = soapInputRef.current.trim() !== text;
+    setSoapDirty(hasNewerChanges); setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
+    if (hasNewerChanges) setSoapAutosaveRevision((revision) => revision + 1);
+    if (source === "manual") setStatus("Consultation note saved.");
+    return true;
+  }, [appointment?.encounter_id]);
+
+  useEffect(() => {
+    if (!soapDirty || !soapInput.trim() || encounter?.status !== "in_progress") return;
+    if (soapInput.trim() === lastSavedSoapTextRef.current) { setSoapDirty(false); setSoapAutosaveState("saved"); return; }
+    setSoapAutosaveState("pending");
+    const timeout = window.setTimeout(() => { void persistSoapNote("auto"); }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [encounter?.status, persistSoapNote, soapAutosaveRevision, soapDirty, soapInput]);
 
   function handleSoapChange(value: string) {
     setSoapInput(value); setSoapDirty(true);
@@ -145,14 +195,14 @@ export default function ProviderTeleconsultRoomPage() {
     const result = await saveMyEncounterViewMode(createBrowserSupabaseClient(), mode);
     if (result.error) setStatus(`Unable to save view preference: ${result.error.message}`);
   }
+  async function saveTeleconsultWorkspacePreference(preference: TeleconsultWorkspacePreference) {
+    setTeleconsultWorkspacePreference(preference);
+    const result = await saveMyTeleconsultWorkspacePreference(createBrowserSupabaseClient(), preference);
+    if (result.error) setStatus(`Unable to save teleconsult layout preference: ${result.error.message}`);
+  }
   async function saveNote(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!appointment?.encounter_id || !organizationId) return;
-    const text = soapInput.trim(); if (!text) return;
-    setBusy(true);
-    const result = await saveSoapNote(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, text, supersedesId: currentSoapNote?.id });
-    setBusy(false);
-    if (result.error) setStatus(`Unable to save consultation note: ${result.error.message}`);
-    else { setSoapDirty(false); await loadClinicalRecords(organizationId); setStatus(currentSoapNote ? "Consultation note revision saved." : "Consultation note saved."); }
+    event.preventDefault();
+    await persistSoapNote("manual");
   }
   async function addRegionDiagnosis(text: string) {
     if (!appointment?.encounter_id) return;
@@ -164,15 +214,16 @@ export default function ProviderTeleconsultRoomPage() {
   }
   async function issueTeleconsultPrescription(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!appointment?.encounter_id) return;
-    setBusy(true); const result = await issuePrescription(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, medication: rxMedication, dosage: rxDosage, note: rxNote }); setBusy(false);
+    const regimen = [{ medication: rxMedication, dosage: rxDosage, note: rxNote }, ...(prescriptionTemplate?.medications.slice(1).map((line) => ({ medication: line.name, dosage: [line.dosage, line.frequency, line.duration].filter(Boolean).join(" · "), note: line.notes })) ?? [])];
+    setBusy(true); const result = regimen.length > 1 ? await issuePrescriptionRegimen(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, medications: regimen, templateId: prescriptionTemplate?.templateId, templateVersion: prescriptionTemplate?.templateVersion }) : await issuePrescription(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, medication: rxMedication, dosage: rxDosage, note: rxNote, templateId: prescriptionTemplate?.templateId, templateVersion: prescriptionTemplate?.templateVersion }); setBusy(false);
     if (result.error) setStatus(`Unable to issue prescription: ${result.error.message}`);
-    else if (organizationId) { setRxMedication(""); setRxDosage(""); setRxNote(""); await loadClinicalRecords(organizationId); setStatus("Prescription issued."); }
+    else if (organizationId) { setRxMedication(""); setRxDosage(""); setRxNote(""); setPrescriptionTemplate(null); await loadClinicalRecords(organizationId); setStatus("Prescription issued."); }
   }
   async function issueTeleconsultCertificate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!appointment?.encounter_id) return;
-    setBusy(true); const result = await issueMedicalCertificate(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, title: certTitle, statement: certStatement }); setBusy(false);
+    setBusy(true); const result = await issueMedicalCertificate(createBrowserSupabaseClient(), { encounterId: appointment.encounter_id, title: certTitle, statement: certStatement, templateId: certificateTemplate?.templateId, templateVersion: certificateTemplate?.templateVersion }); setBusy(false);
     if (result.error) setStatus(`Unable to issue medical certificate: ${result.error.message}`);
-    else if (organizationId) { setCertStatement(""); await loadClinicalRecords(organizationId); setStatus("Medical certificate issued."); }
+    else if (organizationId) { setCertStatement(""); setCertificateTemplate(null); await loadClinicalRecords(organizationId); setStatus("Medical certificate issued."); }
   }
   async function issueTeleconsultReferral(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!appointment?.encounter_id) return;
@@ -207,25 +258,28 @@ export default function ProviderTeleconsultRoomPage() {
       </header>
       <div className="provider-call-status" role="status" aria-live="polite"><span className="provider-call-status-dot" />{status}</div>
       {appointment ? <>
-        <section className="teleconsult-video-panel" aria-label="Video consultation">
-          <div className="teleconsult-video-panel__header"><div><p className="eyebrow">Secure room</p><h2>Video consultation</h2></div><div>{!appointment.encounter_id ? <Button disabled={busy} onClick={() => void startVisit()}>Start encounter</Button> : null}{appointment.room_status !== "closed" && appointment.room_status !== "cancelled" ? <Button disabled={busy} onClick={() => void closeRoom()}>Close room</Button> : null}<Button aria-expanded={videoOpen} onClick={() => setVideoOpen((open) => !open)} variant="secondary">{videoOpen ? "Hide video" : "Show video"}</Button></div></div>
-          {videoOpen ? appointment.can_join && appointment.room_name ? <TeleconsultWebRtcRoom client={createBrowserSupabaseClient()} displayLabel="Clinician" remoteParticipantName={appointment.patient_name} appointmentTime={appointment.start_at} serviceName={appointment.service_type ?? undefined} roomName={appointment.room_name} /> : <div className="provider-call-unavailable"><h2>Video unavailable</h2><p>The secure room becomes available during the appointment join window.</p></div> : null}
-        </section>
-        {appointment.encounter_id && clinicalRecords && patient && encounter ? <div className="encounter-layout teleconsult-clinical-layout">
-          <aside className="encounter-context" aria-label="Patient details and vitals"><ClinicalPatientCard bloodType={patient.blood_type} birthDate={patient.birth_date} compact displayName={patient.displayName} gender={patient.gender} photoUrl={patient.photo_url} qrPayload={createPatientQrPayload(organizationId ?? appointment.organization_id, patient.id)} /><ClinicalVitalsPanel emptyMessage="Not captured this visit. No earlier vital signs are recorded for this patient." readings={vitalReadings} /></aside>
-          <section className="encounter-recording" aria-labelledby="teleconsult-documentation-heading">
-            <ClinicalDocumentationWorkspace headingId="teleconsult-documentation-heading" forceSimpleMode={forceSimpleMode} mode={effectiveMode} onModeChange={(mode) => void selectMode(mode)} simpleContent={<EncounterSoapEditor busy={busy} canEdit={encounter.status === "in_progress"} currentNoteId={currentSoapNote?.id} debugMode={debugMode} encounterId={appointment.encounter_id} onChange={handleSoapChange} onSubmit={saveNote} onTestFillAll={fillSoap} onTestFillSoap={fillSoap} value={soapInput} />} visualContent={<section className="encounter-assessment-workspace" aria-label="Visual assessment workspace"><MusculoskeletalFigure activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]} anatomyView={anatomyView} onRegionSelect={setSelectedRegion} onViewChange={setAnatomyView} selectedRegionCode={selectedRegion.code} /><MusculoskeletalRegionPanel busy={diagnosisBusy} diagnoses={regionDiagnoses} encounterOpen={encounter.status === "in_progress"} onDiagnosisSubmit={addRegionDiagnosis} onRegionChange={setSelectedRegion} selectedRegion={selectedRegion} /></section>} />
+        <TeleconsultSplitWorkspace
+          documentation={appointment.encounter_id && clinicalRecords && patient && encounter ? <section className="encounter-recording" aria-labelledby="teleconsult-documentation-heading">
+            <ClinicalDocumentationWorkspace headingId="teleconsult-documentation-heading" forceSimpleMode={forceSimpleMode} mode={effectiveMode} onModeChange={(mode) => void selectMode(mode)} simpleContent={<EncounterSoapEditor autosaveState={soapAutosaveState} busy={busy} canEdit={encounter.status === "in_progress"} currentNoteId={latestSoapNoteId} debugMode={debugMode} encounterId={appointment.encounter_id} lastSavedAt={soapLastSavedAt ? soapLastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null} onChange={handleSoapChange} onRetryAutosave={() => void persistSoapNote("manual")} onSubmit={saveNote} onTestFillAll={fillSoap} onTestFillSoap={fillSoap} value={soapInput} />} visualContent={<section className="encounter-assessment-workspace" aria-label="Visual assessment workspace"><MusculoskeletalFigure activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]} anatomyView={anatomyView} onRegionSelect={setSelectedRegion} onViewChange={setAnatomyView} selectedRegionCode={selectedRegion.code} /><MusculoskeletalRegionPanel busy={diagnosisBusy} diagnoses={regionDiagnoses} encounterOpen={encounter.status === "in_progress"} onDiagnosisSubmit={addRegionDiagnosis} onRegionChange={setSelectedRegion} selectedRegion={selectedRegion} /></section>} />
             {encounter.status === "in_progress" ? <ClinicalOrdersAndCharges actions={teleconsultActions} activeAction={activeAction} onActionChange={setActiveAction}>
               <div className="encounter-actions-grid">
-                {canPrescribe && activeAction === "prescription" ? <section className="encounter-action-card"><h3>Prescription</h3><form className="encounter-action-form" onSubmit={issueTeleconsultPrescription}><Field label="Medication"><Input maxLength={240} onChange={(event) => setRxMedication(event.target.value)} required value={rxMedication} /></Field><Field label="Dosage and directions"><textarea className="odyssey-input" maxLength={1000} onChange={(event) => setRxDosage(event.target.value)} required rows={3} value={rxDosage} /></Field><Field className="encounter-field-full" label="Note"><Input maxLength={1000} onChange={(event) => setRxNote(event.target.value)} value={rxNote} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button></form></section> : null}
-                {canPrescribe && activeAction === "certificate" ? <section className="encounter-action-card"><h3>Medical certificate</h3><form className="encounter-action-form" onSubmit={issueTeleconsultCertificate}><Field label="Certificate title"><Input maxLength={200} onChange={(event) => setCertTitle(event.target.value)} required value={certTitle} /></Field><Field className="encounter-field-full" label="Statement"><textarea className="odyssey-input" maxLength={5000} onChange={(event) => setCertStatement(event.target.value)} required rows={5} value={certStatement} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Issue certificate</Button></form></section> : null}
+                {canPrescribe && activeAction === "prescription" ? <section className="encounter-action-card"><h3>Prescription</h3><form className="encounter-action-form" onSubmit={issueTeleconsultPrescription}>{organizationId && appointment.encounter_id ? <ClinicalTemplatePicker encounterId={appointment.encounter_id} organizationId={organizationId} type="prescription" onApply={(template) => { setPrescriptionTemplate(template); if (template) { const first = template.medications[0]; setRxMedication(first?.name ?? ""); setRxDosage([first?.dosage, first?.frequency, first?.duration].filter(Boolean).join(" · ")); setRxNote([template.body, first?.notes].filter(Boolean).join("\n\n")); } }} /> : null}<Field label="Medication"><Input maxLength={240} onChange={(event) => setRxMedication(event.target.value)} required value={rxMedication} /></Field><Field label="Dosage and directions"><textarea className="odyssey-input" maxLength={1000} onChange={(event) => setRxDosage(event.target.value)} required rows={3} value={rxDosage} /></Field><Field className="encounter-field-full" label="Note"><Input maxLength={1000} onChange={(event) => setRxNote(event.target.value)} value={rxNote} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button></form></section> : null}
+                {canPrescribe && activeAction === "certificate" ? <section className="encounter-action-card"><h3>Medical certificate</h3><form className="encounter-action-form" onSubmit={issueTeleconsultCertificate}>{organizationId && appointment.encounter_id ? <ClinicalTemplatePicker encounterId={appointment.encounter_id} organizationId={organizationId} type="medical_certificate" onApply={(template) => { setCertificateTemplate(template); if (template) { setCertTitle(template.title); setCertStatement(template.body); } }} /> : null}<Field label="Certificate title"><Input maxLength={200} onChange={(event) => setCertTitle(event.target.value)} required value={certTitle} /></Field><Field className="encounter-field-full" label="Statement"><textarea className="odyssey-input" maxLength={5000} onChange={(event) => setCertStatement(event.target.value)} required rows={5} value={certStatement} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Issue certificate</Button></form></section> : null}
                 {canRefer && activeAction === "referral" ? <section className="encounter-action-card"><h3>Specialist referral</h3><form className="encounter-action-form" onSubmit={issueTeleconsultReferral}><Field label="Specialist"><select className="odyssey-input" onChange={(event) => setSpecialistRoleId(event.target.value)} required value={specialistRoleId}><option disabled value="">Select a specialist</option>{specialists.map((specialist) => <option key={specialist.practitionerRoleId} value={specialist.practitionerRoleId}>{specialist.displayName} · {specialist.organizationName}</option>)}</select></Field><Field className="encounter-field-full" label="Clinical note"><textarea className="odyssey-input" maxLength={5000} onChange={(event) => setReferralNote(event.target.value)} rows={3} value={referralNote} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Place referral</Button></form></section> : null}
               </div>
               <section className="encounter-added-actions" aria-labelledby="teleconsult-added-actions-heading"><h3 id="teleconsult-added-actions-heading">Added to this encounter</h3><ul>{clinicalRecords.medicationRequests.filter((item) => item.encounter_id === appointment.encounter_id).map((item) => <li key={item.id}>Prescription: {item.medication_display ?? item.medication_code}</li>)}{clinicalRecords.documentReferences.filter((item) => item.encounter_id === appointment.encounter_id && item.type_code === "medical-certificate").map((item) => <li key={item.id}>Certificate: {item.content_title ?? item.type_display ?? "Medical certificate"}</li>)}{clinicalRecords.serviceRequests.filter((item) => item.encounter_id === appointment.encounter_id && item.category === "referral").map((item) => <li key={item.id}>Referral: {item.code_display ?? item.code}</li>)}{!clinicalRecords.medicationRequests.some((item) => item.encounter_id === appointment.encounter_id) && !clinicalRecords.documentReferences.some((item) => item.encounter_id === appointment.encounter_id && item.type_code === "medical-certificate") && !clinicalRecords.serviceRequests.some((item) => item.encounter_id === appointment.encounter_id && item.category === "referral") ? <li className="is-empty">No orders or documents added yet.</li> : null}</ul></section>
             </ClinicalOrdersAndCharges> : null}
             <LongitudinalRecord count={priorEncounters.length}>{priorEncounters.length ? priorEncounters.map((prior) => <details className="history-encounter" key={prior.id}><summary><span><strong>{prior.service_type ?? "Clinical visit"}</strong><small>{formatDateTime(prior.period_start)} · {prior.status.replaceAll("_", " ")}</small></span></summary><div className="history-entries">{clinicalRecords.observations.filter((item) => item.encounter_id === prior.id).map((item) => <article key={item.id}><strong>{item.code_display ?? item.code}</strong><p>{clinicalText(item.value) || item.note || "No narrative recorded."}</p></article>)}</div></details>) : <p className="hint">No earlier encounters are recorded at this clinic.</p>}</LongitudinalRecord>
-          </section>
-        </div> : !appointment.encounter_id ? <section className="teleconsult-start-state"><h2>Start the encounter to document</h2><p>The video room remains available while you document in the shared clinical workspace.</p><Button disabled={busy} onClick={() => void startVisit()}>Start encounter</Button></section> : null}
+          </section> : null}
+          patientContext={appointment.encounter_id && clinicalRecords && patient && encounter ? <><ClinicalPatientCard bloodType={patient.blood_type} birthDate={patient.birth_date} compact displayName={patient.displayName} gender={patient.gender} photoUrl={patient.photo_url} qrPayload={createPatientQrPayload(organizationId ?? appointment.organization_id, patient.id)} /><ClinicalVitalsPanel emptyMessage="Not captured this visit. No earlier vital signs are recorded for this patient." readings={vitalReadings} /></> : null}
+          onPreferenceChange={(preference) => void saveTeleconsultWorkspacePreference(preference)}
+          preference={teleconsultWorkspacePreference}
+          video={<section className="teleconsult-video-panel">
+            <div className="teleconsult-video-panel__header"><div><p className="eyebrow">Secure room</p><h2>Video consultation</h2></div><div>{!appointment.encounter_id ? <Button disabled={busy} onClick={() => void startVisit()}>Start encounter</Button> : null}{appointment.room_status !== "closed" && appointment.room_status !== "cancelled" ? <Button disabled={busy} onClick={() => void closeRoom()}>Close room</Button> : null}<Button aria-expanded={videoOpen} onClick={() => setVideoOpen((open) => !open)} variant="secondary">{videoOpen ? "Hide video" : "Show video"}</Button></div></div>
+            {videoOpen ? appointment.can_join && appointment.room_name ? <TeleconsultWebRtcRoom client={createBrowserSupabaseClient()} displayLabel="Clinician" remoteParticipantName={appointment.patient_name} appointmentTime={appointment.start_at} serviceName={appointment.service_type ?? undefined} roomName={appointment.room_name} /> : <div className="provider-call-unavailable"><h2>Video unavailable</h2><p>The secure room becomes available during the appointment join window.</p></div> : null}
+          </section>}
+        />
+        {!appointment.encounter_id ? <section className="teleconsult-start-state"><h2>Start the encounter to document</h2><p>The video room remains available while you document in the shared clinical workspace.</p><Button disabled={busy} onClick={() => void startVisit()}>Start encounter</Button></section> : null}
       </> : null}
     </main>
   );

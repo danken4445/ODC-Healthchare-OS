@@ -21,6 +21,8 @@ export type WorkspaceTab = "all" | "queue" | "chart" | "diagnostics" | "schedule
 
 interface WorkspaceHeaderProps {
   signedInAs: string | null;
+  practitionerName?: string | null;
+  isNurse?: boolean;
   organizationId: string | null;
   department: string | null;
   roleId: string | null;
@@ -30,10 +32,11 @@ interface WorkspaceHeaderProps {
   queueCount: number;
   notificationsCount: number;
   hasActiveEncounter: boolean;
+  canManageTemplates: boolean;
   onSignOut: () => void;
 }
 
-const tabs: Array<{ id: WorkspaceTab; label: string }> = [
+const doctorTabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: "all", label: "Overview" },
   { id: "queue", label: "Daily queue" },
   { id: "chart", label: "Consultation" },
@@ -41,8 +44,16 @@ const tabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: "schedule", label: "Availability" },
 ];
 
+const nurseTabs: Array<{ id: WorkspaceTab; label: string }> = [
+  { id: "all", label: "Overview" },
+  { id: "queue", label: "Daily queue" },
+  { id: "diagnostics", label: "Diagnostics" },
+];
+
 export function WorkspaceHeader({
   signedInAs,
+  practitionerName,
+  isNurse = false,
   department,
   liveStatus,
   activeTab,
@@ -50,20 +61,48 @@ export function WorkspaceHeader({
   queueCount,
   notificationsCount,
   hasActiveEncounter,
+  canManageTemplates,
   onSignOut,
 }: WorkspaceHeaderProps) {
-  // Extract doctor name from email or signedInAs
-  const doctorDisplayName = signedInAs
-    ? `Dr. ${signedInAs.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}`
-    : "Dr. Clinician";
+  // Extract clinician name appropriately based on role
+  const rawName =
+    practitionerName ||
+    (signedInAs
+      ? signedInAs
+          .split("@")[0]
+          .replace(/[._-]/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+      : isNurse
+        ? "Nurse"
+        : "Clinician");
 
-  const initials = doctorDisplayName
-    .replace(/^Dr\.\s*/, "")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0]?.toUpperCase())
-    .slice(0, 2)
-    .join("") || "DR";
+  const displayName = isNurse
+    ? rawName.toLowerCase().startsWith("dr.")
+      ? rawName.replace(/^dr\.\s*/i, "Nurse ")
+      : rawName.toLowerCase().includes("nurse")
+        ? rawName
+        : `Nurse ${rawName}`
+    : rawName.toLowerCase().startsWith("dr.")
+      ? rawName
+      : `Dr. ${rawName}`;
+
+  const initials = isNurse
+    ? displayName
+        .replace(/^Nurse\s+/i, "")
+        .split(" ")
+        .filter(Boolean)
+        .map((w) => w[0]?.toUpperCase())
+        .slice(0, 2)
+        .join("") || "RN"
+    : displayName
+        .replace(/^Dr\.\s*/i, "")
+        .split(" ")
+        .filter(Boolean)
+        .map((w) => w[0]?.toUpperCase())
+        .slice(0, 2)
+        .join("") || "DR";
+
+  const visibleTabs = isNurse ? nurseTabs : doctorTabs;
 
   return (
     <header className="vesper-provider-header">
@@ -73,7 +112,9 @@ export function WorkspaceHeader({
           <div className="vesper-doctor-avatar">{initials}</div>
           <div>
             <div className="vesper-provider-eyebrow-row">
-              <span className="vesper-provider-eyebrow">Provider Workspace</span>
+              <span className="vesper-provider-eyebrow">
+                {isNurse ? "Nurse Workspace" : "Provider Workspace"}
+              </span>
               {department && (
                 <span className="vesper-dept-tag">{department}</span>
               )}
@@ -82,27 +123,31 @@ export function WorkspaceHeader({
                 <span>Queue: {liveStatus.toLowerCase()}</span>
               </span>
             </div>
-            <h1 className="vesper-provider-h1">{doctorDisplayName}</h1>
+            <h1 className="vesper-provider-h1">{displayName}</h1>
           </div>
         </div>
 
         <nav className="vesper-provider-header__actions" aria-label="Quick links">
-          <Link
-            href="/teleconsult"
-            className="vesper-header-link"
-            title="Video Consultation Rooms"
-          >
-            <Video size={16} />
-            <span>Video rooms</span>
-          </Link>
-          <Link
-            href="/payouts"
-            className="vesper-header-link"
-            title="Doctor Payouts & Entitlements"
-          >
-            <HandCoins size={16} />
-            <span>Payouts</span>
-          </Link>
+          {!isNurse && (
+            <>
+              <Link
+                href="/teleconsult"
+                className="vesper-header-link"
+                title="Video Consultation Rooms"
+              >
+                <Video size={16} />
+                <span>Video rooms</span>
+              </Link>
+              <Link
+                href="/payouts"
+                className="vesper-header-link"
+                title="Doctor Payouts & Entitlements"
+              >
+                <HandCoins size={16} />
+                <span>Payouts</span>
+              </Link>
+            </>
+          )}
           <AppointmentNotificationControl />
           <button
             type="button"
@@ -117,12 +162,12 @@ export function WorkspaceHeader({
         </nav>
       </div>
 
-      {/* Horizontal Tab Navigation (Matches Vesper Standard UI) */}
+      {/* Horizontal Tab Navigation (Filtered by Role) */}
       <nav
         className="workspace-nav-tabs vesper-tab-bar"
-        aria-label="Doctor workspace sections"
+        aria-label={isNurse ? "Nurse workspace sections" : "Doctor workspace sections"}
       >
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const count =
             tab.id === "queue"
@@ -163,6 +208,11 @@ export function WorkspaceHeader({
             </button>
           );
         })}
+        {canManageTemplates && !isNurse && (
+          <Link href="/templates" className="vesper-tab-btn vesper-tab-btn--inactive">
+            <span>Templates</span>
+          </Link>
+        )}
       </nav>
     </header>
   );

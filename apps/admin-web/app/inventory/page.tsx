@@ -43,6 +43,7 @@ const emptyWorkspace: InventoryWorkspace = {
   departments: [],
   items: [],
   stock: [],
+  holds: [],
   usages: [],
   movements: [],
 };
@@ -148,8 +149,15 @@ export default function InventoryPage() {
   );
 
   const stockRows = useMemo(
-    () =>
-      workspace.stock
+    () => {
+      const heldQuantityByStockId = new Map<string, number>();
+      for (const hold of workspace.holds) {
+        heldQuantityByStockId.set(
+          hold.stock_id,
+          (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
+        );
+      }
+      return workspace.stock
         .map((stock) => {
           const item = workspace.items.find((i) => i.id === stock.item_id);
           const dept = workspace.departments.find(
@@ -157,6 +165,10 @@ export default function InventoryPage() {
           );
           return {
             ...stock,
+            availableQuantity: Math.max(
+              0,
+              Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0),
+            ),
             itemName: item?.name ?? "Unknown item",
             itemSku: item?.sku ?? "—",
             unit: item?.unit_of_measure ?? "unit",
@@ -171,8 +183,8 @@ export default function InventoryPage() {
         .filter(
           (row) =>
             stockFilter === "all" || row.department_id === stockFilter,
-        ),
-    [workspace, stockFilter],
+        );
+    }, [workspace, stockFilter],
   );
 
   /* ─── KPI calculations ───────────────────────────────────── */
@@ -1204,14 +1216,14 @@ export default function InventoryPage() {
                 {stockRows
                   .filter(
                     (row) =>
-                      Number(row.quantity) > 0 &&
+                      row.availableQuantity > 0 &&
                       (!inventoryDepartmentSelection ||
                         row.department_id === inventoryDepartmentSelection),
                   )
                   .map((row) => (
                     <option key={row.id} value={row.id}>
                       {row.itemName} · {row.departmentName} (
-                      {fmt(Number(row.quantity))})
+                      {fmt(row.availableQuantity)} available)
                     </option>
                   ))}
               </select>

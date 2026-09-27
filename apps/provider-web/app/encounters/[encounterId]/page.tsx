@@ -44,6 +44,7 @@ import {
   hasOrganizationPermission,
   issueMedicalCertificate,
   issuePrescription,
+  issuePrescriptionRegimen,
   recordEncounterRegionDiagnosis,
   saveMyEncounterViewMode,
   saveSoapNote,
@@ -70,12 +71,14 @@ import {
   Button,
   ClinicalPatientCard,
   ClinicalVitalsPanel,
+  EncounterSaveConfirmedModal,
   Field,
   Input,
   MUSCULOSKELETAL_REGIONS,
   MusculoskeletalFigure,
   MusculoskeletalRegionPanel,
   AccessState,
+  SaveConfirmedModal,
   type BodyRegionDefinition,
 } from "@odyssey/ui";
 import Link from "next/link";
@@ -86,6 +89,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { EncounterDevBar } from "../../components/EncounterDevBar";
@@ -93,6 +97,7 @@ import { EncounterSoapEditor } from "../../components/EncounterSoapEditor";
 import { ClinicalDocumentationWorkspace } from "../../components/ClinicalDocumentationWorkspace";
 import { ClinicalOrdersAndCharges } from "../../components/ClinicalOrdersAndCharges";
 import { LongitudinalRecord } from "../../components/LongitudinalRecord";
+import { ClinicalTemplatePicker, type TemplateApplication } from "../../components/template-studio";
 import {
   generateRandomEncounterData,
   isDeveloperModeActive,
@@ -131,6 +136,7 @@ type EncounterAction =
   | "tagging";
 
 type EncounterAccessState = "loading" | "unauthorized" | "error" | "ready";
+type SoapAutosaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -195,11 +201,22 @@ export default function EncounterRecordingPage() {
   // Form input states for the Encounter phase
   const [soapInput, setSoapInput] = useState<string>("");
   const [soapDirty, setSoapDirty] = useState<boolean>(false);
+  const [soapAutosaveState, setSoapAutosaveState] = useState<SoapAutosaveState>("idle");
+  const [soapLastSavedAt, setSoapLastSavedAt] = useState<Date | null>(null);
+  const [latestSoapNoteId, setLatestSoapNoteId] = useState<string | null>(null);
+  const [soapAutosaveRevision, setSoapAutosaveRevision] = useState(0);
+  const soapInputRef = useRef("");
+  const latestSoapNoteIdRef = useRef<string | null>(null);
+  const lastSavedSoapTextRef = useRef("");
+  const soapSaveInFlightRef = useRef(false);
   const [rxMedication, setRxMedication] = useState<string>("");
   const [rxDosage, setRxDosage] = useState<string>("");
   const [rxNote, setRxNote] = useState<string>("");
   const [certTitle, setCertTitle] = useState<string>("Medical Certificate");
   const [certStatement, setCertStatement] = useState<string>("");
+  const [prescriptionTemplate, setPrescriptionTemplate] = useState<TemplateApplication | null>(null);
+  const [additionalPrescriptionLines, setAdditionalPrescriptionLines] = useState<TemplateApplication["medications"]>([]);
+  const [certificateTemplate, setCertificateTemplate] = useState<TemplateApplication | null>(null);
   const [labServiceId, setLabServiceId] = useState<string>("");
   const [labPriority, setLabPriority] = useState<
     "routine" | "urgent" | "asap" | "stat"
@@ -221,6 +238,20 @@ export default function EncounterRecordingPage() {
   const [activeAction, setActiveAction] = useState<EncounterAction>("prescription");
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
+  const [soapSaveConfirmation, setSoapSaveConfirmation] = useState<{
+    noteSnippet: string;
+    revisionNumber?: number;
+    timestamp: Date;
+  } | null>(null);
+  const [orderSaveConfirmation, setOrderSaveConfirmation] = useState<{
+    title: string;
+    subtitle: string;
+    badge: string;
+    recordType: "prescription" | "certificate" | "order";
+    summaryItems: Array<{ label: string; value: ReactNode; highlight?: boolean; badgeVariant?: "default" | "success" | "warning" | "danger" | "info" }>;
+    detailsSnippet?: { title: string; content: string };
+    tertiaryAction?: { label: string; onClick: () => void };
+  } | null>(null);
 
   // Check persisted debug mode on client mount
   useEffect(() => {
@@ -420,10 +451,31 @@ export default function EncounterRecordingPage() {
 
   // Initialize or synchronize SOAP input if not dirtied
   useEffect(() => {
-    if (currentSoapNote && !soapDirty) {
-      setSoapInput(clinicalText(currentSoapNote.value));
+    if (
+      currentSoapNote &&
+      !soapDirty &&
+      (!latestSoapNoteIdRef.current || currentSoapNote.id === latestSoapNoteIdRef.current)
+    ) {
+      const text = clinicalText(currentSoapNote.value);
+      setSoapInput(text);
+      soapInputRef.current = text;
+      lastSavedSoapTextRef.current = text;
+      latestSoapNoteIdRef.current = currentSoapNote.id;
+      setLatestSoapNoteId(currentSoapNote.id);
     }
   }, [currentSoapNote, soapDirty]);
+
+  useEffect(() => {
+    soapInputRef.current = soapInput;
+  }, [soapInput]);
+
+  useEffect(() => {
+    latestSoapNoteIdRef.current = null;
+    lastSavedSoapTextRef.current = "";
+    setLatestSoapNoteId(null);
+    setSoapLastSavedAt(null);
+    setSoapAutosaveState("idle");
+  }, [encounterId]);
 
   const priorEncounters = useMemo(
     () => (records?.encounters ?? [])
@@ -463,7 +515,21 @@ export default function EncounterRecordingPage() {
     [patientObservations],
   );
   const patientDetails = `${patient?.birth_date ?? "Birth date not recorded"} · ${patient?.gender ?? "Gender not recorded"}`;
-  const completionBlocker = !currentSoapNote
+  const heldQuantityByStockId = useMemo(() => {
+    const quantities = new Map<string, number>();
+    for (const hold of inventory?.holds ?? []) {
+      quantities.set(hold.stock_id, (quantities.get(hold.stock_id) ?? 0) + Number(hold.quantity));
+    }
+    return quantities;
+  }, [inventory?.holds]);
+  const availableTagQuantity = tagStockId
+    ? Math.max(
+      0,
+      Number(inventory?.stock.find((stock) => stock.id === tagStockId)?.quantity ?? 0) -
+        (heldQuantityByStockId.get(tagStockId) ?? 0),
+    )
+    : null;
+  const completionBlocker = !latestSoapNoteId
     ? "Save clinical documentation before completing this encounter."
     : soapDirty
       ? "Save or discard the current documentation changes before completing."
@@ -550,6 +616,67 @@ export default function EncounterRecordingPage() {
     ],
   );
 
+  const persistSoapNote = useCallback(async (source: "auto" | "manual") => {
+    const text = soapInputRef.current.trim();
+    if (!text || soapSaveInFlightRef.current) return false;
+
+    soapSaveInFlightRef.current = true;
+    setSoapAutosaveState("saving");
+    const result = await saveSoapNote(createBrowserSupabaseClient(), {
+      encounterId,
+      text,
+      supersedesId: latestSoapNoteIdRef.current ?? undefined,
+    });
+    soapSaveInFlightRef.current = false;
+
+    if (result.error) {
+      setSoapAutosaveState("error");
+      setStatus(`Unable to save the consultation note: ${result.error.message}`);
+      return false;
+    }
+
+    latestSoapNoteIdRef.current = result.data;
+    lastSavedSoapTextRef.current = text;
+    setLatestSoapNoteId(result.data);
+    setSoapLastSavedAt(new Date());
+
+    const hasNewerChanges = soapInputRef.current.trim() !== text;
+    setSoapDirty(hasNewerChanges);
+    setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
+    if (hasNewerChanges) setSoapAutosaveRevision((revision) => revision + 1);
+    if (source === "manual") {
+      setStatus("Consultation note saved.");
+      setSoapSaveConfirmation({
+        noteSnippet: text,
+        revisionNumber: soapAutosaveRevision + 1,
+        timestamp: new Date(),
+      });
+    }
+    return true;
+  }, [encounterId]);
+
+  useEffect(() => {
+    if (
+      !soapDirty ||
+      !soapInput.trim() ||
+      encounter?.status !== "in_progress"
+    ) {
+      return;
+    }
+
+    if (soapInput.trim() === lastSavedSoapTextRef.current) {
+      setSoapDirty(false);
+      setSoapAutosaveState("saved");
+      return;
+    }
+
+    setSoapAutosaveState("pending");
+    const timeout = window.setTimeout(() => {
+      void persistSoapNote("auto");
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [encounter?.status, persistSoapNote, soapAutosaveRevision, soapDirty, soapInput]);
+
   // Easter Egg detection in SOAP documentation textarea
   function handleSoapChange(val: string) {
     setSoapInput(val);
@@ -611,6 +738,9 @@ export default function EncounterRecordingPage() {
     setRxNote("");
     setCertTitle("Medical Certificate");
     setCertStatement("");
+    setPrescriptionTemplate(null);
+    setAdditionalPrescriptionLines([]);
+    setCertificateTemplate(null);
     setLabServiceId("");
     setLabPriority("routine");
     setLabNote("");
@@ -657,26 +787,8 @@ export default function EncounterRecordingPage() {
 
   async function saveNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const text = (soapInput || String(new FormData(event.currentTarget).get("text") ?? "")).trim();
-    if (!text) return;
-    setBusy(true);
-    const result = await saveSoapNote(createBrowserSupabaseClient(), {
-      encounterId,
-      text,
-      supersedesId: currentSoapNote?.id,
-    });
-    setBusy(false);
-    if (result.error) {
-      setStatus(`Unable to save the consultation note: ${result.error.message}`);
-      return;
-    }
-    setSoapDirty(false);
-    await loadEncounter();
-    setStatus(
-      currentSoapNote
-        ? "Consultation note revision saved."
-        : "Consultation note saved.",
-    );
+    if (!soapInputRef.current.trim()) return;
+    await persistSoapNote("manual");
   }
 
   async function completeEncounter() {
@@ -705,21 +817,38 @@ export default function EncounterRecordingPage() {
     const note = (rxNote || String(fields.get("note") ?? "")).trim();
 
     setBusy(true);
-    const result = await issuePrescription(createBrowserSupabaseClient(), {
-      encounterId,
-      medication,
-      dosage,
-      note,
-    });
+    const regimen = [
+      { medication, dosage, note },
+      ...additionalPrescriptionLines.map((line) => ({ medication: line.name, dosage: [line.dosage, line.frequency, line.duration].filter(Boolean).join(" · "), note: line.notes })),
+    ];
+    const result = regimen.length > 1
+      ? await issuePrescriptionRegimen(createBrowserSupabaseClient(), { encounterId, medications: regimen, templateId: prescriptionTemplate?.templateId, templateVersion: prescriptionTemplate?.templateVersion })
+      : await issuePrescription(createBrowserSupabaseClient(), { encounterId, medication, dosage, note, templateId: prescriptionTemplate?.templateId, templateVersion: prescriptionTemplate?.templateVersion });
     setBusy(false);
     if (result.error)
       return setStatus(`Unable to issue prescription: ${result.error.message}`);
     setRxMedication("");
     setRxDosage("");
     setRxNote("");
+    setPrescriptionTemplate(null);
+    setAdditionalPrescriptionLines([]);
     form.reset();
     await loadEncounter();
     setStatus("Prescription issued.");
+    setOrderSaveConfirmation({
+      title: "Prescription Issued & Recorded",
+      subtitle: "Medication regimen has been digitally recorded in the patient's EHR prescription history.",
+      badge: "PRESCRIPTION COMMITTED",
+      recordType: "prescription",
+      summaryItems: [
+        { label: "Medication", value: medication, highlight: true },
+        { label: "Dosage / Directions", value: dosage },
+        ...(additionalPrescriptionLines.length > 0
+          ? [{ label: "Total Regimen", value: `${additionalPrescriptionLines.length + 1} lines` }]
+          : []),
+      ],
+      detailsSnippet: note ? { title: "Prescription Note", content: note } : undefined,
+    });
   }
 
   async function issueEncounterCertificate(event: FormEvent<HTMLFormElement>) {
@@ -734,15 +863,29 @@ export default function EncounterRecordingPage() {
       encounterId,
       title,
       statement,
+      templateId: certificateTemplate?.templateId,
+      templateVersion: certificateTemplate?.templateVersion,
     });
     setBusy(false);
     if (result.error)
       return setStatus(`Unable to issue certificate: ${result.error.message}`);
     setCertTitle("Medical Certificate");
     setCertStatement("");
+    setCertificateTemplate(null);
     form.reset();
     await loadEncounter();
     setStatus("Medical certificate issued.");
+    setOrderSaveConfirmation({
+      title: "Medical Certificate Issued & Saved",
+      subtitle: "The medical certificate has been archived and attached to this encounter record.",
+      badge: "DOCUMENT COMMITTED",
+      recordType: "certificate",
+      summaryItems: [
+        { label: "Document Title", value: title, highlight: true },
+        { label: "Encounter ID", value: `ENC-${encounterId.slice(0, 8).toUpperCase()}` },
+      ],
+      detailsSnippet: statement ? { title: "Certificate Statement", content: statement } : undefined,
+    });
   }
 
   async function createEncounterRequest(event: FormEvent<HTMLFormElement>) {
@@ -802,6 +945,17 @@ export default function EncounterRecordingPage() {
         ? "Laboratory order placed."
         : "Specialist referral placed.",
     );
+    setOrderSaveConfirmation({
+      title: `${category === "laboratory" ? "Laboratory Order" : "Specialist Referral"} Saved`,
+      subtitle: `Your ${category === "laboratory" ? "lab request" : "referral request"} has been placed and attached to this encounter record.`,
+      badge: "ORDER COMMITTED",
+      recordType: "order",
+      summaryItems: [
+        { label: "Category", value: category === "laboratory" ? "Laboratory Diagnostic" : "Specialist Referral", highlight: true },
+        { label: "Priority", value: priority.toUpperCase(), badgeVariant: priority === "stat" || priority === "urgent" ? "danger" : "info" },
+      ],
+      detailsSnippet: note ? { title: "Order Notes / Instructions", content: note } : undefined,
+    });
   }
 
   async function tagEncounterItem(event: FormEvent<HTMLFormElement>) {
@@ -810,6 +964,16 @@ export default function EncounterRecordingPage() {
     const fields = new FormData(form);
     const stockId = tagStockId || String(fields.get("stockId") ?? "");
     const quantity = Number(tagQuantity || fields.get("quantity"));
+    const selectedAvailableQuantity = Math.max(
+      0,
+      Number(inventory?.stock.find((stock) => stock.id === stockId)?.quantity ?? 0) -
+        (heldQuantityByStockId.get(stockId) ?? 0),
+    );
+
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > selectedAvailableQuantity) {
+      setStatus(`Enter a quantity up to ${selectedAvailableQuantity.toLocaleString()} unreserved units for the selected department.`);
+      return;
+    }
 
     setBusy(true);
     const result = await tagInventoryUsage(createBrowserSupabaseClient(), {
@@ -963,10 +1127,13 @@ export default function EncounterRecordingPage() {
                 <EncounterSoapEditor
                   busy={busy}
                   canEdit={encounter.status === "in_progress"}
-                  currentNoteId={currentSoapNote?.id}
+                  currentNoteId={latestSoapNoteId}
                   debugMode={debugMode}
                   encounterId={encounterId}
+                  autosaveState={soapAutosaveState}
+                  lastSavedAt={soapLastSavedAt ? soapLastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null}
                   onChange={handleSoapChange}
+                  onRetryAutosave={() => void persistSoapNote("manual")}
                   onSubmit={saveNote}
                   onTestFillAll={() => applyTestFill("all")}
                   onTestFillSoap={() => applyTestFill("soap")}
@@ -1036,6 +1203,7 @@ export default function EncounterRecordingPage() {
                         )}
                       </div>
                       <form className="stack encounter-action-form" onSubmit={issueEncounterPrescription}>
+                        {organizationId ? <ClinicalTemplatePicker encounterId={encounterId} organizationId={organizationId} type="prescription" onApply={(template) => { setPrescriptionTemplate(template); setAdditionalPrescriptionLines(template?.medications.slice(1) ?? []); if (template) { const first = template.medications[0]; setRxMedication(first?.name ?? ""); setRxDosage([first?.dosage, first?.frequency, first?.duration].filter(Boolean).join(" · ")); setRxNote([template.body, first?.notes].filter(Boolean).join("\n\n")); } }} /> : null}
                         <Field label="Medication">
                           <Input
                             id="odc-rx-medication"
@@ -1068,6 +1236,7 @@ export default function EncounterRecordingPage() {
                             onChange={(e) => setRxNote(e.target.value)}
                           />
                         </Field>
+                        {additionalPrescriptionLines.map((line, index) => <fieldset className="encounter-field-full template-issued-medication" key={`${line.name}-${index}`}><legend>Additional medication {index + 2}</legend><Field label="Medication"><Input value={line.name} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} required /></Field><Field label="Dosage and directions"><Input value={[line.dosage, line.frequency, line.duration].filter(Boolean).join(" · ")} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, dosage: event.target.value, frequency: "", duration: "" } : item))} required /></Field><Field label="Note"><Input value={line.notes} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, notes: event.target.value } : item))} /></Field></fieldset>)}
                         <Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button>
                       </form>
                       <CurrentRecords title="Issued prescriptions" items={records.medicationRequests.filter((item) => item.encounter_id === encounterId)} render={(item) => <><strong>{item.medication_display ?? item.medication_code}</strong><p>{dosageText(item.dosage_instruction)}</p>{item.note && <p>{item.note}</p>}<Button className="encounter-export-button" onClick={() => previewPrescription(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
@@ -1090,6 +1259,7 @@ export default function EncounterRecordingPage() {
                         )}
                       </div>
                       <form className="stack encounter-action-form" onSubmit={issueEncounterCertificate}>
+                        {organizationId ? <ClinicalTemplatePicker encounterId={encounterId} organizationId={organizationId} type="medical_certificate" onApply={(template) => { setCertificateTemplate(template); if (template) { setCertTitle(template.title); setCertStatement(template.body); } }} /> : null}
                         <Field label="Certificate title">
                           <Input
                             id="odc-cert-title"
@@ -1271,12 +1441,16 @@ export default function EncounterRecordingPage() {
                             required
                           >
                             <option disabled value="">Select available stock</option>
-                            {inventory?.stock.filter((stock) => Number(stock.quantity) > 0 && (!departmentSelection || stock.department_id === departmentSelection)).map((stock) => {
+                            {inventory?.stock.filter((stock) => {
+                              const availableQuantity = Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0);
+                              return availableQuantity > 0 && (!departmentSelection || stock.department_id === departmentSelection);
+                            }).map((stock) => {
                               const item = inventory.items.find((candidate) => candidate.id === stock.item_id);
                               const department = inventory.departments.find((candidate) => candidate.id === stock.department_id);
+                              const availableQuantity = Math.max(0, Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0));
                               return (
                                 <option key={stock.id} value={stock.id}>
-                                  {item?.name ?? "Item"} · {department?.name ?? "Department"} ({Number(stock.quantity).toLocaleString()} {item?.unit_of_measure ?? "units"})
+                                  {item?.name ?? "Item"} · {department?.name ?? "Department"} ({availableQuantity.toLocaleString()} available {item?.unit_of_measure ?? "units"})
                                 </option>
                               );
                             })}
@@ -1289,10 +1463,16 @@ export default function EncounterRecordingPage() {
                             type="number"
                             min="0.001"
                             step="0.001"
+                            max={availableTagQuantity ?? undefined}
                             value={tagQuantity}
                             onChange={(e) => setTagQuantity(e.target.value)}
                             required
                           />
+                          {availableTagQuantity !== null && (
+                            <small className="hint" role="status">
+                              {availableTagQuantity.toLocaleString()} unreserved units can be held from this department.
+                            </small>
+                          )}
                         </Field>
                         <Button className="encounter-form-submit" disabled={busy} type="submit">Tag item</Button>
                       </form>
@@ -1325,6 +1505,47 @@ export default function EncounterRecordingPage() {
             </LongitudinalRecord>
           </section>
         </div>
+      )}
+
+      {/* Confirmed Save Modal for SOAP Consultation Notes */}
+      {soapSaveConfirmation && (
+        <EncounterSaveConfirmedModal
+          isOpen={Boolean(soapSaveConfirmation)}
+          onClose={() => setSoapSaveConfirmation(null)}
+          patientName={patient?.displayName ?? "Patient"}
+          encounterId={encounterId}
+          noteSnippet={soapSaveConfirmation.noteSnippet}
+          revisionNumber={soapSaveConfirmation.revisionNumber}
+          timestamp={soapSaveConfirmation.timestamp}
+          onContinueEncounter={() => setSoapSaveConfirmation(null)}
+          onFinishEncounter={() => {
+            setSoapSaveConfirmation(null);
+            setCompletionDialogOpen(true);
+          }}
+        />
+      )}
+
+      {/* Confirmed Save Modal for Orders, Prescriptions, Certificates */}
+      {orderSaveConfirmation && (
+        <SaveConfirmedModal
+          isOpen={Boolean(orderSaveConfirmation)}
+          onClose={() => setOrderSaveConfirmation(null)}
+          title={orderSaveConfirmation.title}
+          subtitle={orderSaveConfirmation.subtitle}
+          badge={orderSaveConfirmation.badge}
+          badgeVariant="success"
+          recordType={orderSaveConfirmation.recordType}
+          patientName={patient?.displayName ?? "Patient"}
+          patientSubtitle="Active Clinical Encounter"
+          recordId={`ENC-${encounterId.slice(0, 8).toUpperCase()}`}
+          summaryItems={orderSaveConfirmation.summaryItems}
+          detailsSnippet={orderSaveConfirmation.detailsSnippet}
+          tertiaryAction={orderSaveConfirmation.tertiaryAction}
+          primaryAction={{
+            label: "Continue Consultation",
+            onClick: () => setOrderSaveConfirmation(null),
+          }}
+        />
       )}
     </main>
   );

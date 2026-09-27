@@ -33,7 +33,7 @@ import {
 } from "./vesper-modals";
 
 export function VesperDashboard() {
-  const { email, organization, permissions, isSuperadmin } = useAdminData();
+  const { email, loading: authLoading, organization, permissions, isSuperadmin } = useAdminData();
   const {
     loading,
     error,
@@ -59,8 +59,17 @@ export function VesperDashboard() {
   const [selectedPatient, setSelectedPatient] = useState<VesperPatientRecord | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  // If user is not authenticated and has error, display sign-in
-  if (!email && error) {
+  // If session is still loading, display placeholder
+  if (authLoading) {
+    return (
+      <div className="vesper-dashboard-root" style={{ display: "grid", placeItems: "center", minHeight: "50vh" }}>
+        <p style={{ color: "#64748b" }}>Loading administrative workspace…</p>
+      </div>
+    );
+  }
+
+  // If user is not authenticated, display sign-in
+  if (!email) {
     return <AdminSignIn />;
   }
 

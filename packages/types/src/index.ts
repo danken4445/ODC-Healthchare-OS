@@ -27,6 +27,7 @@ export type WaitingRoomQueueRow = DatabaseRow<"waiting_room_queue">;
 export type DepartmentRow = DatabaseRow<"departments">;
 export type InventoryItemRow = DatabaseRow<"inventory_items">;
 export type DepartmentStockRow = DatabaseRow<"department_stock">;
+export type InventoryHoldRow = DatabaseRow<"inventory_holds">;
 export type InventoryUsageRow = DatabaseRow<"inventory_usages">;
 export type InventoryStockMovementRow =
   DatabaseRow<"inventory_stock_movements">;
@@ -343,6 +344,10 @@ export type CoverageSummary = Pick<
 >;
 
 export type EncounterViewMode = "visual" | "simple";
+export interface TeleconsultWorkspacePreference {
+  chartCollapsed: boolean;
+  splitRatio: number;
+}
 export type AnatomyView = "front" | "back" | "left" | "right";
 
 export interface EncounterRegionDiagnosis {
@@ -538,12 +543,22 @@ export interface PrescriptionInput {
   medication: string;
   dosage: string;
   note?: string;
+  templateId?: string | null;
+  templateVersion?: number | null;
+}
+
+export interface PrescriptionRegimenItem {
+  medication: string;
+  dosage: string;
+  note?: string;
 }
 
 export interface MedicalCertificateInput {
   encounterId: string;
   title: string;
   statement: string;
+  templateId?: string | null;
+  templateVersion?: number | null;
 }
 
 export type DepartmentSummary = Pick<
@@ -596,6 +611,16 @@ export type InventoryUsageSummary = Pick<
   actorName?: string | null;
 };
 
+export type InventoryHoldSummary = Pick<
+  InventoryHoldRow,
+  | "id"
+  | "stock_id"
+  | "encounter_id"
+  | "quantity"
+  | "status"
+  | "held_at"
+>;
+
 export type InventoryStockMovementSummary = Pick<
   InventoryStockMovementRow,
   | "id"
@@ -618,6 +643,7 @@ export interface InventoryWorkspace {
   departments: DepartmentSummary[];
   items: InventoryItemSummary[];
   stock: DepartmentStockSummary[];
+  holds: InventoryHoldSummary[];
   usages: InventoryUsageSummary[];
   movements: InventoryStockMovementSummary[];
 }
@@ -1175,6 +1201,76 @@ export interface DocumentTemplateInput {
   description?: string;
   body: string;
   active: boolean;
+}
+
+export type ClinicalDocumentTemplateType = "medical_certificate" | "prescription";
+export type ClinicalDocumentTemplateStatus = "draft" | "published" | "archived";
+export type ClinicalTemplateScope = "personal" | "clinic_shared";
+
+export interface TemplateMedicationLine {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  notes: string;
+}
+
+export interface ClinicalDocumentTemplateContent {
+  html: string;
+  /** Private Storage paths; short-lived URLs are resolved only for print preview. */
+  branding?: {
+    source: "none" | "personal" | "clinic";
+    headerLogoPath?: string;
+    watermarkPath?: string;
+  };
+  certificate?: {
+    variant: "fitness_to_work" | "fitness_to_travel" | "general";
+    remarks: string;
+    restDays: string;
+  };
+  medications: TemplateMedicationLine[];
+}
+
+export interface Icd10ReferenceCondition {
+  code: string;
+  description: string;
+  category: string | null;
+}
+
+export interface ClinicalDocumentTemplate {
+  id: string;
+  organizationId: string;
+  ownerDoctorId: string | null;
+  type: ClinicalDocumentTemplateType;
+  title: string;
+  conditionSystem: string | null;
+  conditionCode: string | null;
+  conditionDisplay: string | null;
+  content: ClinicalDocumentTemplateContent;
+  isDefault: boolean;
+  status: ClinicalDocumentTemplateStatus;
+  version: number;
+  updatedAt: string;
+}
+
+export interface ClinicalDocumentTemplateInput {
+  id?: string;
+  type: ClinicalDocumentTemplateType;
+  title: string;
+  scope: ClinicalTemplateScope;
+  conditionSystem?: string | null;
+  conditionCode?: string | null;
+  conditionDisplay?: string | null;
+  content: ClinicalDocumentTemplateContent;
+  isDefault: boolean;
+  status: Exclude<ClinicalDocumentTemplateStatus, "archived">;
+}
+
+export interface EncounterTemplateContext {
+  values: Record<string, string>;
+  diagnosisSystem: string | null;
+  diagnosisCode: string | null;
+  diagnosisDisplay: string | null;
 }
 
 export type OrganizationModuleKey =

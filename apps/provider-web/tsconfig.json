@@ -12,10 +12,12 @@
     "isolatedModules": true
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next-teleconsult-split-build/types/**/*.ts",
+    ".next-template-maker-build/types/**/*.ts",
+    ".next/types/**/*.ts",
+    "next-env.d.ts"
   ],
   "exclude": [
     "node_modules",

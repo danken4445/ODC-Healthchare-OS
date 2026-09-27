@@ -615,15 +615,28 @@ export function generateRandomEncounterData(options?: {
   let quantity = String(profile.inventory.quantity || 1);
 
   if (options?.inventory && options.inventory.stock.length > 0) {
+    const heldQuantityByStockId = new Map<string, number>();
+    for (const hold of options.inventory.holds ?? []) {
+      heldQuantityByStockId.set(
+        hold.stock_id,
+        (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
+      );
+    }
     const availableStocks = options.inventory.stock.filter(
-      (s) => Number(s.quantity) > 0,
+      (stock) => Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0) > 0,
     );
     const pool =
-      availableStocks.length > 0 ? availableStocks : options.inventory.stock;
+      availableStocks.length > 0 ? availableStocks : [];
     const randomStock = pool[Math.floor(Math.random() * pool.length)];
     if (randomStock) {
       stockId = randomStock.id;
       departmentId = randomStock.department_id;
+      quantity = String(
+        Math.min(
+          Number(profile.inventory.quantity || 1),
+          Number(randomStock.quantity) - (heldQuantityByStockId.get(randomStock.id) ?? 0),
+        ),
+      );
     }
   }
 
