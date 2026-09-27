@@ -2,10 +2,12 @@
 
 import { getOrganizationModules, getStaffAdministration } from "@odyssey/supabase-client";
 import type { Json, OrganizationModule } from "@odyssey/types";
+import { Building2, Landmark } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminSignIn } from "../../../../components/admin-sign-in";
 import { useAdminData } from "../../../../components/admin-data-context";
+import { FacilityClassificationToggle } from "../../../../components/facility-classification-toggle";
 import { PageHeader } from "../../../../components/page-header";
 import { StatusBadge } from "../../../../components/status-badge";
 import { Tabs, TabsContent } from "../../../../components/ui/tabs";
@@ -14,6 +16,7 @@ interface ClinicRecord {
   active: boolean;
   address: Json;
   created_at: string;
+  default_payor_type?: string;
   id: string;
   identifier: Json;
   name: string;
@@ -42,7 +45,7 @@ export default function ClinicDetailPage() {
       if (!email || !isSuperadmin) return;
       setLoading(true);
       const [clinicResult, staffResult, moduleResult] = await Promise.all([
-        client.from("organizations").select("id, name, active, identifier, address, created_at, updated_at").eq("id", params.id).single(),
+        client.from("organizations").select("id, name, active, identifier, address, default_payor_type, created_at, updated_at").eq("id", params.id).single(),
         getStaffAdministration(client, params.id),
         getOrganizationModules(client, params.id),
       ]);
@@ -51,7 +54,7 @@ export default function ClinicDetailPage() {
       if (failure || !clinicResult.data || !staffResult.data || !moduleResult.data) {
         setError(failure?.message ?? "The organization record could not be loaded.");
       } else {
-        setClinic(clinicResult.data);
+        setClinic(clinicResult.data as unknown as ClinicRecord);
         setAdmins(staffResult.data.staff.filter((member) => ["owner", "admin"].includes(member.roleCode)));
         setModules(moduleResult.data);
         setError(null);
@@ -67,14 +70,45 @@ export default function ClinicDetailPage() {
   if (loading) return <section className="data-loading">Loading organization record...</section>;
   if (error || !clinic) return <section className="data-error" role="alert"><strong>Organization record could not be loaded.</strong><p>{error}</p></section>;
 
+  const isGov = clinic.default_payor_type === "philhealth_nbb";
+
   return (
     <>
       <PageHeader eyebrow="Platform oversight" title={clinic.name} description="Organization profile, accountable administrators, and active platform controls." />
-      <Tabs defaultValue="overview" items={[{ label: "Overview", value: "overview" }, { label: "Administrators", value: "admins" }, { label: "Feature flags", value: "flags" }]}>
-        <TabsContent value="overview"><dl className="review-list"><div><dt>Organization ID</dt><dd>{clinic.id}</dd></div><div><dt>Operational state</dt><dd><StatusBadge label={clinic.active ? "Active" : "Disabled"} /></dd></div><div><dt>Organization code</dt><dd>{jsonValue(clinic.identifier, "value") ?? "Not configured"}</dd></div><div><dt>Registered address</dt><dd>{jsonValue(clinic.address, "text") ?? "Not configured"}</dd></div><div><dt>Created</dt><dd>{new Date(clinic.created_at).toLocaleString("en-PH")}</dd></div><div><dt>Last updated</dt><dd>{new Date(clinic.updated_at).toLocaleString("en-PH")}</dd></div></dl></TabsContent>
+      <Tabs defaultValue="overview" items={[{ label: "Overview", value: "overview" }, { label: "Operating mode", value: "mode" }, { label: "Administrators", value: "admins" }, { label: "Feature flags", value: "flags" }]}>
+        <TabsContent value="overview">
+          <dl className="review-list">
+            <div><dt>Organization ID</dt><dd>{clinic.id}</dd></div>
+            <div>
+              <dt>Facility classification</dt>
+              <dd>
+                <span className={`facility-badge ${isGov ? "facility-badge--government" : "facility-badge--private"}`}>
+                  {isGov ? (
+                    <><Landmark size={12} style={{ marginRight: 4 }} />Government No-Billing (PhilHealth NBB)</>
+                  ) : (
+                    <><Building2 size={12} style={{ marginRight: 4 }} />Private Hospital (Standard Invoicing)</>
+                  )}
+                </span>
+              </dd>
+            </div>
+            <div><dt>Operational state</dt><dd><StatusBadge label={clinic.active ? "Active" : "Disabled"} /></dd></div>
+            <div><dt>Organization code</dt><dd>{jsonValue(clinic.identifier, "value") ?? "Not configured"}</dd></div>
+            <div><dt>Registered address</dt><dd>{jsonValue(clinic.address, "text") ?? "Not configured"}</dd></div>
+            <div><dt>Created</dt><dd>{new Date(clinic.created_at).toLocaleString("en-PH")}</dd></div>
+            <div><dt>Last updated</dt><dd>{new Date(clinic.updated_at).toLocaleString("en-PH")}</dd></div>
+          </dl>
+        </TabsContent>
+        <TabsContent value="mode">
+          <FacilityClassificationToggle
+            organizationId={clinic.id}
+            organizationName={clinic.name}
+            onChanged={(updated) => setClinic((prev) => prev ? { ...prev, default_payor_type: updated.defaultPayorType } : null)}
+          />
+        </TabsContent>
         <TabsContent value="admins">{admins.length ? <dl className="review-list">{admins.map((admin) => <div key={`${admin.email}-${admin.roleCode}`}><dt>{admin.roleCode.replaceAll("_", " ")}</dt><dd>{admin.displayName}<br /><small>{admin.email ?? "No email available"} - {admin.active ? "Active" : "Disabled"}</small></dd></div>)}</dl> : <p className="data-loading">No clinic administrators are assigned.</p>}</TabsContent>
         <TabsContent value="flags">{modules.length ? <dl className="review-list">{modules.map((module) => <div key={module.id}><dt>{module.moduleKey.replaceAll("_", " ")}</dt><dd><StatusBadge label={module.enabled ? "Enabled" : "Disabled"} /></dd></div>)}</dl> : <p className="data-loading">No module controls are configured.</p>}</TabsContent>
       </Tabs>
     </>
   );
 }
+

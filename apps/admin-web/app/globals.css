@@ -107,6 +107,7 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
 .sidebar__close, .sidebar-scrim, .mobile-header { display: none; }
 
 .workspace { min-height: 100vh; margin-left: 260px; background: var(--background); }
+.workspace--platform { margin-left: 0; }
 .workspace__main { width: 100%; max-width: 1540px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
 .route-loading { display: flex; min-height: 50vh; align-items: center; justify-content: center; gap: 0.65rem; color: var(--muted-foreground); font-size: 0.82rem; }
 .route-skeleton { display: grid; gap: 1rem; }
@@ -1927,4 +1928,342 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ==========================================================================
+   SUPERADMIN NETWORK OVERVIEW DASHBOARD
+   ========================================================================== */
+
+/* ── Dashboard shell ──────────────────────────────────────────────────────── */
+.sa-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.sa-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.sa-header__left { min-width: 0; }
+.sa-header__title {
+  margin: 0.15rem 0 0.35rem;
+  font-size: clamp(1.3rem, 2vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+}
+.sa-header__alert-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.sa-header__alert-line svg { flex: 0 0 auto; color: var(--chart-primary); }
+.sa-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.sa-period-btn {
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.sa-period-btn__icon { font-style: normal; }
+.sa-onboard-btn {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  font-weight: 700;
+  gap: 0.4rem;
+}
+.sa-onboard-btn:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+
+/* ── KPI card row ─────────────────────────────────────────────────────────── */
+.sa-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.sa-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1rem 1.05rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.sa-kpi-card:hover {
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+  transform: translateY(-1px);
+}
+.sa-kpi-card--skeleton {
+  height: 96px;
+  background: linear-gradient(90deg, var(--muted) 25%, var(--background) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.sa-kpi-card__label {
+  color: var(--muted-foreground);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sa-kpi-card__value {
+  margin: 0.15rem 0 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.sa-kpi-card__delta {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+.sa-kpi-card__delta svg { flex: 0 0 auto; }
+.sa-kpi-card__delta--up { color: var(--status-success); }
+.sa-kpi-card__delta--down { color: var(--status-danger); }
+.sa-kpi-card__footnote {
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+  line-height: 1.3;
+}
+
+/* ── Mid row: chart + attention panel ────────────────────────────────────── */
+.sa-mid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.75fr);
+  gap: 0.75rem;
+}
+.sa-chart-panel { min-width: 0; }
+
+/* ── Clinics needing attention ────────────────────────────────────────────── */
+.sa-attention-panel { overflow: hidden; }
+.sa-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--chart-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sa-panel-link:hover { text-decoration: underline; }
+.sa-attention-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 140px;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  text-align: center;
+}
+.sa-attention-empty__icon { color: var(--status-success); }
+.sa-attention-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sa-attention-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.25rem;
+  border-bottom: 1px solid var(--row-border);
+  transition: background 120ms ease;
+}
+.sa-attention-item:last-child { border-bottom: 0; }
+.sa-attention-item:hover { background: var(--row-hover); margin: 0 -1rem; padding-inline: 1.25rem; }
+.sa-attention-item__body { flex: 1; min-width: 0; }
+.sa-attention-item__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.sa-attention-item__stat {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.69rem;
+  color: var(--muted-foreground);
+  margin-top: 0.1rem;
+}
+.sa-attention-item__badge-col { flex-shrink: 0; }
+
+/* ── Clinic avatar ────────────────────────────────────────────────────────── */
+.sa-clinic-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--secondary-foreground);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* ── Issue badges ─────────────────────────────────────────────────────────── */
+.sa-issue-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 750;
+  white-space: nowrap;
+  border: 1px solid;
+}
+.sa-issue-badge--low-inventory {
+  color: var(--status-warning);
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+}
+.sa-issue-badge--high-rejection {
+  color: var(--status-danger);
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+}
+.sa-issue-badge--pending-admin {
+  color: var(--status-info);
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+}
+.sa-issue-badge--inactive {
+  color: var(--status-neutral);
+  background: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
+}
+.sa-attention__issue-icon { flex: 0 0 auto; }
+.sa-attention__issue-icon--warning { color: var(--status-warning); }
+.sa-attention__issue-icon--danger { color: var(--status-danger); }
+.sa-attention__issue-icon--info { color: var(--status-info); }
+.sa-attention__issue-icon--neutral { color: var(--status-neutral); }
+
+/* ── Bottom row: activity table + top clinics ─────────────────────────────── */
+.sa-bottom-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.6fr);
+  gap: 0.75rem;
+}
+.sa-activity-panel { overflow: hidden; }
+.sa-event-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.sa-actor {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  max-width: 180px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sa-ref-id {
+  font-family: ui-monospace, "Cascadia Code", "Fira Mono", Consolas, monospace;
+  font-size: 0.71rem;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+}
+.sa-timestamp {
+  font-size: 0.73rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+/* ── Top clinics list ─────────────────────────────────────────────────────── */
+.sa-top-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sa-top-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.15rem;
+  border-bottom: 1px solid var(--row-border);
+}
+.sa-top-item:last-child { border-bottom: 0; }
+.sa-top-item__rank {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.sa-top-item__body { flex: 1; min-width: 0; }
+.sa-top-item__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.79rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.sa-top-item__stat {
+  display: block;
+  font-size: 0.67rem;
+  color: var(--muted-foreground);
+  margin-top: 0.05rem;
+}
+.sa-top-item__view { flex-shrink: 0; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1280px) {
+  .sa-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .sa-mid-row,
+  .sa-bottom-row { grid-template-columns: 1fr; }
+  .sa-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .sa-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+  .sa-header__actions { flex-wrap: wrap; }
+  .sa-kpi-row { grid-template-columns: 1fr; }
 }

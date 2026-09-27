@@ -78,6 +78,8 @@ import {
   type PatientInvoice,
   type PayorType,
   type PaymentMethod,
+  type FacilityBillingMode,
+  type FacilityClassification,
   type PosCartItem,
   type PosCheckoutResult,
   type ClaimSummary,
@@ -2758,6 +2760,122 @@ export async function saveOrganizationBranding(
     } as never,
   );
   return error ? failure(error) : success(data as unknown as string);
+}
+
+export async function getOrganizationFacilityClassification(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<FacilityClassification>> {
+  const { data, error } = await client.rpc("get_organization_facility_classification", {
+    p_organization_id: organizationId,
+  });
+
+  if (!error && data) {
+    const res = data as unknown as {
+      organization_id: string;
+      default_payor_type: PayorType;
+      is_government_no_billing: boolean;
+      can_manage: boolean;
+    };
+    return success({
+      organizationId: res.organization_id,
+      defaultPayorType: res.default_payor_type,
+      isGovernmentNoBilling: res.is_government_no_billing,
+      canManage: res.can_manage,
+    });
+  }
+
+  // Graceful fallback to direct organizations table query if RPC is not yet in PostgREST cache
+  const untyped = client as unknown as SupabaseClient;
+  const { data: org, error: orgError } = await untyped
+    .from("organizations")
+    .select("id, default_payor_type")
+    .eq("id", organizationId)
+    .single();
+
+  if (orgError) return failure(orgError);
+
+  const payorType = (org.default_payor_type as PayorType) || "self_pay";
+
+  // Check admin role via user_roles or platform_admins
+  let canManage = false;
+  const { data: userData } = await client.auth.getUser();
+  if (userData?.user?.id) {
+    const { data: userRoles } = await untyped
+      .from("user_roles")
+      .select("id, role_id")
+      .eq("organization_id", organizationId)
+      .eq("user_id", userData.user.id);
+
+    if (userRoles && Array.isArray(userRoles) && userRoles.length > 0) {
+      const roleIds = userRoles.map((r: { role_id: string }) => r.role_id);
+      const { data: roles } = await untyped
+        .from("roles")
+        .select("name")
+        .in("id", roleIds);
+      canManage = Boolean(roles?.some((r: { name: string }) => r.name === "admin" || r.name === "owner"));
+    }
+
+    if (!canManage) {
+      const { data: platformAdmin } = await untyped
+        .from("platform_admins")
+        .select("user_id")
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+      canManage = Boolean(platformAdmin);
+    }
+  }
+
+  return success({
+    organizationId: org.id as string,
+    defaultPayorType: payorType,
+    isGovernmentNoBilling: payorType === "philhealth_nbb",
+    canManage,
+  });
+}
+
+export async function setOrganizationFacilityClassification(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  payorType: PayorType,
+): Promise<SupabaseResult<{ organizationId: string; defaultPayorType: PayorType; isGovernmentNoBilling: boolean }>> {
+  const { data, error } = await client.rpc("set_organization_facility_classification", {
+    p_organization_id: organizationId,
+    p_payor_type: payorType,
+  });
+
+  if (!error && data) {
+    const res = data as unknown as {
+      organization_id: string;
+      default_payor_type: PayorType;
+      is_government_no_billing: boolean;
+    };
+    return success({
+      organizationId: res.organization_id,
+      defaultPayorType: res.default_payor_type,
+      isGovernmentNoBilling: res.is_government_no_billing,
+    });
+  }
+
+  // Graceful fallback to direct organizations table update
+  // The database RLS policy organizations_manage strictly verifies that only
+  // admins/owners of this organization (or superadmins) can perform updates.
+  const untyped = client as unknown as SupabaseClient;
+  const { error: updateError } = await untyped
+    .from("organizations")
+    .update({
+      default_payor_type: payorType,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", organizationId);
+
+  if (updateError) return failure(updateError);
+
+  return success({
+    organizationId,
+    defaultPayorType: payorType,
+    isGovernmentNoBilling: payorType === "philhealth_nbb",
+  });
 }
 
 export async function getDocumentTemplates(

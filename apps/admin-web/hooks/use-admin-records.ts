@@ -155,9 +155,22 @@ export function useAdminRecords(dataset: AdminDataset, revision = 0): AdminRecor
           if (result.error) throw new Error(result.error.message);
           data = result.data.map((module) => ({ id: module.id, enabled: module.enabled, module: label(module.moduleKey), key: module.moduleKey, changed: date(module.updatedAt, true), status: module.enabled ? "Enabled" : "Disabled" }));
         } else if (dataset === "clinics") {
-          const result = await client.from("organizations").select("id, name, active, created_at, updated_at").order("name");
+          const result = await client.from("organizations").select("id, name, active, default_payor_type, created_at, updated_at").order("name");
           if (result.error) throw new Error(result.error.message);
-          data = (result.data ?? []).map((clinic) => ({ id: clinic.id, name: clinic.name, active: clinic.active, clinic: clinic.name, code: clinic.id, created: date(clinic.created_at), updated: date(clinic.updated_at, true), status: clinic.active ? "Active" : "Disabled" }));
+          data = (result.data ?? []).map((clinic) => {
+            const isGov = (clinic as unknown as { default_payor_type?: string }).default_payor_type === "philhealth_nbb";
+            return {
+              id: clinic.id,
+              name: clinic.name,
+              active: clinic.active,
+              clinic: clinic.name,
+              classification: isGov ? "Government (NBB)" : "Private Hospital",
+              code: clinic.id,
+              created: date(clinic.created_at),
+              updated: date(clinic.updated_at, true),
+              status: clinic.active ? "Active" : "Disabled",
+            };
+          });
           summaries = [{ label: "Visible clinics", value: data.length.toLocaleString(), detail: isSuperadmin ? "Network-wide scope" : "Assigned organizations" }, { label: "Active", value: (result.data ?? []).filter((item) => item.active).length.toLocaleString(), detail: "Operational organizations" }, { label: "Inactive", value: (result.data ?? []).filter((item) => !item.active).length.toLocaleString(), detail: "Disabled organizations" }];
         } else if (dataset === "admins") {
           if (isSuperadmin) {

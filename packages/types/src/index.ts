@@ -1296,3 +1296,12 @@ export interface GovernancePatientImportRow {
   gender?: string;
   phone?: string;
 }
+
+export type FacilityBillingMode = "government_no_billing" | "private_hospital";
+
+export interface FacilityClassification {
+  organizationId: string;
+  defaultPayorType: PayorType;
+  isGovernmentNoBilling: boolean;
+  canManage: boolean;
+}

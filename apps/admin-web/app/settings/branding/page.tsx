@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AdminSignIn } from "../../../components/admin-sign-in";
 import { useAdminData } from "../../../components/admin-data-context";
 import { PageHeader } from "../../../components/page-header";
+import { FacilityClassificationToggle } from "../../../components/facility-classification-toggle";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 
@@ -80,6 +81,14 @@ export default function BrandingPage() {
       />
       <div className="form-preview-grid">
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          {/* Facility Operating Classification & Billing Route */}
+          {organization && (
+            <FacilityClassificationToggle
+              organizationId={organization.id}
+              organizationName={name || organization.name}
+            />
+          )}
+
           {/* Identity Section */}
           <section className="form-section">
             <div className="section-title">

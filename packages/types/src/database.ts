@@ -1433,6 +1433,7 @@ export type Database = {
           active: boolean;
           address: Json;
           created_at: string;
+          default_payor_type?: "self_pay" | "hmo" | "philhealth_nbb" | "government_subsidized";
           id: string;
           identifier: Json;
           name: string;
@@ -1444,6 +1445,7 @@ export type Database = {
           active?: boolean;
           address?: Json;
           created_at?: string;
+          default_payor_type?: "self_pay" | "hmo" | "philhealth_nbb" | "government_subsidized";
           id?: string;
           identifier?: Json;
           name: string;
@@ -1455,6 +1457,7 @@ export type Database = {
           active?: boolean;
           address?: Json;
           created_at?: string;
+          default_payor_type?: "self_pay" | "hmo" | "philhealth_nbb" | "government_subsidized";
           id?: string;
           identifier?: Json;
           name?: string;
@@ -2613,6 +2616,19 @@ export type Database = {
       finalize_billing_event: {
         Args: {
           p_billing_event_id: string;
+        };
+        Returns: Json;
+      };
+      get_organization_facility_classification: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
+      set_organization_facility_classification: {
+        Args: {
+          p_organization_id: string;
+          p_payor_type: string;
         };
         Returns: Json;
       };

@@ -114,7 +114,7 @@ export const featureFlagsConfig: RecordsConfig = { dataset: "features", title: "
 ] };
 
 export const clinicsConfig: RecordsConfig = { dataset: "clinics", title: "Clinics", eyebrow: "Platform oversight", actionLabel: "Onboard new clinic", description: "Network-wide directory of organizations and their operational state.", emptyMessage: "No clinic organizations are visible to this account.", columns: [
-  { key: "clinic", label: "Clinic" }, { key: "code", label: "Organization ID" }, { key: "created", label: "Created" }, { key: "updated", label: "Last updated" }, { key: "status", label: "Status", render: status },
+  { key: "clinic", label: "Clinic" }, { key: "classification", label: "Classification" }, { key: "code", label: "Organization ID" }, { key: "created", label: "Created" }, { key: "updated", label: "Last updated" }, { key: "status", label: "Status", render: status },
 ] };
 
 export const adminsConfig: RecordsConfig = { dataset: "admins", title: "Administrator directory", eyebrow: "Platform oversight", actionLabel: "Invite administrator", description: "Network-wide view of privileged accounts and organization scope.", emptyMessage: "No administrator assignments are visible to this account.", columns: [

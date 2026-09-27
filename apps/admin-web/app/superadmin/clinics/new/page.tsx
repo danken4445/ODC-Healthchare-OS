@@ -2,7 +2,7 @@
 
 import { createClinicAccount, setOrganizationModule } from "@odyssey/supabase-client";
 import type { OrganizationModuleKey } from "@odyssey/types";
-import { Building2, Check, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { Building2, Check, ChevronLeft, ChevronRight, Landmark, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AdminSignIn } from "../../../../components/admin-sign-in";
@@ -30,6 +30,7 @@ export default function NewClinicPage() {
   const [code, setCode] = useState("");
   const [region, setRegion] = useState("");
   const [address, setAddress] = useState("");
+  const [facilityType, setFacilityType] = useState<"private" | "government">("private");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPhone, setAdminPhone] = useState("");
@@ -51,12 +52,14 @@ export default function NewClinicPage() {
   async function createClinic() {
     setSaving(true);
     setError(null);
+    const defaultPayor = facilityType === "government" ? "philhealth_nbb" : "self_pay";
     const organizationResult = await client.from("organizations").insert({
       name: name.trim(),
       identifier: [{ system: "urn:odyssey:organization-code", value: code.trim() }],
       address: [{ text: address.trim(), district: region }],
       telecom: adminPhone.trim() ? [{ system: "phone", value: adminPhone.trim(), use: "work" }] : [],
-      type_codes: ["prov"],
+      type_codes: [facilityType === "government" ? "prov-gov" : "prov"],
+      default_payor_type: defaultPayor,
     }).select("id").single();
     if (organizationResult.error) {
       setError(organizationResult.error.message);
@@ -95,13 +98,133 @@ export default function NewClinicPage() {
         {steps.map((item, index) => <li className={index === step ? "is-current" : index < step ? "is-complete" : ""} key={item}><span>{index < step ? <Check aria-hidden="true" size={14} /> : index + 1}</span><div><strong>{item}</strong><small>{index === step ? "Current step" : index < step ? "Complete" : "Not started"}</small></div></li>)}
       </ol>
       <section className="wizard-panel">
-        {step === 0 ? <><div className="section-title"><h2>Organization record</h2><p>Enter the clinic's registered identity and operational location.</p></div><div className="form-grid"><label className="field-label field-span">Registered clinic name<Input value={name} onChange={(event) => setName(event.target.value)} required /></label><label className="field-label">Organization code<Input value={code} onChange={(event) => setCode(event.target.value)} required /></label><label className="field-label">Region<select className="ui-input" value={region} onChange={(event) => setRegion(event.target.value)} required><option value="" disabled>Select region</option><option>NCR</option><option>Central Luzon</option><option>CALABARZON</option><option>Central Visayas</option><option>Davao Region</option></select></label><label className="field-label field-span">Registered address<Input value={address} onChange={(event) => setAddress(event.target.value)} required /></label></div></> : null}
+        {step === 0 ? (
+          <>
+            <div className="section-title">
+              <h2>Organization record</h2>
+              <p>Enter the clinic's registered identity, facility classification, and operational location.</p>
+            </div>
+            <div className="form-grid">
+              <label className="field-label field-span">Registered clinic name<Input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+              <label className="field-label">Organization code<Input value={code} onChange={(event) => setCode(event.target.value)} required /></label>
+              <label className="field-label">Region
+                <select className="ui-input" value={region} onChange={(event) => setRegion(event.target.value)} required>
+                  <option value="" disabled>Select region</option>
+                  <option>NCR</option>
+                  <option>Central Luzon</option>
+                  <option>CALABARZON</option>
+                  <option>Central Visayas</option>
+                  <option>Davao Region</option>
+                </select>
+              </label>
+              <label className="field-label field-span">Registered address<Input value={address} onChange={(event) => setAddress(event.target.value)} required /></label>
+              <div className="field-span" style={{ marginTop: "0.5rem" }}>
+                <span className="field-label" style={{ marginBottom: "0.5rem", display: "block" }}>Facility Operating Classification</span>
+                <div className="facility-toggle-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+                  <div
+                    className={`facility-toggle-card ${facilityType === "private" ? "facility-toggle-card--active" : ""}`}
+                    onClick={() => setFacilityType("private")}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setFacilityType("private"); }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="facility-toggle-card__top">
+                      <div className="facility-toggle-card__icon-wrapper facility-toggle-card__icon-wrapper--private">
+                        <Building2 size={20} />
+                      </div>
+                      <div className="facility-toggle-card__header-text">
+                        <span className="facility-toggle-card__category">Operating Mode</span>
+                        <h3 className="facility-toggle-card__title" style={{ fontSize: "1rem" }}>Private Hospital / Clinic</h3>
+                      </div>
+                      <div className="facility-toggle-card__radio-indicator">
+                        <span className={`facility-radio-dot ${facilityType === "private" ? "facility-radio-dot--selected" : ""}`}>
+                          {facilityType === "private" && <Check size={13} strokeWidth={3} />}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="facility-toggle-card__description" style={{ fontSize: "0.825rem", margin: "0 0 0.75rem" }}>
+                      Fee-for-service model with patient self-pay invoicing, cash/card POS checkout, and optional HMO reimbursement.
+                    </p>
+                    <ul className="facility-toggle-card__features" style={{ fontSize: "0.775rem", margin: 0 }}>
+                      <li><Check className="feature-check" size={14} /> Default billing route: <code>self_pay</code></li>
+                      <li><Check className="feature-check" size={14} /> Itemized cashier invoicing & balance tracking</li>
+                      <li><Check className="feature-check" size={14} /> Standard commercial & HMO claims</li>
+                    </ul>
+                  </div>
+
+                  <div
+                    className={`facility-toggle-card ${facilityType === "government" ? "facility-toggle-card--active" : ""}`}
+                    onClick={() => setFacilityType("government")}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setFacilityType("government"); }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="facility-toggle-card__top">
+                      <div className="facility-toggle-card__icon-wrapper facility-toggle-card__icon-wrapper--government">
+                        <Landmark size={20} />
+                      </div>
+                      <div className="facility-toggle-card__header-text">
+                        <span className="facility-toggle-card__category">Operating Mode</span>
+                        <h3 className="facility-toggle-card__title" style={{ fontSize: "1rem" }}>Government Hospital / Public</h3>
+                      </div>
+                      <div className="facility-toggle-card__radio-indicator">
+                        <span className={`facility-radio-dot ${facilityType === "government" ? "facility-radio-dot--selected" : ""}`}>
+                          {facilityType === "government" && <Check size={13} strokeWidth={3} />}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="facility-toggle-card__description" style={{ fontSize: "0.825rem", margin: "0 0 0.75rem" }}>
+                      Public facility under Universal Health Care & PhilHealth No Balance Billing (NBB). Zero out-of-pocket costs for patients.
+                    </p>
+                    <ul className="facility-toggle-card__features" style={{ fontSize: "0.775rem", margin: 0 }}>
+                      <li><Check className="feature-check" size={14} /> Default billing route: <code>philhealth_nbb</code></li>
+                      <li><Check className="feature-check" size={14} /> Out-of-pocket patient co-pays waived</li>
+                      <li><Check className="feature-check" size={14} /> Direct institutional government claims</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
         {step === 1 ? <><div className="section-title"><h2>Primary administrator</h2><p>This account receives clinic administration privileges and is accountable for local access reviews.</p></div><div className="notice"><ShieldCheck aria-hidden="true" size={18} /><span>The account can manage staff roles, billing configuration, and patient data exports. Issue the temporary password through an approved secure channel.</span></div><div className="form-grid"><label className="field-label">Full name<Input value={adminName} onChange={(event) => setAdminName(event.target.value)} required /></label><label className="field-label">Work email<Input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} required /></label><label className="field-label">Mobile number<Input value={adminPhone} onChange={(event) => setAdminPhone(event.target.value)} /></label><label className="field-label">Job title<Input value={adminTitle} onChange={(event) => setAdminTitle(event.target.value)} /></label><label className="field-label field-span">Temporary password<Input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label></div></> : null}
         {step === 2 ? <><div className="section-title"><h2>Platform modules</h2><p>Select the approved starting configuration. Changes remain available through audited feature controls.</p></div><div className="check-grid">{moduleOptions.map((module) => <label key={module.key}><input checked={enabledModules.includes(module.key)} disabled={module.key === "governance"} onChange={() => toggleModule(module.key)} type="checkbox" /><span><strong>{module.label}</strong><small>{module.key === "governance" ? "Required for administration" : module.key}</small></span></label>)}</div></> : null}
-        {step === 3 ? <><div className="section-title"><h2>Activation review</h2><p>Confirm the organization record before creating the clinic workspace and administrator account.</p></div><dl className="review-list"><div><dt>Organization</dt><dd>{name}</dd></div><div><dt>Organization code</dt><dd>{code}</dd></div><div><dt>Region</dt><dd>{region}</dd></div><div><dt>Primary administrator</dt><dd>{adminName} ({adminEmail})</dd></div><div><dt>Enabled modules</dt><dd>{moduleOptions.filter((module) => enabledModules.includes(module.key)).map((module) => module.label).join(", ")}</dd></div><div><dt>Operational state</dt><dd>Active on creation</dd></div></dl></> : null}
+        {step === 3 ? (
+          <>
+            <div className="section-title">
+              <h2>Activation review</h2>
+              <p>Confirm the organization record and operating classification before creating the workspace.</p>
+            </div>
+            <dl className="review-list">
+              <div><dt>Organization</dt><dd>{name}</dd></div>
+              <div><dt>Organization code</dt><dd>{code}</dd></div>
+              <div>
+                <dt>Facility classification</dt>
+                <dd>
+                  <span className={`facility-badge ${facilityType === "government" ? "facility-badge--government" : "facility-badge--private"}`}>
+                    {facilityType === "government" ? (
+                      <><Landmark size={12} style={{ marginRight: 4 }} />Government (PhilHealth NBB)</>
+                    ) : (
+                      <><Building2 size={12} style={{ marginRight: 4 }} />Private Hospital (Standard Billing)</>
+                    )}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>Default payor routing</dt>
+                <dd><code>{facilityType === "government" ? "philhealth_nbb (No-Balance Billing)" : "self_pay (Standard Invoicing)"}</code></dd>
+              </div>
+              <div><dt>Region</dt><dd>{region}</dd></div>
+              <div><dt>Primary administrator</dt><dd>{adminName} ({adminEmail})</dd></div>
+              <div><dt>Enabled modules</dt><dd>{moduleOptions.filter((module) => enabledModules.includes(module.key)).map((module) => module.label).join(", ")}</dd></div>
+              <div><dt>Operational state</dt><dd>Active on creation</dd></div>
+            </dl>
+          </>
+        ) : null}
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         <footer className="wizard-actions"><Button variant="outline" disabled={step === 0 || saving} onClick={() => setStep((value) => value - 1)}><ChevronLeft aria-hidden="true" size={16} />Back</Button><span>Step {step + 1} of {steps.length}</span><Button disabled={!currentValid || saving} onClick={() => step === 3 ? void createClinic() : setStep((value) => Math.min(value + 1, 3))}>{step === 3 ? <><Building2 aria-hidden="true" size={16} />{saving ? "Creating..." : "Create clinic"}</> : <>Continue<ChevronRight aria-hidden="true" size={16} /></>}</Button></footer>
       </section>
     </>
   );
 }
+

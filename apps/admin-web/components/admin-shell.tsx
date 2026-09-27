@@ -77,9 +77,21 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/billing", label: "Billing / POS", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing", "can_manage_pos"] },
       { href: "/billing/claims", label: "HMO Claims", icon: ClipboardCheck, anyOf: ["can_view_claims", "can_manage_claims"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
+      { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
       { href: "/settings/branding", label: "White-Labeling", icon: Palette, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },
       { href: "/settings/features", label: "Security", icon: Lock, allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
       { href: "/support", label: "Support", icon: HelpCircle, public: true },
+    ],
+  },
+  {
+    label: "PLATFORM SUPERADMIN",
+    items: [
+      { href: "/superadmin/dashboard", label: "Network Overview", icon: LayoutDashboard, superadminOnly: true },
+      { href: "/superadmin/clinics", label: "Clinics & Tenants", icon: Building2, superadminOnly: true },
+      { href: "/superadmin/clinics/new", label: "Onboard New Clinic", icon: Globe2, superadminOnly: true },
+      { href: "/superadmin/admins", label: "Admin Directory", icon: UserCog, superadminOnly: true },
+      { href: "/superadmin/analytics", label: "Platform Analytics", icon: Activity, superadminOnly: true },
+      { href: "/superadmin/audit", label: "Global Audit Log", icon: FileClock, superadminOnly: true },
     ],
   },
 ];
@@ -90,7 +102,7 @@ function RouteAccessBoundary({ children, fallbackHref }: { children: ReactNode; 
   const { email, isSuperadmin, loading, permissions, permissionsError, permissionsLoading, refreshAccess } = useAdminData();
   const rule = getAdminRouteRule(pathname);
   const allowed = !rule || canAccessAdminDestination(rule, permissions, isSuperadmin);
-  const redirectHref = isSuperadmin ? "/superadmin/analytics" : fallbackHref;
+  const redirectHref = isSuperadmin ? "/superadmin/clinics" : fallbackHref;
   const shouldRedirect = Boolean(email && !loading && !permissionsLoading && !permissionsError && !allowed && redirectHref && redirectHref !== pathname);
 
   useEffect(() => {
@@ -114,6 +126,7 @@ function RouteAccessBoundary({ children, fallbackHref }: { children: ReactNode; 
 function AdminShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const showSidebar = !pathname.startsWith("/superadmin");
   const [open, setOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -145,7 +158,7 @@ function AdminShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="admin-shell">
       {/* Vesper-style White Sidebar */}
-      <aside className={`sidebar ${open ? "sidebar--open" : ""}`}>
+      {showSidebar && <aside className={`sidebar ${open ? "sidebar--open" : ""}`}>
         <div className="sidebar__brand">
           <div className="vesper-brand-mark" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -225,16 +238,16 @@ function AdminShellContent({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
-      </aside>
+      </aside>}
 
-      {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}
+      {showSidebar && open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}
 
-      <div className="workspace">
+      <div className={`workspace${showSidebar ? "" : " workspace--platform"}`}>
         <header className="mobile-header">
           <div className="mobile-header__main">
-            <button className="icon-button" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)}>
+            {showSidebar && <button className="icon-button" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)}>
               <Menu aria-hidden="true" size={20} />
-            </button>
+            </button>}
             <strong>Odyssey Healthcare OS</strong>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
