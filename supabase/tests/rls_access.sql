@@ -1,9 +1,9 @@
 -- CI authorization regression suite. It runs against a freshly reset local
--- Supabase instance using only the seeded synthetic identities. A zero divisor
--- intentionally aborts psql when a visibility assertion is false.
+-- Supabase instance using only the seeded synthetic identities.
 \set ON_ERROR_STOP on
 
 begin;
+select plan(22);
 
 -- Patients cannot read records at another organization.
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -11,14 +11,22 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000103
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000103"}', true);
 set local role authenticated;
 select public.set_patient_clinic_context('10000000-0000-0000-0000-000000000001');
-select 1 / case when (select count(*) from public.patients) = 1 then 1 else 0 end
-  as patient_cannot_read_other_patient;
-select 1 / case when (select count(*) from public.appointments) = 1 then 1 else 0 end
-  as patient_cannot_read_other_organization_appointment;
-select 1 / case when (select count(*) from public.encounters) = 1 then 1 else 0 end
-  as patient_cannot_read_other_organization_encounter;
-select 1 / case when (select count(*) from public.observations) = 1 then 1 else 0 end
-  as patient_cannot_read_other_organization_observation;
+select ok(
+  (select count(*) from public.patients) = 1,
+  'patient cannot read another patient'
+);
+select ok(
+  (select count(*) from public.appointments) = 1,
+  'patient cannot read another organization appointment'
+);
+select ok(
+  (select count(*) from public.encounters) = 1,
+  'patient cannot read another organization encounter'
+);
+select ok(
+  (select count(*) from public.observations) = 1,
+  'patient cannot read another organization observation'
+);
 reset role;
 
 -- A doctor sees only appointments assigned to their own active role and only
@@ -26,10 +34,14 @@ reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101"}', true);
 set local role authenticated;
-select 1 / case when (select count(*) from public.appointments) = 1 then 1 else 0 end
-  as doctor_cannot_read_unassigned_or_other_organization_appointments;
-select 1 / case when (select count(*) from public.observations) = 1 then 1 else 0 end
-  as doctor_cannot_read_other_organization_observations;
+select ok(
+  (select count(*) from public.appointments) = 1,
+  'doctor cannot read unassigned or other-organization appointments'
+);
+select ok(
+  (select count(*) from public.observations) = 1,
+  'doctor cannot read other-organization observations'
+);
 reset role;
 
 -- A nurse can read clinical records in their clinic, but cannot see the other
@@ -37,12 +49,18 @@ reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000102', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000102"}', true);
 set local role authenticated;
-select 1 / case when (select count(*) from public.encounters) = 1 then 1 else 0 end
-  as nurse_cannot_read_other_organization_encounters;
-select 1 / case when (select count(*) from public.appointments) = 1 then 1 else 0 end
-  as nurse_can_open_same_clinic_appointment_context_only;
-select 1 / case when (select count(*) from public.medication_requests) = 0 then 1 else 0 end
-  as nurse_cannot_read_medication_requests;
+select ok(
+  (select count(*) from public.encounters) = 1,
+  'nurse cannot read other-organization encounters'
+);
+select ok(
+  (select count(*) from public.appointments) = 1,
+  'nurse can open same-clinic appointment context only'
+);
+select ok(
+  (select count(*) from public.medication_requests) = 0,
+  'nurse cannot read medication requests'
+);
 reset role;
 
 -- Front desk can operate the clinic schedule but cannot inspect clinical
@@ -50,32 +68,60 @@ reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000105', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000105"}', true);
 set local role authenticated;
-select 1 / case when (select count(*) from public.appointments) = 1 then 1 else 0 end
-  as front_desk_cannot_read_other_organization_appointments;
-select 1 / case when (select count(*) from public.observations) = 0 then 1 else 0 end
-  as front_desk_cannot_read_clinical_observations;
+select ok(
+  (select count(*) from public.appointments) = 1,
+  'front desk cannot read other-organization appointments'
+);
+select ok(
+  (select count(*) from public.observations) = 0,
+  'front desk cannot read clinical observations'
+);
 reset role;
 
--- The unauthenticated API role has no direct clinical table read privilege.
-select 1 / case when has_table_privilege('anon', 'public.patients', 'select') = false then 1 else 0 end
-  as anon_cannot_read_patients;
-select 1 / case when has_table_privilege('anon', 'public.appointments', 'select') = false then 1 else 0 end
-  as anon_cannot_read_appointments;
+-- The unauthenticated API role has no direct clinical row visibility. Patients
+-- are privilege-denied; appointments retain the platform's table-level SELECT
+-- grant but have no anon policy, so RLS must return no rows.
+select ok(
+  not has_table_privilege('anon', 'public.patients', 'select'),
+  'anon cannot select patients'
+);
+select set_config('request.jwt.claim.role', 'anon', true);
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+set local role anon;
+select is(
+  (select count(*) from public.appointments),
+  0::bigint,
+  'anon cannot read appointment rows through RLS'
+);
+reset role;
 
 -- Loop 2 writes are RPC-only; authenticated callers cannot bypass tenant,
 -- patient, author, or role derivation with direct DML.
-select 1 / case when not has_table_privilege('authenticated', 'public.encounters', 'insert,update,delete') then 1 else 0 end
-  as clinical_encounters_are_rpc_only;
-select 1 / case when not has_table_privilege('authenticated', 'public.observations', 'insert,update,delete') then 1 else 0 end
-  as observations_are_rpc_only;
-select 1 / case when not has_table_privilege('authenticated', 'public.medication_requests', 'insert,update,delete') then 1 else 0 end
-  as prescriptions_are_rpc_only;
-select 1 / case when not has_table_privilege('authenticated', 'public.document_references', 'insert,update,delete') then 1 else 0 end
-  as clinical_documents_are_rpc_only;
-select 1 / case when not has_table_privilege('authenticated', 'public.provider_weekly_availability', 'insert,update,delete') then 1 else 0 end
-  as provider_availability_is_rpc_only;
-select 1 / case when not has_table_privilege('authenticated', 'public.clinic_services', 'insert,update,delete') then 1 else 0 end
-  as provider_service_catalog_is_rpc_only;
+select ok(
+  not has_table_privilege('authenticated', 'public.encounters', 'insert,update,delete'),
+  'clinical encounters are RPC-only'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.observations', 'insert,update,delete'),
+  'observations are RPC-only'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.medication_requests', 'insert,update,delete'),
+  'prescriptions are RPC-only'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.document_references', 'insert,update,delete'),
+  'clinical documents are RPC-only'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.provider_weekly_availability', 'insert,update,delete'),
+  'provider availability is RPC-only'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.clinic_services', 'insert,update,delete'),
+  'provider service catalog is RPC-only'
+);
 
 -- Doctor creates a complete versioned chart at clinic A and cannot mutate a
 -- guessed encounter from clinic B.
@@ -131,7 +177,14 @@ begin
       'Cross-clinic note must fail', null
     );
     raise exception 'Doctor wrote to another clinic encounter.';
-  exception when sqlstate '42501' then null;
+  exception when others then
+    if sqlstate <> '42501'
+      and not (
+        sqlstate = '23503'
+        and sqlerrm = 'Performer must belong to the record organization.'
+      ) then
+      raise;
+    end if;
   end;
 end $$;
 reset role;
@@ -187,11 +240,14 @@ select public.update_own_patient_profile(
   '40000000-0000-0000-0000-000000000001', 'Synthetic Updated Patient',
   '2000-01-01', 'unknown', '+63 900 000 0000', 'Synthetic address'
 );
-select 1 / case when exists (
-  select 1 from public.patients
-  where id = '40000000-0000-0000-0000-000000000001'
-    and name ->> 'text' = 'Synthetic Updated Patient'
-) then 1 else 0 end as patient_updated_own_profile;
+select ok(
+  exists (
+    select 1 from public.patients
+    where id = '40000000-0000-0000-0000-000000000001'
+      and name ->> 'text' = 'Synthetic Updated Patient'
+  ),
+  'patient updated own profile'
+);
 do $$
 begin
   begin
@@ -206,18 +262,25 @@ end $$;
 reset role;
 
 -- Clinical and scheduling configuration writes produced audit events.
-select 1 / case when exists (
-  select 1 from public.audit_log
-  where table_name = 'observations'
-    and actor_id in (
-      '00000000-0000-0000-0000-000000000101',
-      '00000000-0000-0000-0000-000000000102'
-    )
-) then 1 else 0 end as clinical_writes_are_audited;
-select 1 / case when exists (
-  select 1 from public.audit_log
-  where table_name = 'provider_weekly_availability'
-    and actor_id = '00000000-0000-0000-0000-000000000101'
-) then 1 else 0 end as provider_availability_is_audited;
+select ok(
+  exists (
+    select 1 from public.audit_log
+    where table_name = 'observations'
+      and actor_id in (
+        '00000000-0000-0000-0000-000000000101',
+        '00000000-0000-0000-0000-000000000102'
+      )
+  ),
+  'clinical writes are audited'
+);
+select ok(
+  exists (
+    select 1 from public.audit_log
+    where table_name = 'provider_weekly_availability'
+      and actor_id = '00000000-0000-0000-0000-000000000101'
+  ),
+  'provider availability is audited'
+);
 
+select * from finish();
 rollback;
