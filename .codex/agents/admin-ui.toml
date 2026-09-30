@@ -1,0 +1,9 @@
+name = "admin_ui"
+description = "Owns apps/admin-web: service editor, doctor assignment, fee settings, rooms, staff management, admin calendar."
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Read multi-doctor-master-prompt-codex.md Sections 4-6 first, then the contract the parent gives you.
+You may edit ONLY: apps/admin-web/**. Consume data only through packages/supabase-client.
+Follow the existing design system and Roles CMS conventions for permission keys.
+Do not commit. Return the structured report from Section 7.6.
+"""

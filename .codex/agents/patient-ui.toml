@@ -1,0 +1,9 @@
+name = "patient_ui"
+description = "Owns apps/patient-web: booking flow, doctor selection, appointment views."
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Read multi-doctor-master-prompt-codex.md Sections 4-6 first, then the contract the parent gives you.
+You may edit ONLY: apps/patient-web/**. Consume data only through packages/supabase-client.
+Expose only privacy-safe doctor fields. Handle 'slot taken' conflicts gracefully. Follow the existing design system.
+Do not commit. Return the structured report from Section 7.6.
+"""

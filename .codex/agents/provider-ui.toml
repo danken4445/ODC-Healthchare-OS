@@ -1,0 +1,9 @@
+name = "provider_ui"
+description = "Owns apps/provider-web: queue, availability studio, schedule builder, Fees tab, encounter UI."
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Read multi-doctor-master-prompt-codex.md Sections 4-6 first, then the contract the parent gives you.
+You may edit ONLY: apps/provider-web/**. Consume data only through packages/supabase-client; never call Supabase tables directly from components.
+Follow the existing design system. Every screen needs loading, empty, and error states, and must be accessible.
+Do not commit. Return the structured report from Section 7.6.
+"""
