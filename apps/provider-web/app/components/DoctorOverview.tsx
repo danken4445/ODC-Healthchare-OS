@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowRight,
   Calendar,
   CalendarDays,
   CheckCircle2,
@@ -34,6 +35,7 @@ interface DoctorOverviewProps {
   diagnostics: DiagnosticsWorkspace | null;
   clinicalRecords: OrganizationClinicalRecords | null;
   activeEncounterId: string | null;
+  startingAppointmentId: string | null;
   isNurse?: boolean;
   onStartConsultation: (appointment: AppointmentQueueItem) => void;
   onOpenTriage: (appointment: AppointmentQueueItem) => void;
@@ -79,6 +81,7 @@ export function DoctorOverview({
   diagnostics,
   clinicalRecords,
   activeEncounterId,
+  startingAppointmentId,
   isNurse = false,
   onStartConsultation,
   onOpenTriage,
@@ -274,6 +277,13 @@ export function DoctorOverview({
                   upNextQueue.map((item) => {
                     const initials = getInitials(item.patientName || "PT");
                     const isInProgress = item.encounterStatus === "in_progress";
+                    const isAwaitingCheckIn = item.status !== "arrived";
+                    const isWaitingForTriage =
+                      item.delivery_mode !== "virtual" &&
+                      !isAwaitingCheckIn &&
+                      item.triageStatus !== "complete";
+                    const isStarting = startingAppointmentId === item.id;
+                    const patientName = item.patientName || "this patient";
 
                     return (
                       <tr key={item.id} className="vesper-table-row--interactive">
@@ -330,9 +340,13 @@ export function DoctorOverview({
                           >
                             {isInProgress
                               ? "In Consult"
-                              : item.triageStatus === "complete"
-                              ? "Triage Done"
-                              : "Waiting"}
+                              : isAwaitingCheckIn
+                                ? "Awaiting check-in"
+                                : isWaitingForTriage
+                                  ? "Waiting for triage"
+                                  : item.delivery_mode === "virtual"
+                                    ? "Ready for teleconsult"
+                                    : "Triage complete"}
                           </span>
                         </td>
                         <td>
@@ -346,13 +360,44 @@ export function DoctorOverview({
                                 ? "Review Triage"
                                 : "Record Triage"}
                             </button>
+                          ) : isInProgress ? (
+                            <button
+                              type="button"
+                              className="vesper-consult-button vesper-consult-button--resume"
+                              onClick={() => onStartConsultation(item)}
+                              aria-label={`Resume consultation with ${patientName}`}
+                            >
+                              Resume consultation
+                              <ArrowRight size={15} aria-hidden="true" />
+                            </button>
+                          ) : isAwaitingCheckIn ? (
+                            <span className="vesper-action-status">
+                              Waiting for check-in
+                            </span>
+                          ) : isWaitingForTriage ? (
+                            <span className="vesper-action-status">
+                              Waiting for triage
+                            </span>
                           ) : (
                             <button
                               type="button"
-                              className="vesper-action-link"
+                              className="vesper-consult-button"
+                              disabled={startingAppointmentId !== null}
                               onClick={() => onStartConsultation(item)}
+                              aria-label={
+                                item.delivery_mode === "virtual"
+                                  ? `Open teleconsult with ${patientName}`
+                                  : `Start consultation with ${patientName}`
+                              }
                             >
-                              {isInProgress ? "Resume" : "Start Consult"}
+                              {isStarting
+                                ? "Starting consultation…"
+                                : item.delivery_mode === "virtual"
+                                  ? "Open teleconsult"
+                                  : "Start consultation"}
+                              {!isStarting && (
+                                <ArrowRight size={15} aria-hidden="true" />
+                              )}
                             </button>
                           )}
                         </td>

@@ -13,6 +13,11 @@ interface SignalPayload {
   targetId?: string;
 }
 
+interface ConsultationEndingPayload {
+  clinicianName: string;
+  senderId: string;
+}
+
 export interface TeleconsultWebRtcRoomProps {
   client: SupabaseClient<Database>;
   displayLabel: "Clinician" | "Patient";
@@ -21,7 +26,9 @@ export interface TeleconsultWebRtcRoomProps {
   appointmentTime?: string;
   serviceName?: string;
   onLeave?: () => void;
+  onConsultationEnded?: () => void;
   initialLayout?: "pip" | "split";
+  endingNotice?: { id: number; clinicianName: string } | null;
 }
 
 const iceServers: RTCConfiguration = {
@@ -54,6 +61,13 @@ function asSignalPayload(value: unknown): SignalPayload | null {
   };
 }
 
+function asConsultationEndingPayload(value: unknown): ConsultationEndingPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.senderId !== "string" || typeof payload.clinicianName !== "string") return null;
+  return { senderId: payload.senderId, clinicianName: payload.clinicianName };
+}
+
 function VideoStream({ muted = false, stream }: { muted?: boolean; stream: MediaStream }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -77,7 +91,9 @@ export function TeleconsultWebRtcRoom({
   appointmentTime,
   serviceName,
   onLeave,
+  onConsultationEnded,
   initialLayout = "pip",
+  endingNotice = null,
 }: TeleconsultWebRtcRoomProps) {
   const [callState, setCallState] = useState<CallState>("preparing");
   const [localAudioActive, setLocalAudioActive] = useState(true);
@@ -90,6 +106,8 @@ export function TeleconsultWebRtcRoom({
   const [isPipMinimized, setIsPipMinimized] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [durationSeconds, setDurationSeconds] = useState(0);
+  const [endingCountdown, setEndingCountdown] = useState<number | null>(null);
+  const [endingClinicianName, setEndingClinicianName] = useState("");
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -97,6 +115,7 @@ export function TeleconsultWebRtcRoom({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const joiningRef = useRef(false);
+  const sentEndingNoticeIdRef = useRef<number | null>(null);
 
   // In-call duration timer
   useEffect(() => {
@@ -126,6 +145,11 @@ export function TeleconsultWebRtcRoom({
   function send(event: "answer" | "ice-candidate" | "join" | "leave" | "offer", payload: SignalPayload) {
     if (!channelRef.current) return;
     void channelRef.current.send({ type: "broadcast", event, payload });
+  }
+
+  function sendEndingNotice(payload: ConsultationEndingPayload) {
+    if (!channelRef.current) return;
+    void channelRef.current.send({ type: "broadcast", event: "consultation-ending", payload });
   }
 
   async function startOffer(peerId: string) {
@@ -246,6 +270,26 @@ export function TeleconsultWebRtcRoom({
   }
 
   useEffect(() => {
+    if (displayLabel !== "Clinician" || !endingNotice || sentEndingNoticeIdRef.current === endingNotice.id) return;
+    if (!channelRef.current || !participantIdRef.current) return;
+    sentEndingNoticeIdRef.current = endingNotice.id;
+    sendEndingNotice({ clinicianName: endingNotice.clinicianName, senderId: participantIdRef.current });
+  }, [displayLabel, endingNotice]);
+
+  useEffect(() => {
+    if (endingCountdown === null) return;
+    const timeout = window.setTimeout(() => {
+      if (endingCountdown > 1) {
+        setEndingCountdown((countdown) => (countdown ? countdown - 1 : countdown));
+        return;
+      }
+      setEndingCountdown(null);
+      leaveCall(true);
+    }, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [endingCountdown]);
+
+  useEffect(() => {
     let cancelled = false;
     async function prepareMedia() {
       if (!window.isSecureContext) {
@@ -342,8 +386,15 @@ export function TeleconsultWebRtcRoom({
         if (signal?.senderId !== participantIdRef.current) {
           closePeer();
           setCallState("ready");
-          setMessage("The clinician left the room. You may remain or leave.");
+          setMessage(displayLabel === "Patient" ? "The clinician left the room. You may remain or leave." : "The patient left the room.");
         }
+      })
+      .on("broadcast", { event: "consultation-ending" }, ({ payload }) => {
+        if (displayLabel !== "Patient") return;
+        const ending = asConsultationEndingPayload(payload);
+        if (!ending || ending.senderId === participantIdRef.current) return;
+        setEndingClinicianName(ending.clinicianName);
+        setEndingCountdown(3);
       });
     channelRef.current = channel;
     channel.subscribe((status) => {
@@ -360,15 +411,16 @@ export function TeleconsultWebRtcRoom({
     });
   }
 
-  function leaveCall() {
+  function leaveCall(endedByClinician = false) {
     send("leave", { senderId: participantIdRef.current });
     channelRef.current?.unsubscribe();
     channelRef.current = null;
     joiningRef.current = false;
     closePeer();
     setCallState("ready");
-    setMessage("You left the consultation. You can rejoin while the room is open.");
-    if (onLeave) onLeave();
+    setMessage(endedByClinician ? "The teleconsultation has ended." : "You left the consultation. You can rejoin while the room is open.");
+    if (endedByClinician) onConsultationEnded?.();
+    else onLeave?.();
   }
 
   function toggleAudio() {
@@ -659,6 +711,11 @@ export function TeleconsultWebRtcRoom({
         )}
       </div>
 
+      {endingCountdown !== null ? <div aria-atomic="true" aria-live="assertive" className="odyssey-teleconsult-video__ending-overlay" role="status">
+        <p>{endingClinicianName || "Your doctor"} is ending the teleconsultation</p>
+        <strong aria-label={`${endingCountdown} seconds remaining`}>{endingCountdown}</strong>
+      </div> : null}
+
       {/* Floating Bottom Touch Action Dock */}
       {isCallActive && (
         <div className="odyssey-teleconsult-video__dock">
@@ -717,7 +774,7 @@ export function TeleconsultWebRtcRoom({
           <button
             type="button"
             className="odyssey-dock-btn odyssey-dock-btn--leave"
-            onClick={leaveCall}
+            onClick={() => leaveCall()}
             title="End consultation call"
             aria-label="End consultation call"
           >

@@ -28,6 +28,7 @@ export default function PatientTeleconsultRoomPage() {
   const [status, setStatus] = useState("Connecting to your medical room…");
   const [showInfoSheet, setShowInfoSheet] = useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(true);
+  const [consultationEnded, setConsultationEnded] = useState(false);
 
   useEffect(() => {
     async function loadRoom() {
@@ -150,6 +151,16 @@ export default function PatientTeleconsultRoomPage() {
             <div className="teleconsult-spinner" />
             <p role="status">{status}</p>
           </div>
+        ) : consultationEnded ? (
+          <section className="teleconsult-finished-card" aria-labelledby="teleconsult-finished-heading">
+            <Badge variant="success">Consultation complete</Badge>
+            <h2 id="teleconsult-finished-heading">Your teleconsultation has ended</h2>
+            <p>Your clinician&apos;s completed notes, prescriptions, and documents are available in your medical record.</p>
+            <div className="teleconsult-finished-card__actions">
+              <Link href="/?tab=records"><Button>View medical record</Button></Link>
+              <Link href="/"><Button variant="outline">Return to portal</Button></Link>
+            </div>
+          </section>
         ) : appointment ? (
           appointment.can_join && appointment.room_name ? (
             <div className="teleconsult-video-wrapper">
@@ -161,6 +172,7 @@ export default function PatientTeleconsultRoomPage() {
                 appointmentTime={formatTime(appointment.start_at)}
                 serviceName={appointment.service_type ?? "Virtual Doctor Consultation"}
                 onLeave={() => router.push("/")}
+                onConsultationEnded={() => setConsultationEnded(true)}
               />
             </div>
           ) : (

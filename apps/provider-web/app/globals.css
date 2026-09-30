@@ -1633,12 +1633,18 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
 .history-entries article { padding: .75rem; border-left: 3px solid var(--odyssey-border); background: var(--odyssey-background); }
 .history-entries article strong { font-size: .85rem; }
 .history-entries article p { margin: .35rem 0 0; white-space: pre-wrap; font-size: .84rem; line-height: 1.45; }
-.encounter-completion-dialog { width: min(calc(100% - 2rem), 32rem); padding: 0; border: 1px solid var(--odyssey-border); border-radius: .5rem; color: var(--odyssey-foreground); background: var(--odyssey-card); box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
+.encounter-completion-dialog { box-sizing: border-box; width: min(calc(100% - 2rem), 32rem); max-height: calc(100dvh - 2rem); padding: 0; overflow: auto; border: 1px solid var(--odyssey-border); border-radius: .5rem; color: var(--odyssey-foreground); background: var(--odyssey-card); box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
 .encounter-completion-dialog::backdrop { background: rgb(15 23 42 / 45%); }
 .encounter-completion-dialog form { padding: 1.25rem; }
 .encounter-completion-dialog h2 { margin: .25rem 0 .75rem; font-size: 1.2rem; }
 .encounter-completion-dialog p:not(.eyebrow) { margin: 0; color: var(--odyssey-muted-foreground); line-height: 1.5; }
-.encounter-completion-dialog form > div { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
+.encounter-completion-dialog form > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-top: 1.25rem; }
+.encounter-completion-dialog form > div .odyssey-button { width: 100%; }
+
+@media (max-width: 420px) {
+  .encounter-completion-dialog form { padding: 1rem; }
+  .encounter-completion-dialog form > div { grid-template-columns: 1fr; }
+}
 
 /* ----------------------------------------------------
    ODC Developer Debug Mode & Encounter Test Fill
@@ -3024,6 +3030,65 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
 .vesper-action-link:hover {
   color: #042f2e;
   text-decoration: underline;
+}
+
+.vesper-action-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.vesper-consult-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--odyssey-primary);
+  border-radius: 0.5rem;
+  background: var(--odyssey-primary);
+  color: var(--odyssey-primary-foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--odyssey-primary) 25%, transparent);
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.vesper-consult-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--odyssey-primary) 88%, black);
+  border-color: color-mix(in srgb, var(--odyssey-primary) 88%, black);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--odyssey-primary) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.vesper-consult-button:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+.vesper-consult-button:focus-visible,
+.vesper-action-link:focus-visible {
+  outline: 3px solid var(--odyssey-focus);
+  outline-offset: 2px;
+}
+
+.vesper-consult-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.vesper-consult-button--resume {
+  background: var(--odyssey-background);
+  color: var(--odyssey-primary);
 }
 
 .vesper-btn-primary {

@@ -134,6 +134,10 @@ export default function Home() {
     MUSCULOSKELETAL_REGIONS.find((region) => region.code === "chest") ?? { code: "chest", display: "Chest" },
   );
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "records") setActiveTab("records");
+  }, []);
+
   const selectedClinic = clinics.find((clinic) => clinic.id === organizationId);
   const patientAtSelectedClinic = Boolean(records?.patients.length);
 

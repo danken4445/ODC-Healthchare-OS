@@ -3290,8 +3290,38 @@ export async function getClinicalDocumentTemplates(
   if (type) query = query.eq("category", type);
   const { data, error } = await query;
   if (error) return failure(error);
-  return success(
-    (data ?? []).flatMap((row) => {
+  return success(toClinicalDocumentTemplates(data ?? []));
+}
+
+/**
+ * Reads the published templates the current doctor can use for one encounter.
+ * The RPC binds visibility to the encounter's organization so a clinician never
+ * relies on a broad template table read or a selected organization from the UI.
+ */
+export async function getEncounterClinicalDocumentTemplates(
+  client: SupabaseClient<Database>,
+  encounterId: string,
+  type: ClinicalDocumentTemplateType,
+): Promise<SupabaseResult<ClinicalDocumentTemplate[]>> {
+  const { data, error } = await client.rpc(
+    "list_encounter_clinical_document_templates" as never,
+    {
+      p_encounter_id: encounterId,
+      p_type: type,
+    } as never,
+  );
+  if (error) return failure(error);
+  return success(toClinicalDocumentTemplates((data ?? []) as unknown[]));
+}
+
+function toClinicalDocumentTemplates(
+  rows: unknown[],
+): ClinicalDocumentTemplate[] {
+  return rows.flatMap((value) => {
+      const row =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
       const templateType = row.category;
       if (
         templateType !== "medical_certificate" &&
@@ -3315,8 +3345,7 @@ export async function getClinicalDocumentTemplates(
           updatedAt: row.updated_at as string,
         },
       ];
-    }),
-  );
+    });
 }
 
 export async function saveClinicalDocumentTemplate(

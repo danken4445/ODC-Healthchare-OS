@@ -6,6 +6,7 @@ import {
   getClinicalTemplateAssetContext,
   getClinicalDocumentTemplates,
   getCurrentStaffOrganization,
+  getEncounterClinicalDocumentTemplates,
   getEncounterTemplateContext,
   hasOrganizationPermission,
   saveClinicalDocumentTemplate,
@@ -393,12 +394,10 @@ function fillTemplate(html: string, values: Record<string, string>) {
 /** Published-template selector used by encounter and teleconsult issuance forms. */
 export function ClinicalTemplatePicker({
   encounterId,
-  organizationId,
   type,
   onApply,
 }: {
   encounterId: string;
-  organizationId: string;
   type: ClinicalDocumentTemplateType;
   onApply: (application: TemplateApplication | null) => void;
 }) {
@@ -412,7 +411,7 @@ export function ClinicalTemplatePicker({
     async function load() {
       const client = createBrowserSupabaseClient();
       const [library, context] = await Promise.all([
-        getClinicalDocumentTemplates(client, organizationId, type),
+        getEncounterClinicalDocumentTemplates(client, encounterId, type),
         // The context RPC guarantees the values come from the assigned encounter.
         getEncounterTemplateContext(client, encounterId),
       ]);
@@ -431,7 +430,7 @@ export function ClinicalTemplatePicker({
     }
     void load();
     return () => { current = false; };
-  }, [encounterId, organizationId, type]);
+  }, [encounterId, type]);
 
   function apply() {
     const template = templates.find((item) => item.id === selectedId);

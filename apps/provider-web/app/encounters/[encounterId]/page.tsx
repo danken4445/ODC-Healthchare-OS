@@ -237,6 +237,7 @@ export default function EncounterRecordingPage() {
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
   const [activeAction, setActiveAction] = useState<EncounterAction>("prescription");
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const completionDialogRef = useRef<HTMLDialogElement>(null);
   const [historyQuery, setHistoryQuery] = useState("");
   const [soapSaveConfirmation, setSoapSaveConfirmation] = useState<{
     noteSnippet: string;
@@ -270,6 +271,13 @@ export default function EncounterRecordingPage() {
       mobile.removeEventListener("change", update);
     };
   }, []);
+
+  useEffect(() => {
+    const dialog = completionDialogRef.current;
+    if (!dialog) return;
+    if (completionDialogOpen && !dialog.open) dialog.showModal();
+    if (!completionDialogOpen && dialog.open) dialog.close();
+  }, [completionDialogOpen]);
 
   const loadEncounter = useCallback(async () => {
     setAccessState("loading");
@@ -1044,7 +1052,12 @@ export default function EncounterRecordingPage() {
         </div>
       </header>
 
-      <dialog className="encounter-completion-dialog" onCancel={() => setCompletionDialogOpen(false)} open={completionDialogOpen}>
+      <dialog
+        className="encounter-completion-dialog"
+        onCancel={() => setCompletionDialogOpen(false)}
+        onClose={() => setCompletionDialogOpen(false)}
+        ref={completionDialogRef}
+      >
         <form method="dialog">
           <p className="eyebrow">Close encounter</p>
           <h2>Complete this encounter?</h2>
@@ -1203,7 +1216,7 @@ export default function EncounterRecordingPage() {
                         )}
                       </div>
                       <form className="stack encounter-action-form" onSubmit={issueEncounterPrescription}>
-                        {organizationId ? <ClinicalTemplatePicker encounterId={encounterId} organizationId={organizationId} type="prescription" onApply={(template) => { setPrescriptionTemplate(template); setAdditionalPrescriptionLines(template?.medications.slice(1) ?? []); if (template) { const first = template.medications[0]; setRxMedication(first?.name ?? ""); setRxDosage([first?.dosage, first?.frequency, first?.duration].filter(Boolean).join(" · ")); setRxNote([template.body, first?.notes].filter(Boolean).join("\n\n")); } }} /> : null}
+                        <ClinicalTemplatePicker encounterId={encounterId} type="prescription" onApply={(template) => { setPrescriptionTemplate(template); setAdditionalPrescriptionLines(template?.medications.slice(1) ?? []); if (template) { const first = template.medications[0]; setRxMedication(first?.name ?? ""); setRxDosage([first?.dosage, first?.frequency, first?.duration].filter(Boolean).join(" · ")); setRxNote([template.body, first?.notes].filter(Boolean).join("\n\n")); } }} />
                         <Field label="Medication">
                           <Input
                             id="odc-rx-medication"
@@ -1259,7 +1272,7 @@ export default function EncounterRecordingPage() {
                         )}
                       </div>
                       <form className="stack encounter-action-form" onSubmit={issueEncounterCertificate}>
-                        {organizationId ? <ClinicalTemplatePicker encounterId={encounterId} organizationId={organizationId} type="medical_certificate" onApply={(template) => { setCertificateTemplate(template); if (template) { setCertTitle(template.title); setCertStatement(template.body); } }} /> : null}
+                        <ClinicalTemplatePicker encounterId={encounterId} type="medical_certificate" onApply={(template) => { setCertificateTemplate(template); if (template) { setCertTitle(template.title); setCertStatement(template.body); } }} />
                         <Field label="Certificate title">
                           <Input
                             id="odc-cert-title"

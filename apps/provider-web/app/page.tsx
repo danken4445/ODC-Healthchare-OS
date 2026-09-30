@@ -1294,6 +1294,7 @@ export default function Home() {
               diagnostics={diagnostics}
               clinicalRecords={clinicalRecords}
               activeEncounterId={selectedEncounterId}
+              startingAppointmentId={startingId}
               isNurse={isNurse}
               onStartConsultation={handleQueueConsultation}
               onOpenTriage={(appointment) => {
