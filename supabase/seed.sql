@@ -14,7 +14,6 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000107', 'authenticated', 'authenticated', 'lab@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000108', 'authenticated', 'authenticated', 'inventory@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000109', 'authenticated', 'authenticated', 'specialist@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
-  ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000100', 'authenticated', 'authenticated', 'superadmin@odc.com', crypt('Test123!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"display_name":"Platform Superadmin"}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000103', 'authenticated', 'authenticated', 'patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000104', 'authenticated', 'authenticated', 'other-patient@synthetic.odyssey.test', crypt('LocalOnly-2026!', gen_salt('bf')), now(), '', '', '', '', now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now())
 on conflict (id) do nothing;
@@ -133,6 +132,16 @@ insert into public.departments (id, organization_id, code, name, description) va
   ('90000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'OPD', 'Other Clinic OPD', 'Tenant-isolation test location.')
 on conflict (id) do nothing;
 
+insert into public.inventory_categories (
+  id, organization_id, department_id, name, description
+) values
+  ('94000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 'Department stock', 'Synthetic outpatient inventory category.'),
+  ('94000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000002', 'Department stock', 'Synthetic emergency inventory category.'),
+  ('94000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000003', 'Department stock', 'Synthetic tenant-isolation inventory category.')
+on conflict (department_id, name) do update
+set description = excluded.description,
+    active = true;
+
 insert into public.inventory_items (
   id, organization_id, sku, name, description, unit_of_measure,
   unit_cost, selling_price, unit_price, currency
@@ -142,13 +151,32 @@ insert into public.inventory_items (
   ('91000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'SYR-5ML', 'Other Clinic Syringe 5 mL', 'Tenant-isolation test item.', 'piece', 11.00, 20.00, 20.00, 'PHP')
 on conflict (id) do nothing;
 
-insert into public.department_stock (
+with stock_fixtures (
   id, organization_id, item_id, department_id, quantity, reorder_level
-) values
-  ('92000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 100, 20),
-  ('92000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000002', 40, 10),
-  ('92000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000001', 75, 15),
-  ('92000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000003', '90000000-0000-0000-0000-000000000003', 500, 25)
+) as (
+  values
+    ('92000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, '91000000-0000-0000-0000-000000000001'::uuid, '90000000-0000-0000-0000-000000000001'::uuid, 100::numeric, 20::numeric),
+    ('92000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, '91000000-0000-0000-0000-000000000001'::uuid, '90000000-0000-0000-0000-000000000002'::uuid, 40::numeric, 10::numeric),
+    ('92000000-0000-0000-0000-000000000003'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, '91000000-0000-0000-0000-000000000002'::uuid, '90000000-0000-0000-0000-000000000001'::uuid, 75::numeric, 15::numeric),
+    ('92000000-0000-0000-0000-000000000004'::uuid, '10000000-0000-0000-0000-000000000002'::uuid, '91000000-0000-0000-0000-000000000003'::uuid, '90000000-0000-0000-0000-000000000003'::uuid, 500::numeric, 25::numeric)
+)
+insert into public.department_stock (
+  id, organization_id, item_id, department_id, category_id, quantity, reorder_level
+)
+select
+  fixture.id,
+  fixture.organization_id,
+  fixture.item_id,
+  fixture.department_id,
+  category.id,
+  fixture.quantity,
+  fixture.reorder_level
+from stock_fixtures fixture
+join public.inventory_categories category
+  on category.organization_id = fixture.organization_id
+ and category.department_id = fixture.department_id
+ and category.name = 'Department stock'
+ and category.active
 on conflict (id) do nothing;
 
 insert into public.inventory_stock_movements (
@@ -182,7 +210,7 @@ where id = '10000000-0000-0000-0000-000000000002';
 
 -- Coverages
 insert into public.coverages (
-  id, organization_id, patient_id, status, kind, payor,
+  id, organization_id, patient_id, status, coverage_type, payor,
   payor_type, hmo_provider_name, hmo_member_number, max_benefit_limit, remaining_benefit
 ) values (
   'a4000000-0000-0000-0000-000000000001',
@@ -194,7 +222,7 @@ insert into public.coverages (
 ) on conflict (id) do nothing;
 
 insert into public.coverages (
-  id, organization_id, patient_id, status, kind, payor,
+  id, organization_id, patient_id, status, coverage_type, payor,
   payor_type, philhealth_id, philhealth_category
 ) values (
   'a4000000-0000-0000-0000-000000000002',
@@ -207,13 +235,15 @@ insert into public.coverages (
 
 -- Clinic 1: Self-Pay Billing Event & Paid Invoice
 insert into public.billing_events (
-  id, organization_id, encounter_id, patient_id, payor_type, status, finalized_at
+  id, organization_id, encounter_id, patient_id, payor_type,
+  billing_mode, billing_mode_source, status, finalized_at
 ) values (
   'a0000000-0000-0000-0000-000000000001',
   '10000000-0000-0000-0000-000000000001',
   '60000000-0000-0000-0000-000000000001',
   '40000000-0000-0000-0000-000000000001',
-  'self_pay', 'finalized', now()
+  'self_pay', 'standard'::public.billing_mode, 'historical_payor',
+  'finalized', now()
 ) on conflict (id) do nothing;
 
 insert into public.billing_line_items (
@@ -257,14 +287,14 @@ insert into public.payments (
 
 -- Clinic 2: PhilHealth NBB Billing Event & Claim (Zero Balance for Patient)
 insert into public.billing_events (
-  id, organization_id, encounter_id, patient_id, payor_type, status,
-  coverage_id, finalized_at
+  id, organization_id, encounter_id, patient_id, payor_type,
+  billing_mode, billing_mode_source, status, coverage_id, finalized_at
 ) values (
   'a0000000-0000-0000-0000-000000000002',
   '10000000-0000-0000-0000-000000000002',
   '60000000-0000-0000-0000-000000000002',
   '40000000-0000-0000-0000-000000000002',
-  'philhealth_nbb', 'finalized',
+  'philhealth_nbb', 'nbb'::public.billing_mode, 'historical_payor', 'finalized',
   'a4000000-0000-0000-0000-000000000002', now()
 ) on conflict (id) do nothing;
 
@@ -313,7 +343,9 @@ insert into public.invoices (
   'paid', 620.00, 0.00, 0.00, 0.00, now(), now()
 ) on conflict (id) do nothing;
 
-insert into public.platform_admins (user_id, granted_by) values
-  ('00000000-0000-0000-0000-000000000100', '00000000-0000-0000-0000-000000000100')
+insert into public.platform_admins (user_id, granted_by)
+select user_account.id, user_account.id
+from auth.users user_account
+where user_account.email = 'superadmin@odc.com'
 on conflict (user_id) do nothing;
 

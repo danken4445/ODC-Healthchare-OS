@@ -2,6 +2,8 @@
 -- Extends the existing financial loop in place. Appointment reservations,
 -- charges, inventory usage, invoices, and payment confirmation remain
 -- organization-scoped and auditable.
+-- Rollback: restore the preceding billing RPC definitions and remove the added
+-- lifecycle objects in reverse dependency order during a controlled rollback.
 
 create type public.billing_mode as enum ('standard', 'nbb');
 create type public.billing_line_payment_status as enum ('unpaid', 'paid', 'written_off', 'voided');
@@ -853,7 +855,8 @@ begin
   select * into v_event from public.billing_events where id = public.ensure_encounter_draft_bill(p_encounter_id);
   if p_payor_type_override is not null then
     update public.billing_events set payor_type = p_payor_type_override,
-      billing_mode = case when p_payor_type_override in ('philhealth_nbb', 'government_subsidized') then 'nbb' else 'standard' end,
+      billing_mode = case when p_payor_type_override in ('philhealth_nbb', 'government_subsidized')
+        then 'nbb'::public.billing_mode else 'standard'::public.billing_mode end,
       billing_mode_source = 'billing_override'
     where id = v_event.id returning * into v_event;
   end if;
@@ -951,7 +954,12 @@ begin
 end;
 $$;
 
-create or replace function public.get_billing_line_items(p_billing_event_id uuid)
+-- RETURNS TABLE columns are OUT parameters, so PostgreSQL cannot expand this
+-- existing (uuid) overload with CREATE OR REPLACE. Drop only that exact
+-- signature and recreate it transactionally with the lifecycle result shape.
+drop function if exists public.get_billing_line_items(uuid);
+
+create function public.get_billing_line_items(p_billing_event_id uuid)
 returns table (
   id uuid, source_type text, source_id uuid, description text, quantity numeric,
   unit_price numeric, currency text, line_total numeric,
@@ -968,6 +976,9 @@ returns table (
     or exists (select 1 from public.patients patient where patient.id = event.patient_id and patient.auth_user_id = auth.uid())
   ) order by line.created_at;
 $$;
+
+revoke all on function public.get_billing_line_items(uuid) from public, anon, authenticated;
+grant execute on function public.get_billing_line_items(uuid) to authenticated;
 
 create or replace function public.get_invoice_detail(p_invoice_id uuid)
 returns jsonb language plpgsql stable security definer set search_path = public, auth as $$
@@ -1079,12 +1090,14 @@ $$;
 
 -- Backfill lifecycle fields for financial records created by the earlier loop.
 update public.billing_events event set
-  billing_mode = coalesce(event.billing_mode, case when event.payor_type in ('philhealth_nbb', 'government_subsidized') then 'nbb' else 'standard' end),
+  billing_mode = coalesce(event.billing_mode, case when event.payor_type in ('philhealth_nbb', 'government_subsidized')
+    then 'nbb'::public.billing_mode else 'standard'::public.billing_mode end),
   billing_mode_source = coalesce(event.billing_mode_source, 'historical_payor')
 from public.encounters encounter
 where encounter.id = event.encounter_id;
 update public.billing_events event set
-  billing_mode = coalesce(event.billing_mode, case when event.payor_type in ('philhealth_nbb', 'government_subsidized') then 'nbb' else 'standard' end),
+  billing_mode = coalesce(event.billing_mode, case when event.payor_type in ('philhealth_nbb', 'government_subsidized')
+    then 'nbb'::public.billing_mode else 'standard'::public.billing_mode end),
   billing_mode_source = coalesce(event.billing_mode_source, 'historical_payor')
 where event.billing_mode is null;
 update public.encounters encounter set
