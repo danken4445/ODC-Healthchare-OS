@@ -1,3 +1,6 @@
+-- Rollback: restore the prior list_encounter_clinical_document_templates(uuid, text)
+-- definition from the migration that introduced the clinical document templates.
+
 -- Resolve published template visibility against the actual encounter. This
 -- avoids a client-selected organization becoming the source of truth while
 -- retaining personal-template privacy between clinicians.

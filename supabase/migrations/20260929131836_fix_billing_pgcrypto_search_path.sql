@@ -1,3 +1,5 @@
+-- Rollback: restore both functions' prior search_path to public, auth.
+
 -- Hosted Supabase installs pgcrypto functions in the extensions schema. The
 -- billing lifecycle migration fixed the older finalization function but its
 -- invoice-token functions still used a restricted search_path, so patient
