@@ -43,6 +43,10 @@ export function QueueBoard({ appointments, renderAction }: QueueBoardProps) {
                     <time>{formatTime(appointment.start_at)}</time>
                   </div>
                   <p>{appointment.description || appointment.service_type || "Consultation"}</p>
+                  <p className="queue-patient__doctor">
+                    <strong>Assigned doctor</strong>
+                    <span>{appointment.assignedDoctorName}</span>
+                  </p>
                   <DepartmentTag>{appointment.service_type || "General medicine"}</DepartmentTag>
                   <div className="queue-patient__action">{renderAction(appointment)}</div>
                 </Card>

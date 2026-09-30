@@ -36,6 +36,8 @@ interface DoctorOverviewProps {
   clinicalRecords: OrganizationClinicalRecords | null;
   activeEncounterId: string | null;
   startingAppointmentId: string | null;
+  currentPractitionerRoleId: string | null;
+  canStartConsultation: boolean;
   isNurse?: boolean;
   onStartConsultation: (appointment: AppointmentQueueItem) => void;
   onOpenTriage: (appointment: AppointmentQueueItem) => void;
@@ -82,6 +84,8 @@ export function DoctorOverview({
   clinicalRecords,
   activeEncounterId,
   startingAppointmentId,
+  currentPractitionerRoleId,
+  canStartConsultation,
   isNurse = false,
   onStartConsultation,
   onOpenTriage,
@@ -266,9 +270,10 @@ export function DoctorOverview({
             <table className="vesper-table">
               <thead>
                 <tr>
-                  <th style={{ width: "36%" }}>Patient</th>
-                  <th style={{ width: "22%" }}>Time</th>
-                  <th style={{ width: "22%" }}>Status</th>
+                  <th style={{ width: "28%" }}>Patient</th>
+                  <th style={{ width: "20%" }}>Assigned Doctor</th>
+                  <th style={{ width: "14%" }}>Time</th>
+                  <th style={{ width: "18%" }}>Status</th>
                   <th style={{ width: "20%" }}>Action</th>
                 </tr>
               </thead>
@@ -284,6 +289,11 @@ export function DoctorOverview({
                       item.triageStatus !== "complete";
                     const isStarting = startingAppointmentId === item.id;
                     const patientName = item.patientName || "this patient";
+                    const isAssignedToCurrentPractitioner =
+                      currentPractitionerRoleId !== null &&
+                      item.practitioner_role_id === currentPractitionerRoleId;
+                    const canOpenConsultation =
+                      canStartConsultation && isAssignedToCurrentPractitioner;
 
                     return (
                       <tr key={item.id} className="vesper-table-row--interactive">
@@ -325,6 +335,11 @@ export function DoctorOverview({
                         </td>
                         <td>
                           <span className="vesper-date-text">
+                            {item.assignedDoctorName}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="vesper-date-text">
                             {formatTime(item.start_at)}
                           </span>
                         </td>
@@ -360,6 +375,12 @@ export function DoctorOverview({
                                 ? "Review Triage"
                                 : "Record Triage"}
                             </button>
+                          ) : !canOpenConsultation ? (
+                            <span className="vesper-action-status">
+                              {isAssignedToCurrentPractitioner
+                                ? "Consultation access required"
+                                : "Assigned to another doctor"}
+                            </span>
                           ) : isInProgress ? (
                             <button
                               type="button"
@@ -406,7 +427,7 @@ export function DoctorOverview({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="vesper-table-empty">
+                    <td colSpan={5} className="vesper-table-empty">
                       No patients currently waiting in queue today.
                     </td>
                   </tr>

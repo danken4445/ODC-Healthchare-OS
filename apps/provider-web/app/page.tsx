@@ -8,7 +8,6 @@ import {
   getCurrentUserEmail,
   getPortalAccess,
   getCurrentStaffOrganization,
-  getCurrentProviderRoleId,
   getDailyAppointmentQueue,
   getSpecificDayRange,
   getUpcomingDayRange,
@@ -91,6 +90,10 @@ import {
   isDeveloperModeActive,
   setDeveloperModeActive,
 } from "./components/encounter-test-data";
+import { useCurrentPractitionerRole } from "./hooks/useCurrentPractitionerRole";
+
+const CROSS_DOCTOR_ASSIGNMENT_MESSAGE =
+  "This appointment is assigned to another doctor. Ask an authorized coordinator to reassign it.";
 
 function formatTime(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -184,7 +187,9 @@ export default function Home() {
   );
   const [clinicalBusy, setClinicalBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
-  const [providerRoleId, setProviderRoleId] = useState<string | null>(null);
+  const [canManageAppointments, setCanManageAppointments] = useState(false);
+  const [queueScope, setQueueScope] = useState<"mine" | "clinic">("mine");
+  const [selectedDoctorRoleId, setSelectedDoctorRoleId] = useState("");
   const [inventory, setInventory] = useState<InventoryWorkspace | null>(null);
   const [canTagInventory, setCanTagInventory] = useState(false);
   const [inventoryDepartmentId, setInventoryDepartmentId] = useState<
@@ -268,12 +273,60 @@ export default function Home() {
   );
   const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [selectedSpecialistRoleId, setSelectedSpecialistRoleId] = useState("");
-  const [laboratoryServices, setLaboratoryServices] = useState<LaboratoryServiceSummary[]>([]);
+  const [laboratoryServices, setLaboratoryServices] = useState<
+    LaboratoryServiceSummary[]
+  >([]);
   const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(false);
   const [canRecordLabResults, setCanRecordLabResults] = useState(false);
   const [canUpdateReferrals, setCanUpdateReferrals] = useState(false);
   const [canManageTemplates, setCanManageTemplates] = useState(false);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+
+  const {
+    practitionerRoleId: providerRoleId,
+    isLoading: providerRoleLoading,
+    error: providerRoleError,
+  } = useCurrentPractitionerRole(organizationId, canPrescribe);
+
+  const queueDoctorOptions = useMemo(() => {
+    const doctors = new Map<string, string>();
+    queue.forEach((appointment) => {
+      if (appointment.practitioner_role_id) {
+        doctors.set(
+          appointment.practitioner_role_id,
+          appointment.assignedDoctorName,
+        );
+      }
+    });
+    return [...doctors.entries()]
+      .map(([roleId, name]) => ({ roleId, name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [queue]);
+
+  const visibleQueue = useMemo(() => {
+    if (isNurse) return queue;
+    if (queueScope === "clinic" && canManageAppointments) {
+      return selectedDoctorRoleId
+        ? queue.filter(
+            (appointment) =>
+              appointment.practitioner_role_id === selectedDoctorRoleId,
+          )
+        : queue;
+    }
+    return providerRoleId
+      ? queue.filter(
+          (appointment) =>
+            appointment.practitioner_role_id === providerRoleId,
+        )
+      : [];
+  }, [
+    canManageAppointments,
+    isNurse,
+    providerRoleId,
+    queue,
+    queueScope,
+    selectedDoctorRoleId,
+  ]);
 
   const ownedServices = services.filter(
     (service) => service.owner_practitioner_role_id === providerRoleId,
@@ -468,10 +521,10 @@ export default function Home() {
 
   const loadAvailability = useCallback(
     async (clinicId = organizationId) => {
-      if (!clinicId) return;
+      if (!clinicId || !canPrescribe || !providerRoleId) return;
       const client = createBrowserSupabaseClient();
       const [slotResult, serviceResult, weeklyResult] = await Promise.all([
-        getProviderAppointmentSlots(client, clinicId),
+        getProviderAppointmentSlots(client, clinicId, { scope: "mine" }),
         getClinicServices(client, clinicId),
         getProviderWeeklyAvailability(client, clinicId),
       ]);
@@ -485,7 +538,7 @@ export default function Home() {
       setServices(serviceResult.data);
       setWeeklyAvailability(weeklyResult.data);
     },
-    [organizationId],
+    [canPrescribe, organizationId, providerRoleId],
   );
 
   const loadClinicalRecords = useCallback(
@@ -546,14 +599,36 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (providerRoleError) {
+      setStatus(`Provider role query failed: ${providerRoleError}`);
+    }
+  }, [providerRoleError]);
+
+  useEffect(() => {
+    if (!canManageAppointments && queueScope !== "mine") {
+      setQueueScope("mine");
+      setSelectedDoctorRoleId("");
+    }
+  }, [canManageAppointments, queueScope]);
+
+  useEffect(() => {
+    if (
+      selectedDoctorRoleId &&
+      !queueDoctorOptions.some(
+        (doctor) => doctor.roleId === selectedDoctorRoleId,
+      )
+    ) {
+      setSelectedDoctorRoleId("");
+    }
+  }, [queueDoctorOptions, selectedDoctorRoleId]);
+
+  useEffect(() => {
     const bookableServices = services.filter(
       (service) =>
         service.owner_practitioner_role_id === providerRoleId &&
         service.booking_enabled,
     );
-    if (
-      !bookableServices.some((service) => service.id === scheduleServiceId)
-    ) {
+    if (!bookableServices.some((service) => service.id === scheduleServiceId)) {
       setScheduleServiceId(bookableServices[0]?.id ?? "");
     }
   }, [providerRoleId, scheduleServiceId, services]);
@@ -619,14 +694,6 @@ export default function Home() {
     );
     if (result.error)
       return setStatus(`Clinic access failed: ${result.error.message}`);
-    const roleResult = await getCurrentProviderRoleId(
-      createBrowserSupabaseClient(),
-      result.data,
-    );
-    if (roleResult.error)
-      return setStatus(
-        `Provider role query failed: ${roleResult.error.message}`,
-      );
     const departmentResult = await getCurrentStaffDepartment(
       createBrowserSupabaseClient(),
       result.data,
@@ -643,6 +710,7 @@ export default function Home() {
       labPermission,
       referralPermission,
       templatePermission,
+      appointmentManagementPermission,
     ] = await Promise.all([
       hasOrganizationPermission(
         createBrowserSupabaseClient(),
@@ -679,6 +747,11 @@ export default function Home() {
         result.data,
         "can_manage_document_templates",
       ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_manage_appointments",
+      ),
     ]);
     if (
       inventoryPermission.error ||
@@ -686,13 +759,13 @@ export default function Home() {
       consultationPermission.error ||
       orderPermission.error ||
       labPermission.error ||
-      referralPermission.error
-      || templatePermission.error
+      referralPermission.error ||
+      templatePermission.error ||
+      appointmentManagementPermission.error
     )
       return setStatus(
         `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message}`,
       );
-    setProviderRoleId(roleResult.data);
     setOrganizationId(result.data);
     setInventoryDepartmentId(departmentResult.data);
     setInventoryDepartmentSelection(departmentResult.data ?? "");
@@ -703,6 +776,7 @@ export default function Home() {
     setCanRecordLabResults(labPermission.data);
     setCanUpdateReferrals(referralPermission.data);
     setCanManageTemplates(templatePermission.data);
+    setCanManageAppointments(appointmentManagementPermission.data);
 
     // Fetch practitioner display name if available
     try {
@@ -724,7 +798,6 @@ export default function Home() {
 
     await Promise.all([
       loadQueue(result.data),
-      loadAvailability(result.data),
       loadClinicalRecords(result.data),
       inventoryPermission.data ? loadInventory(result.data) : Promise.resolve(),
       loadDiagnostics(result.data),
@@ -765,19 +838,45 @@ export default function Home() {
   }
 
   async function handleStart(appointmentId: string) {
+    const appointment = queue.find((item) => item.id === appointmentId);
+    if (
+      !canPrescribe ||
+      !providerRoleId ||
+      appointment?.practitioner_role_id !== providerRoleId
+    ) {
+      setStatus(CROSS_DOCTOR_ASSIGNMENT_MESSAGE);
+      return;
+    }
     setStartingId(appointmentId);
     const result = await startAppointmentEncounter(
       createBrowserSupabaseClient(),
       appointmentId,
     );
     setStartingId(null);
-    if (result.error)
-      return setStatus(`Unable to start encounter: ${result.error.message}`);
+    if (result.error) {
+      if (
+        result.error.code === "P0002" ||
+        result.error.message.includes("Assigned appointment not found")
+      ) {
+        setStatus(CROSS_DOCTOR_ASSIGNMENT_MESSAGE);
+        return;
+      }
+      setStatus(`Unable to start encounter: ${result.error.message}`);
+      return;
+    }
     setStatus(`Encounter ${result.data} is in progress.`);
     router.push(`/encounters/${result.data}`);
   }
 
   function handleQueueConsultation(appointment: AppointmentQueueItem) {
+    if (
+      !canPrescribe ||
+      !providerRoleId ||
+      appointment.practitioner_role_id !== providerRoleId
+    ) {
+      setStatus(CROSS_DOCTOR_ASSIGNMENT_MESSAGE);
+      return;
+    }
     if (appointment.delivery_mode === "virtual") {
       router.push(`/teleconsult/${appointment.id}`);
       return;
@@ -1139,12 +1238,14 @@ export default function Home() {
     setLiveStatus("Offline");
     setClinicalRecords(null);
     setSelectedEncounterId(null);
-    setProviderRoleId(null);
     setInventory(null);
     setCanTagInventory(false);
     setInventoryDepartmentId(null);
     setInventoryDepartmentSelection("");
     setCanTriage(false);
+    setCanManageAppointments(false);
+    setQueueScope("mine");
+    setSelectedDoctorRoleId("");
     setSelectedTriageAppointmentId(null);
     setDiagnostics(null);
     setSpecialists([]);
@@ -1267,7 +1368,7 @@ export default function Home() {
                 setActiveTab(tab);
               }
             }}
-            queueCount={queue.length}
+            queueCount={visibleQueue.length}
             notificationsCount={diagnostics?.notifications.length ?? 0}
             hasActiveEncounter={Boolean(selectedEncounterId)}
             canManageTemplates={canManageTemplates && !isNurse}
@@ -1290,11 +1391,13 @@ export default function Home() {
                     : "Clinician")
               }
               department={currentDepartmentName}
-              queue={queue}
+              queue={visibleQueue}
               diagnostics={diagnostics}
               clinicalRecords={clinicalRecords}
               activeEncounterId={selectedEncounterId}
               startingAppointmentId={startingId}
+              currentPractitionerRoleId={providerRoleId}
+              canStartConsultation={canPrescribe}
               isNurse={isNurse}
               onStartConsultation={handleQueueConsultation}
               onOpenTriage={(appointment) => {
@@ -1333,182 +1436,296 @@ export default function Home() {
             <>
               {!!diagnostics?.notifications.length && (
                 <section aria-labelledby="notifications-heading">
-              <h2 id="notifications-heading">Diagnostics notifications</h2>
-              <div className="record-list">
-                {diagnostics.notifications.map((notification) => (
-                  <article key={notification.id}>
-                    <strong>{notification.title}</strong>
-                    <p>{notification.message}</p>
-                    <small>
-                      {new Date(notification.created_at).toLocaleString()}
-                    </small>{" "}
-                    {!notification.read_at && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          void markClinicalNotificationRead(
-                            createBrowserSupabaseClient(),
-                            notification.id,
-                          ).then(() => loadDiagnostics())
-                        }
-                      >
-                        Mark read
-                      </Button>
-                    )}
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-          {canRecordLabResults && (
-            <section aria-labelledby="lab-worklist-heading">
-              <h2 id="lab-worklist-heading">Laboratory worklist</h2>
-              {!diagnostics?.serviceRequests.some(
-                (request) =>
-                  request.category === "laboratory" &&
-                  request.status === "active",
-              ) && <p className="hint">No active laboratory orders.</p>}
-              <div className="clinical-grid">
-                {diagnostics?.serviceRequests
-                  .filter(
+                  <h2 id="notifications-heading">Diagnostics notifications</h2>
+                  <div className="record-list">
+                    {diagnostics.notifications.map((notification) => (
+                      <article key={notification.id}>
+                        <strong>{notification.title}</strong>
+                        <p>{notification.message}</p>
+                        <small>
+                          {new Date(notification.created_at).toLocaleString()}
+                        </small>{" "}
+                        {!notification.read_at && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void markClinicalNotificationRead(
+                                createBrowserSupabaseClient(),
+                                notification.id,
+                              ).then(() => loadDiagnostics())
+                            }
+                          >
+                            Mark read
+                          </Button>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {canRecordLabResults && (
+                <section aria-labelledby="lab-worklist-heading">
+                  <h2 id="lab-worklist-heading">Laboratory worklist</h2>
+                  {!diagnostics?.serviceRequests.some(
                     (request) =>
                       request.category === "laboratory" &&
                       request.status === "active",
-                  )
-                  .map((request) => (
-                    <Card key={request.id}>
-                      <h3>{request.code_display ?? request.code}</h3>
-                      <p className="hint">
-                        {request.priority ?? "routine"} · ordered{" "}
-                        {new Date(request.created_at).toLocaleString()}
-                      </p>
-                      {request.note && <p>{request.note}</p>}
-                      <form className="stack" onSubmit={handleLabResult}>
-                        <input
-                          type="hidden"
-                          name="serviceRequestId"
-                          value={request.id}
-                        />
-                        <Field label="Result name">
-                          <Input name="resultDisplay" required />
-                        </Field>
-                        <Field label="Value">
-                          <Input name="value" required />
-                        </Field>
-                        <Field label="Unit">
-                          <Input name="unit" />
-                        </Field>
-                        <Field label="Reference range">
-                          <Input name="referenceRange" />
-                        </Field>
-                        <Field label="Conclusion">
-                          <textarea
-                            className="odyssey-input"
-                            name="conclusion"
-                            rows={3}
-                            maxLength={5000}
-                          />
-                        </Field>
-                        <Button type="submit" disabled={diagnosticsBusy}>
-                          Publish final report
+                  ) && <p className="hint">No active laboratory orders.</p>}
+                  <div className="clinical-grid">
+                    {diagnostics?.serviceRequests
+                      .filter(
+                        (request) =>
+                          request.category === "laboratory" &&
+                          request.status === "active",
+                      )
+                      .map((request) => (
+                        <Card key={request.id}>
+                          <h3>{request.code_display ?? request.code}</h3>
+                          <p className="hint">
+                            {request.priority ?? "routine"} · ordered{" "}
+                            {new Date(request.created_at).toLocaleString()}
+                          </p>
+                          {request.note && <p>{request.note}</p>}
+                          <form className="stack" onSubmit={handleLabResult}>
+                            <input
+                              type="hidden"
+                              name="serviceRequestId"
+                              value={request.id}
+                            />
+                            <Field label="Result name">
+                              <Input name="resultDisplay" required />
+                            </Field>
+                            <Field label="Value">
+                              <Input name="value" required />
+                            </Field>
+                            <Field label="Unit">
+                              <Input name="unit" />
+                            </Field>
+                            <Field label="Reference range">
+                              <Input name="referenceRange" />
+                            </Field>
+                            <Field label="Conclusion">
+                              <textarea
+                                className="odyssey-input"
+                                name="conclusion"
+                                rows={3}
+                                maxLength={5000}
+                              />
+                            </Field>
+                            <Button type="submit" disabled={diagnosticsBusy}>
+                              Publish final report
+                            </Button>
+                          </form>
+                        </Card>
+                      ))}
+                  </div>
+                </section>
+              )}
+              {canUpdateReferrals && (
+                <section aria-labelledby="referrals-heading">
+                  <h2 id="referrals-heading">My specialist referrals</h2>
+                  <QueueBoard
+                    appointments={visibleQueue}
+                    renderAction={(appointment) =>
+                      !canPrescribe ||
+                      !providerRoleId ||
+                      appointment.practitioner_role_id !== providerRoleId ? (
+                        <span className="hint">Assigned to another doctor</span>
+                      ) : appointment.encounterStatus === "in_progress" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const encounter = clinicalRecords?.encounters.find(
+                              (item) => item.appointment_id === appointment.id,
+                            );
+                            if (encounter)
+                              router.push(`/encounters/${encounter.id}`);
+                          }}
+                        >
+                          Open chart
                         </Button>
-                      </form>
-                    </Card>
-                  ))}
-              </div>
-            </section>
-          )}
-          {canUpdateReferrals && (
-            <section aria-labelledby="referrals-heading">
-              <h2 id="referrals-heading">My specialist referrals</h2>
-              <QueueBoard
-                appointments={queue}
-                renderAction={(appointment) =>
-                  appointment.encounterStatus === "in_progress" ? (
-                    <Button size="sm" variant="outline" onClick={() => {
-                      const encounter = clinicalRecords?.encounters.find((item) => item.appointment_id === appointment.id);
-                      if (encounter) router.push(`/encounters/${encounter.id}`);
-                    }}>Open chart</Button>
-                  ) : appointment.delivery_mode === "virtual" ? (
-                    <Link href={`/teleconsult/${appointment.id}`}><Button size="sm">Open room</Button></Link>
-                  ) : appointment.status === "arrived" && appointment.triageStatus === "complete" ? (
-                    <Button size="sm" disabled={startingId !== null} onClick={() => void handleStart(appointment.id)}>
-                      {startingId === appointment.id ? "Starting…" : "Start consultation"}
-                    </Button>
-                  ) : canTriage && appointment.status === "arrived" ? (
-                    <Button size="sm" onClick={() => setSelectedTriageAppointmentId(appointment.id)}>Record triage</Button>
-                  ) : <span className="hint">Awaiting check-in</span>
-                }
-              />
-              <DataTable
-                caption="Referrals routed specifically to your specialist role."
-                data={
-                  diagnostics?.serviceRequests.filter(
-                    (request) => request.category === "referral",
-                  ) ?? []
-                }
-                emptyMessage="No referrals are assigned to you."
-                getRowId={(request) => request.id}
-                columns={[
-                  {
-                    id: "request",
-                    header: "Referral",
-                    cell: (request) => request.code_display ?? request.code,
-                  },
-                  {
-                    id: "priority",
-                    header: "Priority",
-                    cell: (request) => request.priority ?? "routine",
-                  },
-                  {
-                    id: "status",
-                    header: "Status",
-                    cell: (request) => request.status.replaceAll("_", " "),
-                  },
-                  {
-                    id: "action",
-                    header: "",
-                    cell: (request) =>
-                      request.status === "completed" ||
-                      request.status === "revoked" ? null : (
+                      ) : appointment.delivery_mode === "virtual" ? (
+                        <Link href={`/teleconsult/${appointment.id}`}>
+                          <Button size="sm">Open room</Button>
+                        </Link>
+                      ) : appointment.status === "arrived" &&
+                        appointment.triageStatus === "complete" ? (
+                        <Button
+                          size="sm"
+                          disabled={startingId !== null}
+                          onClick={() => void handleStart(appointment.id)}
+                        >
+                          {startingId === appointment.id
+                            ? "Starting…"
+                            : "Start consultation"}
+                        </Button>
+                      ) : canTriage && appointment.status === "arrived" ? (
                         <Button
                           size="sm"
                           onClick={() =>
-                            void updateReferralStatus(
-                              createBrowserSupabaseClient(),
-                              request.id,
-                              "completed",
-                            ).then((result) => {
-                              if (result.error)
-                                setStatus(
-                                  `Unable to update referral: ${result.error.message}`,
-                                );
-                              else void loadDiagnostics();
-                            })
+                            setSelectedTriageAppointmentId(appointment.id)
                           }
                         >
-                          Complete
+                          Record triage
                         </Button>
-                      ),
-                  },
-                ]}
-              />
-            </section>
-          )}
-          </>
+                      ) : (
+                        <span className="hint">Awaiting check-in</span>
+                      )
+                    }
+                  />
+                  <DataTable
+                    caption="Referrals routed specifically to your specialist role."
+                    data={
+                      diagnostics?.serviceRequests.filter(
+                        (request) => request.category === "referral",
+                      ) ?? []
+                    }
+                    emptyMessage="No referrals are assigned to you."
+                    getRowId={(request) => request.id}
+                    columns={[
+                      {
+                        id: "request",
+                        header: "Referral",
+                        cell: (request) => request.code_display ?? request.code,
+                      },
+                      {
+                        id: "priority",
+                        header: "Priority",
+                        cell: (request) => request.priority ?? "routine",
+                      },
+                      {
+                        id: "status",
+                        header: "Status",
+                        cell: (request) => request.status.replaceAll("_", " "),
+                      },
+                      {
+                        id: "action",
+                        header: "",
+                        cell: (request) =>
+                          request.status === "completed" ||
+                          request.status === "revoked" ? null : (
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                void updateReferralStatus(
+                                  createBrowserSupabaseClient(),
+                                  request.id,
+                                  "completed",
+                                ).then((result) => {
+                                  if (result.error)
+                                    setStatus(
+                                      `Unable to update referral: ${result.error.message}`,
+                                    );
+                                  else void loadDiagnostics();
+                                })
+                              }
+                            >
+                              Complete
+                            </Button>
+                          ),
+                      },
+                    ]}
+                  />
+                </section>
+              )}
+            </>
           )}
 
           {activeTab === "queue" && (
-            <section aria-labelledby="queue-heading" style={{ marginTop: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <section
+              aria-labelledby="queue-heading"
+              style={{ marginTop: "1rem" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "1rem",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                }}
+              >
                 <div>
-                  <h1 id="queue-heading" style={{ fontSize: "1.5rem", margin: 0 }}>
-                    {isNurse ? "Nurse triage queue" : "My queue today"}
+                  <h1
+                    id="queue-heading"
+                    style={{ fontSize: "1.5rem", margin: 0 }}
+                  >
+                    {isNurse
+                      ? "Nurse triage queue"
+                      : queueScope === "clinic" && canManageAppointments
+                        ? "Clinic queue"
+                        : "My queue today"}
                   </h1>
-                  <h2 style={{ fontSize: "1.05rem", margin: "0.2rem 0 0 0", color: "var(--odyssey-muted-foreground)" }}>Live queue</h2>
+                  <h2
+                    style={{
+                      fontSize: "1.05rem",
+                      margin: "0.2rem 0 0 0",
+                      color: "var(--odyssey-muted-foreground)",
+                    }}
+                  >
+                    Live queue
+                  </h2>
                 </div>
               </div>
+              {!isNurse && (
+                <div className="queue-scope-controls">
+                  <fieldset>
+                    <legend>Patient scope</legend>
+                    <div className="queue-scope-controls__buttons">
+                      <Button
+                        size="sm"
+                        variant={queueScope === "mine" ? "default" : "outline"}
+                        aria-pressed={queueScope === "mine"}
+                        onClick={() => {
+                          setQueueScope("mine");
+                          setSelectedDoctorRoleId("");
+                        }}
+                      >
+                        My patients
+                      </Button>
+                      {canManageAppointments && (
+                        <Button
+                          size="sm"
+                          variant={
+                            queueScope === "clinic" ? "default" : "outline"
+                          }
+                          aria-pressed={queueScope === "clinic"}
+                          onClick={() => setQueueScope("clinic")}
+                        >
+                          All
+                        </Button>
+                      )}
+                    </div>
+                  </fieldset>
+                  {canManageAppointments && queueScope === "clinic" && (
+                    <label className="queue-doctor-filter">
+                      <span>Assigned doctor</span>
+                      <select
+                        className="odyssey-input"
+                        value={selectedDoctorRoleId}
+                        onChange={(event) =>
+                          setSelectedDoctorRoleId(event.target.value)
+                        }
+                      >
+                        <option value="">All doctors</option>
+                        {queueDoctorOptions.map((doctor) => (
+                          <option key={doctor.roleId} value={doctor.roleId}>
+                            {doctor.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {providerRoleLoading && (
+                    <span className="hint" role="status">
+                      Loading practitioner assignment…
+                    </span>
+                  )}
+                </div>
+              )}
               <div
                 style={{
                   display: "flex",
@@ -1585,7 +1802,7 @@ export default function Home() {
                         ? `Clinical appointments scheduled for ${customDate}.`
                         : "Clinical appointments scheduled for the next 7 days."
                 }
-                data={queue}
+                data={visibleQueue}
                 emptyMessage={
                   queueView === "today"
                     ? "Your queue is empty today."
@@ -1594,112 +1811,196 @@ export default function Home() {
                       : "No appointments for this period."
                 }
                 getRowId={(appointment) => appointment.id}
-            columns={[
-              {
-                id: "queue",
-                header: "Queue",
-                cell: (appointment) =>
-                  appointment.queue_number
-                    ? `A-${String(appointment.queue_number).padStart(3, "0")}`
-                    : "—",
-              },
-              {
-                id: "time",
-                header: "Time",
-                cell: (appointment) => formatTime(appointment.start_at),
-              },
-              {
-                id: "patient",
-                header: "Patient",
-                cell: (appointment) => appointment.patientName,
-              },
-              {
-                id: "mode",
-                header: "Visit",
-                cell: (appointment) =>
-                  appointment.delivery_mode === "virtual" ? "Virtual" : "Clinic",
-              },
-              {
-                id: "status",
-                header: "Status",
-                cell: (appointment) =>
-                  appointment.encounterStatus === "in_progress" ? (
-                    <span className="encounter-status">
-                      {isNurse ? "In doctor consult" : "In progress"}
-                    </span>
-                  ) : appointment.delivery_mode === "virtual" ? (
-                    <span className="encounter-status">
-                      {isNurse ? "Virtual consult (Doctor)" : "Virtual visit"}
-                    </span>
-                  ) : appointment.triageStatus === "complete" ? (
-                    <span className="encounter-status">Triage complete</span>
-                  ) : appointment.status !== "arrived" ? (
-                    canTriage ? (
-                      <span className="hint">Awaiting check-in</span>
-                    ) : (
-                      <AppointmentStatusBadge status={appointment.status} />
-                    )
-                  ) : canPrescribe ? (
-                    <AppointmentStatusBadge status={appointment.status} />
-                  ) : (
-                    <span className="hint">
-                      {isNurse ? "Ready for triage" : "Awaiting triage"}
-                    </span>
-                  ),
-              },
-              {
-                id: "action",
-                header: "",
-                cell: (appointment) => {
-                  if (isNurse) {
-                    if (appointment.encounterStatus === "in_progress") {
-                      return <span className="hint">In consultation with doctor</span>;
-                    }
-                    if (appointment.delivery_mode === "virtual") {
-                      return <span className="hint">Virtual consult (Doctor)</span>;
-                    }
-                    if (appointment.status === "arrived") {
-                      if (appointment.triageStatus !== "complete") {
+                columns={[
+                  {
+                    id: "queue",
+                    header: "Queue",
+                    cell: (appointment) =>
+                      appointment.queue_number
+                        ? `A-${String(appointment.queue_number).padStart(3, "0")}`
+                        : "—",
+                  },
+                  {
+                    id: "time",
+                    header: "Time",
+                    cell: (appointment) => formatTime(appointment.start_at),
+                  },
+                  {
+                    id: "patient",
+                    header: "Patient",
+                    cell: (appointment) => appointment.patientName,
+                  },
+                  {
+                    id: "assigned-doctor",
+                    header: "Assigned Doctor",
+                    cell: (appointment) => appointment.assignedDoctorName,
+                  },
+                  {
+                    id: "mode",
+                    header: "Visit",
+                    cell: (appointment) =>
+                      appointment.delivery_mode === "virtual"
+                        ? "Virtual"
+                        : "Clinic",
+                  },
+                  {
+                    id: "status",
+                    header: "Status",
+                    cell: (appointment) =>
+                      appointment.encounterStatus === "in_progress" ? (
+                        <span className="encounter-status">
+                          {isNurse ? "In doctor consult" : "In progress"}
+                        </span>
+                      ) : appointment.delivery_mode === "virtual" ? (
+                        <span className="encounter-status">
+                          {isNurse
+                            ? "Virtual consult (Doctor)"
+                            : "Virtual visit"}
+                        </span>
+                      ) : appointment.triageStatus === "complete" ? (
+                        <span className="encounter-status">
+                          Triage complete
+                        </span>
+                      ) : appointment.status !== "arrived" ? (
+                        canTriage ? (
+                          <span className="hint">Awaiting check-in</span>
+                        ) : (
+                          <AppointmentStatusBadge status={appointment.status} />
+                        )
+                      ) : canPrescribe ? (
+                        <AppointmentStatusBadge status={appointment.status} />
+                      ) : (
+                        <span className="hint">
+                          {isNurse ? "Ready for triage" : "Awaiting triage"}
+                        </span>
+                      ),
+                  },
+                  {
+                    id: "action",
+                    header: "",
+                    cell: (appointment) => {
+                      if (isNurse) {
+                        if (appointment.encounterStatus === "in_progress") {
+                          return (
+                            <span className="hint">
+                              In consultation with doctor
+                            </span>
+                          );
+                        }
+                        if (appointment.delivery_mode === "virtual") {
+                          return (
+                            <span className="hint">
+                              Virtual consult (Doctor)
+                            </span>
+                          );
+                        }
+                        if (appointment.status === "arrived") {
+                          if (appointment.triageStatus !== "complete") {
+                            return (
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  setSelectedTriageAppointmentId(appointment.id)
+                                }
+                              >
+                                Record triage for {appointment.patientName}
+                              </Button>
+                            );
+                          }
+                          return (
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                gap: "0.5rem",
+                                alignItems: "center",
+                              }}
+                            >
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setSelectedTriageAppointmentId(appointment.id)
+                                }
+                              >
+                                Review triage
+                              </Button>
+                              <span className="hint">Ready for doctor</span>
+                            </div>
+                          );
+                        }
+                        return <span className="hint">Awaiting check-in</span>;
+                      }
+
+                      // Doctor actions
+                      const isAssignedToCurrentPractitioner =
+                        providerRoleId !== null &&
+                        appointment.practitioner_role_id === providerRoleId;
+                      const canOpenConsultation =
+                        canPrescribe && isAssignedToCurrentPractitioner;
+
+                      if (
+                        canTriage &&
+                        appointment.delivery_mode !== "virtual" &&
+                        appointment.status === "arrived" &&
+                        appointment.encounterStatus !== "in_progress"
+                      ) {
                         return (
                           <Button
                             size="sm"
+                            variant={
+                              appointment.triageStatus === "complete"
+                                ? "outline"
+                                : "default"
+                            }
                             onClick={() =>
                               setSelectedTriageAppointmentId(appointment.id)
                             }
                           >
-                            Record triage for {appointment.patientName}
+                            {appointment.triageStatus === "complete"
+                              ? "Review triage"
+                              : `Record triage for ${appointment.patientName}`}
                           </Button>
                         );
                       }
-                      return (
-                        <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setSelectedTriageAppointmentId(appointment.id)
-                            }
-                          >
-                            Review triage
-                          </Button>
-                          <span className="hint">Ready for doctor</span>
-                        </div>
-                      );
-                    }
-                    return <span className="hint">Awaiting check-in</span>;
-                  }
 
-                  // Doctor actions
-                  return appointment.delivery_mode === "virtual" ? (
-                    <span className="table-actions">
-                      <Link href={`/teleconsult/${appointment.id}`}>
-                        <Button size="sm">
-                          {appointment.encounterStatus === "in_progress"
-                            ? "Rejoin room"
-                            : "Open room"}
-                        </Button>
-                      </Link>
-                      {appointment.encounterStatus === "in_progress" && (
+                      if (!canOpenConsultation) {
+                        return (
+                          <span className="hint">
+                            {isAssignedToCurrentPractitioner
+                              ? "Consultation access required"
+                              : "Assigned to another doctor"}
+                          </span>
+                        );
+                      }
+
+                      return appointment.delivery_mode === "virtual" ? (
+                        <span className="table-actions">
+                          <Link href={`/teleconsult/${appointment.id}`}>
+                            <Button size="sm">
+                              {appointment.encounterStatus === "in_progress"
+                                ? "Rejoin room"
+                                : "Open room"}
+                            </Button>
+                          </Link>
+                          {appointment.encounterStatus === "in_progress" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const encounter =
+                                  clinicalRecords?.encounters.find(
+                                    (item) =>
+                                      item.appointment_id === appointment.id,
+                                  );
+                                if (encounter)
+                                  router.push(`/encounters/${encounter.id}`);
+                              }}
+                            >
+                              Open chart
+                            </Button>
+                          )}
+                        </span>
+                      ) : appointment.encounterStatus === "in_progress" ? (
                         <Button
                           size="sm"
                           variant="outline"

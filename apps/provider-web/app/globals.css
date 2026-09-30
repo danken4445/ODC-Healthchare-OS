@@ -63,6 +63,50 @@
 .queue-patient__heading time { color: var(--odyssey-muted-foreground); font-size: 0.8125rem; white-space: nowrap; }
 .queue-column .odyssey-card p { margin: 0.5rem 0; color: var(--odyssey-muted-foreground); font-size: 0.875rem; }
 .queue-patient__action { margin-top: 0.75rem; }
+.queue-patient__doctor {
+  display: grid;
+  gap: 0.125rem;
+}
+.queue-patient__doctor strong {
+  color: var(--odyssey-foreground);
+  font-size: 0.75rem;
+}
+
+.queue-scope-controls {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.queue-scope-controls fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.queue-scope-controls legend,
+.queue-doctor-filter > span {
+  display: block;
+  margin-bottom: 0.375rem;
+  color: var(--odyssey-muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.queue-scope-controls__buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.queue-doctor-filter {
+  min-width: min(16rem, 100%);
+  max-width: 100%;
+}
+.queue-doctor-filter select {
+  width: 100%;
+  min-height: 2.75rem;
+}
 
 .consultation-layout { grid-template-columns: minmax(14rem, 0.7fr) minmax(28rem, 1.8fr); align-items: start; }
 .soap-panel { grid-column: 2; grid-row: span 2; }
