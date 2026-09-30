@@ -349,3 +349,124 @@ from auth.users user_account
 where user_account.email = 'superadmin@odc.com'
 on conflict (user_id) do nothing;
 
+-- Published Clinical Document Templates (Prescriptions and Medical Certificates)
+insert into public.document_templates (
+  id, organization_id, code, name, category, description, body, structured_body,
+  is_default, status, active, condition_system, condition_code, condition_display
+) values
+  (
+    'e0000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001',
+    'TPL-RX-URI-01',
+    'Acute Respiratory Infection Prescription',
+    'prescription',
+    'Standard protocol for acute upper respiratory infection',
+    '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Take prescribed medications as directed with meals. Complete the full antibiotic course if indicated.</p>',
+    jsonb_build_object(
+      'html', '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Take prescribed medications as directed with meals. Complete the full antibiotic course if indicated.</p>',
+      'medications', jsonb_build_array(
+        jsonb_build_object('name', 'Amoxicillin 500 mg Capsule', 'dosage', '500 mg', 'frequency', 'every 8 hours', 'duration', '7 days', 'notes', 'Take after meals. Complete the entire 7-day course.'),
+        jsonb_build_object('name', 'Paracetamol 500 mg Tablet', 'dosage', '500 mg', 'frequency', 'every 4 to 6 hours as needed for fever or pain', 'duration', '5 days', 'notes', 'Do not exceed 4,000 mg in 24 hours.')
+      ),
+      'branding', jsonb_build_object('source', 'none')
+    ),
+    true, 'published', true, 'ICD-10', 'J06.9', 'Acute upper respiratory infection, unspecified'
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000002',
+    '10000000-0000-0000-0000-000000000001',
+    'TPL-RX-GEN-01',
+    'Standard General Prescription',
+    'prescription',
+    'Standard general outpatient prescription',
+    '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Follow dosage and instructions carefully. Return for follow-up if symptoms persist or worsen.</p>',
+    jsonb_build_object(
+      'html', '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Follow dosage and instructions carefully. Return for follow-up if symptoms persist or worsen.</p>',
+      'medications', jsonb_build_array(
+        jsonb_build_object('name', 'Cetirizine 10 mg Tablet', 'dosage', '10 mg', 'frequency', 'once daily at bedtime', 'duration', '7 days', 'notes', 'May cause drowsiness.')
+      ),
+      'branding', jsonb_build_object('source', 'none')
+    ),
+    false, 'published', true, null, null, null
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000003',
+    '10000000-0000-0000-0000-000000000001',
+    'TPL-MC-GEN-01',
+    'General Medical Certificate',
+    'medical_certificate',
+    'Standard clinical medical certificate with rest recommendation',
+    '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>The patient has been advised to rest for <strong>{{rest_days}}</strong> day(s) from the date of examination.</p><p>This certification is issued upon the request of the patient for whatever medical or legal purpose it may serve, except for medico-legal cases.</p>',
+    jsonb_build_object(
+      'html', '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>The patient has been advised to rest for <strong>{{rest_days}}</strong> day(s) from the date of examination.</p><p>This certification is issued upon the request of the patient for whatever medical or legal purpose it may serve, except for medico-legal cases.</p>',
+      'medications', '[]'::jsonb,
+      'branding', jsonb_build_object('source', 'none'),
+      'certificate', jsonb_build_object('variant', 'general', 'remarks', 'Excused from physical exertion and strenuous activity.', 'restDays', '3')
+    ),
+    true, 'published', true, null, null, null
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000004',
+    '10000000-0000-0000-0000-000000000001',
+    'TPL-MC-FIT-01',
+    'Fitness to Work Certificate',
+    'medical_certificate',
+    'Medical clearance certificate for returning to work duties',
+    '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>After clinical evaluation, the patient is deemed <strong>FIT TO RESUME WORK</strong> with no physical limitations.</p><p>This certification is issued upon the request of the patient for employment / work clearance purposes.</p>',
+    jsonb_build_object(
+      'html', '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>After clinical evaluation, the patient is deemed <strong>FIT TO RESUME WORK</strong> with no physical limitations.</p><p>This certification is issued upon the request of the patient for employment / work clearance purposes.</p>',
+      'medications', '[]'::jsonb,
+      'branding', jsonb_build_object('source', 'none'),
+      'certificate', jsonb_build_object('variant', 'fitness_to_work', 'remarks', 'Cleared to return to work duties.', 'restDays', '0')
+    ),
+    false, 'published', true, null, null, null
+  )
+on conflict (id) do nothing;
+
+insert into public.document_template_versions (
+  template_id, organization_id, version, title, type, structured_body
+) values
+  (
+    'e0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 1,
+    'Acute Respiratory Infection Prescription', 'prescription',
+    jsonb_build_object(
+      'html', '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Take prescribed medications as directed with meals. Complete the full antibiotic course if indicated.</p>',
+      'medications', jsonb_build_array(
+        jsonb_build_object('name', 'Amoxicillin 500 mg Capsule', 'dosage', '500 mg', 'frequency', 'every 8 hours', 'duration', '7 days', 'notes', 'Take after meals. Complete the entire 7-day course.'),
+        jsonb_build_object('name', 'Paracetamol 500 mg Tablet', 'dosage', '500 mg', 'frequency', 'every 4 to 6 hours as needed for fever or pain', 'duration', '5 days', 'notes', 'Do not exceed 4,000 mg in 24 hours.')
+      ),
+      'branding', jsonb_build_object('source', 'none')
+    )
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 1,
+    'Standard General Prescription', 'prescription',
+    jsonb_build_object(
+      'html', '<p>Rx for <strong>{{patient.name}}</strong></p><p>Diagnosis: {{diagnosis.summary}}</p><p>Follow dosage and instructions carefully. Return for follow-up if symptoms persist or worsen.</p>',
+      'medications', jsonb_build_array(
+        jsonb_build_object('name', 'Cetirizine 10 mg Tablet', 'dosage', '10 mg', 'frequency', 'once daily at bedtime', 'duration', '7 days', 'notes', 'May cause drowsiness.')
+      ),
+      'branding', jsonb_build_object('source', 'none')
+    )
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 1,
+    'General Medical Certificate', 'medical_certificate',
+    jsonb_build_object(
+      'html', '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>The patient has been advised to rest for <strong>{{rest_days}}</strong> day(s) from the date of examination.</p><p>This certification is issued upon the request of the patient for whatever medical or legal purpose it may serve, except for medico-legal cases.</p>',
+      'medications', '[]'::jsonb,
+      'branding', jsonb_build_object('source', 'none'),
+      'certificate', jsonb_build_object('variant', 'general', 'remarks', 'Excused from physical exertion and strenuous activity.', 'restDays', '3')
+    )
+  ),
+  (
+    'e0000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', 1,
+    'Fitness to Work Certificate', 'medical_certificate',
+    jsonb_build_object(
+      'html', '<p>This is to certify that <strong>{{patient.name}}</strong>, {{patient.age}} years old, was clinically evaluated on {{encounter.date}}.</p><p><strong>Diagnosis:</strong> {{diagnosis.summary}}</p><p>After clinical evaluation, the patient is deemed <strong>FIT TO RESUME WORK</strong> with no physical limitations.</p><p>This certification is issued upon the request of the patient for employment / work clearance purposes.</p>',
+      'medications', '[]'::jsonb,
+      'branding', jsonb_build_object('source', 'none'),
+      'certificate', jsonb_build_object('variant', 'fitness_to_work', 'remarks', 'Cleared to return to work duties.', 'restDays', '0')
+    )
+  )
+on conflict (template_id, version) do nothing;
