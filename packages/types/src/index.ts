@@ -313,6 +313,7 @@ export interface ClinicRoleDefinition {
 export interface AppointmentQueueItem extends AppointmentSummary {
   encounterStatus: EncounterStatus | null;
   patientName: string;
+  assignedDoctorName: string;
   triageStatus: "pending" | "complete";
 }
 

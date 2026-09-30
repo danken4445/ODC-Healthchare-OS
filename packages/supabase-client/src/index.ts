@@ -1845,18 +1845,49 @@ export async function getOrganizationPatients(
   return success(rows.map(toPatientSummary));
 }
 
+export type ProviderAppointmentSlotScope = "mine" | "clinic";
+
 /** Availability visible to the current provider through PractitionerRole RLS. */
 export async function getProviderAppointmentSlots(
   client: SupabaseClient<Database>,
   organizationId: string,
-  from: Date = new Date(),
+  options: { scope: ProviderAppointmentSlotScope; from?: Date },
 ): Promise<SupabaseResult<AppointmentSlotSummary[]>> {
-  const { data, error } = await client
+  let practitionerRoleId: string | null = null;
+  if (options.scope === "mine") {
+    const roleResult = await getCurrentProviderRoleId(client, organizationId);
+    if (roleResult.error) return failure(roleResult.error);
+    practitionerRoleId = roleResult.data;
+    if (!practitionerRoleId) {
+      return failure({
+        code: "PROVIDER_ROLE_REQUIRED",
+        message: "An active doctor or specialist role is required to view your appointment slots.",
+      });
+    }
+  } else {
+    const permissionResult = await hasOrganizationPermission(
+      client,
+      organizationId,
+      "can_manage_appointments",
+    );
+    if (permissionResult.error) return failure(permissionResult.error);
+    if (!permissionResult.data) {
+      return failure({
+        code: "APPOINTMENT_SCOPE_FORBIDDEN",
+        message: "Appointment management permission is required to view clinic-wide slots.",
+      });
+    }
+  }
+
+  let query = client
     .from("appointment_slots")
     .select(appointmentSlotSummaryColumns)
     .eq("organization_id", organizationId)
-    .gte("start_at", from.toISOString())
-    .order("start_at", { ascending: true });
+    .gte("start_at", (options.from ?? new Date()).toISOString());
+  if (practitionerRoleId) {
+    query = query.eq("practitioner_role_id", practitionerRoleId);
+  }
+  const { data, error } = await query.order("start_at", { ascending: true });
   if (error) return failure(error);
   return success((data ?? []) as unknown as AppointmentSlotSummary[]);
 }
@@ -2100,20 +2131,57 @@ export async function getDailyAppointmentQueue(
     []) as unknown as AppointmentSummary[];
   const patientIds = [...new Set(appointmentRows.map((row) => row.patient_id))];
   if (!patientIds.length) return success([]);
+  const practitionerRoleIds = [
+    ...new Set(
+      appointmentRows
+        .map((row) => row.practitioner_role_id)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
 
-  const { data: patients, error: patientError } = await client
-    .from("patients")
-    .select("id, name")
-    .in("id", patientIds);
+  const [patientResult, encounterResult, practitionerRoleResult] =
+    await Promise.all([
+      client.from("patients").select("id, name").in("id", patientIds),
+      client
+        .from("encounters")
+        .select("id, appointment_id, status")
+        .in(
+          "appointment_id",
+          appointmentRows.map((appointment) => appointment.id),
+        ),
+      practitionerRoleIds.length
+        ? client
+            .from("practitioner_roles")
+            .select("id, practitioner_id")
+            .eq("organization_id", organizationId)
+            .eq("active", true)
+            .in("id", practitionerRoleIds)
+        : { data: [], error: null },
+    ]);
+  const { data: patients, error: patientError } = patientResult;
   if (patientError) return failure(patientError);
-  const { data: encounters, error: encounterError } = await client
-    .from("encounters")
-    .select("id, appointment_id, status")
-    .in(
-      "appointment_id",
-      appointmentRows.map((appointment) => appointment.id),
-    );
+  const { data: encounters, error: encounterError } = encounterResult;
   if (encounterError) return failure(encounterError);
+  const { data: practitionerRoles, error: practitionerRoleError } =
+    practitionerRoleResult;
+  if (practitionerRoleError) return failure(practitionerRoleError);
+
+  const practitionerIds = [
+    ...new Set(
+      (practitionerRoles ?? []).map((role) => role.practitioner_id),
+    ),
+  ];
+  const { data: practitioners, error: practitionerError } =
+    practitionerIds.length
+      ? await client
+          .from("practitioners")
+          .select("id, name")
+          .eq("organization_id", organizationId)
+          .eq("active", true)
+          .in("id", practitionerIds)
+      : { data: [], error: null };
+  if (practitionerError) return failure(practitionerError);
+
   const encounterRows = encounters ?? [];
   const encounterIds = encounterRows.map((encounter) => encounter.id);
   const { data: triageObservations, error: triageError } = encounterIds.length
@@ -2131,6 +2199,20 @@ export async function getDailyAppointmentQueue(
       patient.id,
       getHumanNameDisplay(patient.name),
     ]),
+  );
+  const practitionerIdsByRole = new Map(
+    (practitionerRoles ?? []).map((role) => [role.id, role.practitioner_id]),
+  );
+  const practitionerNames = new Map(
+    (practitioners ?? []).map((practitioner) => {
+      const displayName = getHumanNameDisplay(practitioner.name);
+      return [
+        practitioner.id,
+        displayName === "Unnamed patient"
+          ? "Assigned doctor unavailable"
+          : displayName,
+      ];
+    }),
   );
   const encounterStatuses = new Map(
     encounterRows.map((encounter) => [
@@ -2152,6 +2234,12 @@ export async function getDailyAppointmentQueue(
   return success(
     appointmentRows.map((appointment) => ({
       ...appointment,
+      assignedDoctorName:
+        practitionerNames.get(
+          appointment.practitioner_role_id
+            ? (practitionerIdsByRole.get(appointment.practitioner_role_id) ?? "")
+            : "",
+        ) ?? "Assigned doctor unavailable",
       encounterStatus: encounterStatuses.get(appointment.id) ?? null,
       patientName: names.get(appointment.patient_id) ?? "Patient",
       triageStatus: triageStatusByAppointment.get(appointment.id) ?? "pending",
