@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(12);
 
 -- The fixtures live entirely inside this transaction so this test does not
 -- depend on supabase/seed.sql and leaves no persistent data behind.
@@ -74,6 +74,10 @@ insert into public.appointment_slots (
   ('91000000-0000-0000-0000-000000000606', '91000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000303', null, 'free', 'Loop A', '2099-01-01 15:00:00+00', '2099-01-01 15:30:00+00'),
   ('91000000-0000-0000-0000-000000000607', '91000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000305', null, 'free', 'Loop A Foreign', '2099-01-01 16:00:00+00', '2099-01-01 16:30:00+00');
 
+-- Scheduling mutations are RPC-only in production. Grant one column inside
+-- this rolled-back transaction so the negative test exercises RLS itself.
+grant update (service_type) on public.appointment_slots to authenticated;
+
 select set_config('request.jwt.claim.role', 'anon', true);
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
@@ -141,7 +145,24 @@ select is(
   0::bigint,
   'Doctor A cannot read a foreign-organization slot'
 );
+with updated as (
+  update public.appointment_slots
+  set service_type = 'Unauthorized change'
+  where id = '91000000-0000-0000-0000-000000000605'
+  returning id
+)
+select is(
+  count(*),
+  0::bigint,
+  'Doctor A update attempt against Doctor B slot affects zero rows'
+)
+from updated;
 reset role;
+select is(
+  (select service_type from public.appointment_slots where id = '91000000-0000-0000-0000-000000000605'),
+  'Loop A',
+  'Doctor B slot remains unchanged after Doctor A update attempt'
+);
 
 select set_config('request.jwt.claim.sub', '91000000-0000-0000-0000-000000000102', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"91000000-0000-0000-0000-000000000102"}', true);
