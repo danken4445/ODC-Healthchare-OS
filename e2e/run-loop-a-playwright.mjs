@@ -28,26 +28,6 @@ const generatedConfigPaths = [
   path.join(providerRoot, "tsconfig.json"),
 ];
 
-function reserveAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once("error", reject);
-    server.listen(0, host, () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        server.close();
-        reject(new Error("Could not allocate an isolated provider port."));
-        return;
-      }
-      server.close((error) => {
-        if (error) reject(error);
-        else resolve(address.port);
-      });
-    });
-  });
-}
-
 function canConnect(port) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
@@ -87,6 +67,62 @@ async function waitForServerReady(child, port, timeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`Provider server was not ready within ${timeoutMs}ms.`);
+}
+
+function discoverServerPort(child, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(
+        new Error(
+          `Provider server did not report its OS-assigned port within ${timeoutMs}ms.`,
+        ),
+      );
+    }, timeoutMs);
+
+    const finish = (error, discoveredPort) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("error", onError);
+      child.off("exit", onExit);
+      if (error) reject(error);
+      else resolve(discoveredPort);
+    };
+    const inspect = (chunk) => {
+      buffer = `${buffer}${chunk.toString()}`.slice(-8_192);
+      const plainOutput = buffer.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+      const match = plainOutput.match(
+        /Local:\s+http:\/\/(?:127\.0\.0\.1|localhost):(\d+)/,
+      );
+      if (!match) return;
+      const discoveredPort = Number(match[1]);
+      if (Number.isInteger(discoveredPort) && discoveredPort > 0) {
+        finish(undefined, discoveredPort);
+      }
+    };
+    const onStdout = (chunk) => {
+      process.stdout.write(chunk);
+      inspect(chunk);
+    };
+    const onStderr = (chunk) => {
+      process.stderr.write(chunk);
+      inspect(chunk);
+    };
+    const onError = (error) => finish(error);
+    const onExit = (code, signal) =>
+      finish(
+        new Error(
+          `Provider server exited ${signal ? `via ${signal}` : `with code ${code}`} before reporting its port.`,
+        ),
+      );
+
+    child.stdout?.on("data", onStdout);
+    child.stderr?.on("data", onStderr);
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
 }
 
 async function waitForPortClosed(port, timeoutMs) {
@@ -169,6 +205,14 @@ function getWindowsListeningProcessIds(port) {
   return [...new Set((result.stdout.match(/^\d+$/gm) ?? []).map(Number))];
 }
 
+function captureWindowsListenerProcessIds(port) {
+  const listenerProcessIds = getListeningProcessIds(port);
+  if (listenerProcessIds.length === 0) {
+    throw new Error("Could not identify the isolated provider listener process.");
+  }
+  return listenerProcessIds;
+}
+
 async function waitForWindowsListenerClosed(
   port,
   ownedListenerProcessIds,
@@ -203,16 +247,6 @@ async function waitForWindowsListenerClosed(
   throw new Error(
     `Owned isolated provider listener process IDs ${listenerProcessIds.join(", ")} persisted for ${timeoutMs}ms.`,
   );
-}
-
-function terminateWindowsProcessIds(processIds) {
-  for (const processId of processIds) {
-    spawnSync("taskkill", ["/PID", String(processId), "/T", "/F"], {
-      stdio: "ignore",
-      timeout: 10_000,
-      windowsHide: true,
-    });
-  }
 }
 
 function waitForExit(child, timeoutMs, label) {
@@ -327,27 +361,24 @@ const originalGeneratedConfigs = new Map(
 );
 
 try {
-  port = await reserveAvailablePort();
-  isolatedDistDir = `.next-loop-a-${process.pid}-${port}`;
-  console.log(
-    `[loop-a] Starting an isolated provider server on ${host}:${port}.`,
-  );
+  isolatedDistDir = `.next-loop-a-${process.pid}-0`;
+  console.log(`[loop-a] Starting an isolated provider server on ${host}:auto.`);
 
   providerServer = spawn(
     process.execPath,
-    [nextCli, "dev", "--hostname", host, "--port", String(port)],
+    [nextCli, "dev", "--hostname", host, "--port", "0"],
     {
       cwd: providerRoot,
       detached: process.platform !== "win32",
       env: { ...process.env, NEXT_DIST_DIR: isolatedDistDir },
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  port = await discoverServerPort(providerServer, 180_000);
   await waitForServerReady(providerServer, port, 180_000);
-  ownedListenerProcessIds = getListeningProcessIds(port);
-  if (process.platform === "win32" && ownedListenerProcessIds.length === 0) {
-    throw new Error("Could not identify the isolated provider listener process.");
+  if (process.platform === "win32") {
+    ownedListenerProcessIds = captureWindowsListenerProcessIds(port);
   }
   console.log(`[loop-a] Provider server ready on ${host}:${port}.`);
 
@@ -369,15 +400,11 @@ try {
   console.error(`[loop-a] ${error instanceof Error ? error.message : error}`);
 } finally {
   if (providerServer) {
-    terminateProcessTree(providerServer);
-    if (process.platform === "win32") {
-      const activeOwnedProcessIds = getListeningProcessIds(port).filter((id) =>
-        ownedListenerProcessIds.includes(id),
-      );
-      terminateWindowsProcessIds(activeOwnedProcessIds);
-    }
-    providerServer.unref();
     try {
+      // The OS assigns port 0 atomically to this spawned child. On Windows we
+      // terminate only that child tree; listener PIDs are verification data,
+      // never independent kill targets.
+      terminateProcessTree(providerServer);
       // taskkill may not produce a child exit event on Windows. On Windows,
       // no listener on our private port is the teardown completion condition.
       if (port && process.platform === "win32") {
@@ -392,6 +419,10 @@ try {
     } catch (error) {
       console.error(`[loop-a] ${error instanceof Error ? error.message : error}`);
       exitCode = 1;
+    } finally {
+      providerServer.unref();
+      providerServer.stdout?.destroy();
+      providerServer.stderr?.destroy();
     }
   }
 
