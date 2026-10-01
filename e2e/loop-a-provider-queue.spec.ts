@@ -248,7 +248,7 @@ async function installSupabaseMock(
 }
 
 async function signIn(page: Page, email: string) {
-  await page.goto("http://127.0.0.1:3001");
+  await page.goto("/");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("test-only-password");
   await page.getByRole("button", { name: "Sign in" }).click();

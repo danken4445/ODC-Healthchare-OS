@@ -1,6 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const usesExternalServer = process.env.LOOP_A_EXTERNAL_SERVER === "1";
+const port = Number(process.env.LOOP_A_PORT);
+
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  throw new Error(
+    "LOOP_A_PORT must be set to the isolated port allocated by run-loop-a-playwright.mjs.",
+  );
+}
+
+const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: ".",
@@ -8,19 +16,13 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  // Cold isolated Next compilation can occur during the first navigation.
+  timeout: 180_000,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3001",
+    baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"],
   },
-  webServer: usesExternalServer
-    ? undefined
-    : {
-        command: "corepack pnpm --filter @odyssey/provider-web dev",
-        url: "http://127.0.0.1:3001",
-        reuseExistingServer: true,
-        timeout: 120_000,
-      },
 });
