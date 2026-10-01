@@ -3,7 +3,14 @@
 \set ON_ERROR_STOP on
 
 begin;
-select plan(22);
+select plan(24);
+
+-- The seeded in-progress encounter is intentionally minimal. This fixture
+-- makes its assignment explicit so issuance can exercise the assigned-doctor
+-- path, while retaining a separate deliberate mismatch rejection below.
+update public.encounters
+set practitioner_role_id = '30000000-0000-0000-0000-000000000101'
+where id = '60000000-0000-0000-0000-000000000001';
 
 -- Patients cannot read records at another organization.
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -129,6 +136,13 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101"}', true);
 set local role authenticated;
+select lives_ok(
+  $$ select public.issue_prescription(
+    '60000000-0000-0000-0000-000000000001',
+    'Synthetic medicine', 'One synthetic unit daily', null
+  ) $$,
+  'assigned doctor can issue a prescription'
+);
 do $$
 declare
   first_note uuid;
@@ -148,10 +162,6 @@ begin
     where id = revised_note and supersedes_id = first_note and code = 'SOAP-NOTE'
   ) then raise exception 'SOAP revision chain was not preserved.'; end if;
 
-  perform public.issue_prescription(
-    '60000000-0000-0000-0000-000000000001',
-    'Synthetic medicine', 'One synthetic unit daily', null
-  );
   perform public.issue_medical_certificate(
     '60000000-0000-0000-0000-000000000001',
     'Synthetic certificate', 'Synthetic certificate statement'
@@ -188,6 +198,28 @@ begin
   end;
 end $$;
 reset role;
+
+-- An encounter whose role no longer matches its appointment must be rejected,
+-- even when the authenticated doctor is assigned to the appointment.
+update public.encounters
+set practitioner_role_id = '30000000-0000-0000-0000-000000000102'
+where id = '60000000-0000-0000-0000-000000000001';
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101"}', true);
+set local role authenticated;
+select throws_ok(
+  $$ select public.issue_prescription(
+    '60000000-0000-0000-0000-000000000001',
+    'Mismatched medicine', 'Mismatched directions', null
+  ) $$,
+  '22023',
+  'The encounter and appointment must have the same assigned practitioner role.',
+  'appointment and encounter assignment mismatch is rejected'
+);
+reset role;
+update public.encounters
+set practitioner_role_id = '30000000-0000-0000-0000-000000000101'
+where id = '60000000-0000-0000-0000-000000000001';
 
 -- A nurse can revise the combined SOAP note for an in-progress clinic chart,
 -- but cannot prescribe, issue certificates, or finish the encounter.
