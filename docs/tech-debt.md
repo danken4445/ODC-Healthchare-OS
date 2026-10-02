@@ -109,3 +109,10 @@ the multi-doctor rollout is enabled:
 # Loop E-2
 
 - TODO: define and implement explicit coverage payout splits/admin payout arrangements. E-2 records original assigned and performed practitioner roles while retaining assigned-doctor fee ownership; no split logic is intentionally implemented.
+
+## Pilot readiness review (2026-10-02)
+
+- `pnpm exec supabase db advisors` is unavailable in the pinned CLI v1.226.4; upgrade or run the supported advisor tool before hosted rollout.
+- The public `waiting_room_queue` table remains directly readable by `anon` under a date-only policy. The lobby requests an organization filter and exposes no patient identity, but a future release should replace direct table reads with an organization-bound public projection/RPC while preserving Realtime delivery.
+- Room assignment changes do not independently resynchronize existing queue rows; reloading or changing the appointment refreshes the projection. Add an assignment-to-queue refresh trigger before room schedules are edited during active lobby hours.
+- The local reset/pgTAP gate was inconclusive in this environment: the Supabase wrapper timed out and the local Postgres connection returned an unexpected EOF. Re-run after Docker/local Postgres recovery.

@@ -10,10 +10,6 @@ import {
 import type { PublicClinicSummary, WaitingRoomQueueItem } from "@odyssey/types";
 import { useCallback, useEffect, useState } from "react";
 
-function queueLabel(queueNumber: number): string {
-  return `A-${String(queueNumber).padStart(3, "0")}`;
-}
-
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
@@ -75,6 +71,17 @@ export default function WaitingRoomPage() {
   }, [loadQueue, organizationId]);
 
   const nowServing = queue.filter((item) => item.stage === "in_progress");
+  const nowServingGroups = Array.from(
+    nowServing.reduce((groups, item) => {
+      const doctor = item.practitioner_display_name ?? "Doctor not assigned";
+      const room = item.room_label ?? "Room not assigned";
+      const key = `${doctor}\u0000${room}`;
+      const group = groups.get(key) ?? { doctor, room, items: [] as WaitingRoomQueueItem[] };
+      group.items.push(item);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, { doctor: string; room: string; items: WaitingRoomQueueItem[] }>()),
+  ).map(([, group]) => group);
   const waiting = queue.filter((item) => item.stage === "waiting");
   const clinicName = clinics.find(
     (clinic) => clinic.id === organizationId,
@@ -94,14 +101,21 @@ export default function WaitingRoomPage() {
 
       <section aria-labelledby="now-serving-heading">
         <h2 id="now-serving-heading">Now serving</h2>
-        <div className="queue-cards queue-cards--active">
-          {nowServing.map((item) => (
-            <article
-              className="queue-card queue-card--active"
-              key={item.appointment_id}
-            >
-              <strong>{queueLabel(item.queue_number)}</strong>
-              <span>{item.service_name}</span>
+        <div className="queue-groups">
+          {nowServingGroups.map((group) => (
+            <article className="queue-group" key={`${group.doctor}\u0000${group.room}`}>
+              <header className="queue-group__header">
+                <h3>{group.doctor}</h3>
+                <span>{group.room}</span>
+              </header>
+              <div className="queue-cards queue-cards--active">
+                {group.items.map((item) => (
+                  <article className="queue-card queue-card--active" key={item.appointment_id}>
+                    <strong>{item.queue_label}</strong>
+                    <span>{item.service_name}</span>
+                  </article>
+                ))}
+              </div>
             </article>
           ))}
           {!nowServing.length && <p>No queue number is being served.</p>}
@@ -113,7 +127,7 @@ export default function WaitingRoomPage() {
         <div className="queue-cards">
           {waiting.map((item) => (
             <article className="queue-card" key={item.appointment_id}>
-              <strong>{queueLabel(item.queue_number)}</strong>
+              <strong>{item.queue_label}</strong>
               <span>{formatTime(item.scheduled_at)}</span>
               <span>{item.service_name}</span>
             </article>

@@ -274,6 +274,30 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 1rem;
 }
+.queue-groups {
+  display: grid;
+  gap: 1.25rem;
+}
+.queue-group {
+  display: grid;
+  gap: 0.75rem;
+}
+.queue-group__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 2px solid var(--odyssey-border);
+  padding-bottom: 0.35rem;
+}
+.queue-group__header h3 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 2rem);
+}
+.queue-group__header span {
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  font-weight: 700;
+}
 .clinic-picker {
   display: flex;
   flex-wrap: wrap;
@@ -306,6 +330,9 @@ h2 {
 .queue-card--active strong {
   color: inherit;
   font-size: 3rem;
+}
+.queue-group .queue-card--active strong {
+  font-size: clamp(3rem, 7vw, 6rem);
 }
 .waiting-room {
   max-width: 76rem;
