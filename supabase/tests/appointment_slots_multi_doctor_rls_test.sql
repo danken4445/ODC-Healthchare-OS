@@ -96,13 +96,8 @@ select is(
       '91000000-0000-0000-0000-000000000607'::uuid
     ])
   ),
-  array[
-    '91000000-0000-0000-0000-000000000601'::uuid,
-    '91000000-0000-0000-0000-000000000605'::uuid,
-    '91000000-0000-0000-0000-000000000606'::uuid,
-    '91000000-0000-0000-0000-000000000607'::uuid
-  ],
-  'anon can read future free slots only'
+  null::uuid[],
+  'anon direct SELECT on appointment_slots returns no rows; booking uses the patient-safe RPC path'
 );
 reset role;
 

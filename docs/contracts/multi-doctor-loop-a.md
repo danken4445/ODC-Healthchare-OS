@@ -62,6 +62,5 @@ Extend `AppointmentQueueItem` with `assignedDoctorName: string`. `getDailyAppoin
 
 ## Known deferred work
 
-- Patient booking continues its temporary direct-table discovery path until Loop C introduces a patient-safe availability RPC.
-- Anonymous discovery remains organization-filtered by the caller under the existing public product model.
+- Loop C replaced direct appointment-slot discovery with the patient-safe `bookable_practitioners`, `get_available_slots`, and `book_appointment` RPC path. The patient booking UI is signed-in and clinic-context scoped, so direct anonymous SELECT on `appointment_slots` is intentionally denied.
 - Doctors with zero matching queue rows do not appear in the derived filter list.
