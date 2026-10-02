@@ -1,5 +1,5 @@
 begin;
-select plan(18);
+select plan(21);
 
 select has_column('public', 'organization_settings', 'queue_mode', 'organization settings expose queue mode');
 select has_column('public', 'practitioner_roles', 'queue_prefix', 'practitioner roles expose queue prefix');
@@ -58,6 +58,16 @@ select ok(
   'independent doctor sequences have distinct labels'
 );
 select is(
+  (select queue_prefix from public.practitioner_roles where id = '30000000-0000-0000-0000-000000000101'),
+  'A',
+  'first unprefixed practitioner receives the next free letter'
+);
+select is(
+  (select queue_prefix from public.practitioner_roles where id = '30000000-0000-0000-0000-000000000109'),
+  'B',
+  'second unprefixed practitioner receives a distinct free letter'
+);
+select is(
   (select queue_label from public.waiting_room_queue where appointment_id = 'd3000000-0000-0000-0000-000000000001'),
   (select queue_label from public.appointments where id = 'd3000000-0000-0000-0000-000000000001'),
   'waiting-room projection copies appointment queue_label'
@@ -87,6 +97,21 @@ select is(
   (select queue_label from public.appointments where id = 'd3000000-0000-0000-0000-000000000001'),
   (select queue_label from public.waiting_room_queue where appointment_id = 'd3000000-0000-0000-0000-000000000001'),
   'switching modes does not rewrite existing labels'
+);
+
+update public.organization_settings
+set queue_mode = 'per_practitioner'
+where organization_id = '10000000-0000-0000-0000-000000000001';
+insert into public.appointments (
+  id, organization_id, patient_id, practitioner_role_id, status,
+  service_type, start_at, end_at, delivery_mode
+) values (
+  'd3000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000101', 'booked', 'D queue new day', '2099-02-02 09:00+00', '2099-02-02 09:30+00', 'in_person'
+);
+select is(
+  (select queue_number from public.appointments where id = 'd3000000-0000-0000-0000-000000000004'),
+  1,
+  'a new queue day starts each practitioner sequence at 001'
 );
 
 select * from finish();

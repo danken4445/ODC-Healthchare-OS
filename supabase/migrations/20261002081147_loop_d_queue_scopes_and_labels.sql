@@ -60,7 +60,8 @@ alter table public.waiting_room_queue
 create or replace function public.assign_appointment_queue_number()
 returns trigger
 language plpgsql
-set search_path = public, pg_catalog
+security definer
+set search_path = ''
 as $$
 declare
   v_queue_mode text;
@@ -69,6 +70,12 @@ declare
   v_candidate_prefix text;
   v_queue_date date;
 begin
+  if auth.uid() is null
+    and session_user not in ('postgres', 'supabase_admin', 'authenticator')
+    and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    raise exception 'Authentication is required.' using errcode = '28000';
+  end if;
+
   if new.delivery_mode = 'virtual' or new.start_at is null then
     new.queue_date := null;
     new.queue_number := null;
