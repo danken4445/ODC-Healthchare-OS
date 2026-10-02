@@ -12,6 +12,7 @@ import {
   getSpecificDayRange,
   getUpcomingDayRange,
   getOrganizationClinicalRecords,
+  getOrganizationFeeSettings,
   getProviderAppointmentSlots,
   getProviderWeeklyAvailability,
   getInventoryWorkspace,
@@ -83,6 +84,7 @@ import {
 import { DoctorOverview } from "./components/DoctorOverview";
 import { Stethoscope } from "lucide-react";
 import { WeeklyScheduleBuilder } from "./components/WeeklyScheduleBuilder";
+import { ProfessionalFeesTab } from "./components/ProfessionalFeesTab";
 import { AvailabilityStudio } from "./components/AvailabilityStudio";
 import { QueueBoard } from "./components/QueueBoard";
 import {
@@ -188,6 +190,7 @@ export default function Home() {
   const [clinicalBusy, setClinicalBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
   const [canManageAppointments, setCanManageAppointments] = useState(false);
+  const [canManageProfessionalFees, setCanManageProfessionalFees] = useState(false);
   const [queueScope, setQueueScope] = useState<"mine" | "clinic">("mine");
   const [selectedDoctorRoleId, setSelectedDoctorRoleId] = useState("");
   const [inventory, setInventory] = useState<InventoryWorkspace | null>(null);
@@ -711,6 +714,8 @@ export default function Home() {
       referralPermission,
       templatePermission,
       appointmentManagementPermission,
+      professionalFeesPermission,
+      feeSettings,
     ] = await Promise.all([
       hasOrganizationPermission(
         createBrowserSupabaseClient(),
@@ -752,6 +757,15 @@ export default function Home() {
         result.data,
         "can_manage_appointments",
       ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_manage_professional_fees",
+      ),
+      getOrganizationFeeSettings(
+        createBrowserSupabaseClient(),
+        result.data,
+      ),
     ]);
     if (
       inventoryPermission.error ||
@@ -761,6 +775,7 @@ export default function Home() {
       labPermission.error ||
       referralPermission.error ||
       templatePermission.error ||
+      professionalFeesPermission.error ||
       appointmentManagementPermission.error
     )
       return setStatus(
@@ -777,6 +792,10 @@ export default function Home() {
     setCanUpdateReferrals(referralPermission.data);
     setCanManageTemplates(templatePermission.data);
     setCanManageAppointments(appointmentManagementPermission.data);
+    setCanManageProfessionalFees(
+      Boolean(professionalFeesPermission.data) &&
+        feeSettings.data?.fee_model !== "fixed_rate",
+    );
 
     // Fetch practitioner display name if available
     try {
@@ -1372,6 +1391,7 @@ export default function Home() {
             notificationsCount={diagnostics?.notifications.length ?? 0}
             hasActiveEncounter={Boolean(selectedEncounterId)}
             canManageTemplates={canManageTemplates && !isNurse}
+            canManageProfessionalFees={canManageProfessionalFees}
             onSignOut={handleSignOut}
           />
 
@@ -3033,6 +3053,12 @@ export default function Home() {
                 />
               </div>
             </section>
+          )}
+          {activeTab === "fees" && (
+            <ProfessionalFeesTab
+              organizationId={organizationId}
+              canManageProfessionalFees={canManageProfessionalFees}
+            />
           )}
         </>
       )}
