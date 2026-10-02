@@ -56,6 +56,8 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/", label: "Home", icon: Home, public: true },
       { href: "/queue", label: "Queue", icon: Users, public: true },
+      { href: "/calendar", label: "Clinic calendar", icon: CalendarDays, anyOf: ["can_view_clinic_queue"] },
+      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_access_admin_portal"] },
       { href: "/teleconsult", label: "Teleconsult", icon: Video, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments", "can_access_admin_portal"] },
       { href: "/soap-notes", label: "SOAP Notes", icon: FileText, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients", "can_access_admin_portal"] },
       { href: "/referrals", label: "Referrals", icon: Share2, anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients", "can_access_admin_portal"] },
@@ -77,7 +79,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/billing", label: "Billing / POS", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing", "can_manage_pos"] },
       { href: "/billing/claims", label: "HMO Claims", icon: ClipboardCheck, anyOf: ["can_view_claims", "can_manage_claims"] },
-      { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services"] },
+      { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services", "can_manage_professional_fees"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
       { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
       { href: "/settings/queue", label: "Queue settings", icon: Users, anyOf: ["can_manage_appointments"] },

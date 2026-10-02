@@ -42,6 +42,9 @@ export const permissionOptions: Array<{
   { value: "can_manage_service_catalog", label: "Services and pricing", hint: "Maintain services, prices, and booking rules." },
   { value: "can_manage_services", label: "Service and fee administration", hint: "Maintain service assignments, professional-fee models, and fee limits." },
   { value: "can_manage_professional_fees", label: "Professional fees", hint: "Use the provider Fees tab to declare fees for assigned services." },
+  { value: "can_view_clinic_queue", label: "Clinic calendar and queue", hint: "Read the organization-wide doctor calendar and queue projection." },
+  { value: "can_manage_rooms", label: "Clinic rooms", hint: "Create rooms and manage doctor room assignments." },
+  { value: "can_reassign_appointments", label: "Appointment reassignment and coverage", hint: "Reassign appointments and record doctor coverage arrangements." },
   { value: "can_manage_document_templates", label: "Document templates", hint: "Maintain reusable document definitions." },
   { value: "can_manage_feature_modules", label: "Feature modules", hint: "Control staged module availability." },
 ];

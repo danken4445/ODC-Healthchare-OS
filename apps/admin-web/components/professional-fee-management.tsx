@@ -229,7 +229,7 @@ export function ProfessionalFeeManagement() {
   const [changingModel, setChangingModel] = useState(false);
   const [modelMessage, setModelMessage] = useState<string | null>(null);
 
-  const canManage = isSuperadmin || permissions.includes("can_manage_services");
+  const canManage = isSuperadmin || permissions.includes("can_manage_services") || permissions.includes("can_manage_professional_fees");
   const load = useCallback(async () => {
     if (!organization) return;
     setLoading(true);
