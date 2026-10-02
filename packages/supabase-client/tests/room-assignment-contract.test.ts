@@ -40,6 +40,17 @@ test("room assignment input keeps date/time and UUID validation at the client bo
     }).success,
     false,
   );
+  assert.equal(
+    roomAssignmentInputSchema.safeParse({
+      organizationId: "10000000-0000-0000-0000-000000000001",
+      practitionerRoleId: "30000000-0000-0000-0000-000000000101",
+      roomId: "d3200000-0000-0000-0000-000000000001",
+      date: "2026-10-02",
+      shiftStart: "08:00",
+      shiftEnd: "17:00",
+    }).success,
+    true,
+  );
 });
 
 test("saveRoomAssignment removes the prior doctor-day assignment before inserting the replacement", async () => {

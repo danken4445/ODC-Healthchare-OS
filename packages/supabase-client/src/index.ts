@@ -2801,10 +2801,19 @@ export function subscribeToAppointmentQueue(
   };
 }
 
+// PostgreSQL accepts any 8-4-4-4-12 hexadecimal UUID shape.  Keep this
+// boundary aligned with the database instead of Zod 4's stricter RFC UUID
+// variant/version check; hosted synthetic fixtures intentionally use stable
+// UUID-shaped identifiers whose version bits are zeroed.
+const postgresUuidSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  "Invalid UUID",
+);
+
 export const roomAssignmentInputSchema = z.object({
-  organizationId: z.string().uuid(),
-  practitionerRoleId: z.string().uuid(),
-  roomId: z.string().uuid(),
+  organizationId: postgresUuidSchema,
+  practitionerRoleId: postgresUuidSchema,
+  roomId: postgresUuidSchema,
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD."),
   shiftStart: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM."),
   shiftEnd: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM."),
