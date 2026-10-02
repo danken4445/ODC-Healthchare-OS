@@ -219,6 +219,7 @@ export type Database = {
           id: string
           minutes_duration: number | null
           organization_id: string
+          original_assigned_practitioner_role_id: string | null
           patient_id: string
           patient_instruction: string | null
           payment_due_at: string | null
@@ -249,6 +250,7 @@ export type Database = {
           id?: string
           minutes_duration?: number | null
           organization_id: string
+          original_assigned_practitioner_role_id?: string | null
           patient_id: string
           patient_instruction?: string | null
           payment_due_at?: string | null
@@ -279,6 +281,7 @@ export type Database = {
           id?: string
           minutes_duration?: number | null
           organization_id?: string
+          original_assigned_practitioner_role_id?: string | null
           patient_id?: string
           patient_instruction?: string | null
           payment_due_at?: string | null
@@ -315,6 +318,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_original_assigned_practitioner_role_id_fkey"
+            columns: ["original_assigned_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
             referencedColumns: ["id"]
           },
           {
@@ -1381,6 +1391,7 @@ export type Database = {
       }
       doctor_payouts: {
         Row: {
+          assigned_practitioner_role_id: string
           billing_event_id: string
           created_at: string
           currency: string
@@ -1392,12 +1403,14 @@ export type Database = {
           paid_by: string | null
           payment_reference: string | null
           payout_amount: number
+          performed_by_practitioner_role_id: string | null
           practitioner_role_id: string
           share_basis_points: number
           status: Database["public"]["Enums"]["doctor_payout_status"]
           updated_at: string
         }
         Insert: {
+          assigned_practitioner_role_id: string
           billing_event_id: string
           created_at?: string
           currency?: string
@@ -1409,12 +1422,14 @@ export type Database = {
           paid_by?: string | null
           payment_reference?: string | null
           payout_amount: number
+          performed_by_practitioner_role_id?: string | null
           practitioner_role_id: string
           share_basis_points: number
           status?: Database["public"]["Enums"]["doctor_payout_status"]
           updated_at?: string
         }
         Update: {
+          assigned_practitioner_role_id?: string
           billing_event_id?: string
           created_at?: string
           currency?: string
@@ -1426,12 +1441,20 @@ export type Database = {
           paid_by?: string | null
           payment_reference?: string | null
           payout_amount?: number
+          performed_by_practitioner_role_id?: string | null
           practitioner_role_id?: string
           share_basis_points?: number
           status?: Database["public"]["Enums"]["doctor_payout_status"]
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "doctor_payouts_assigned_practitioner_role_id_fkey"
+            columns: ["assigned_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doctor_payouts_billing_event_id_fkey"
             columns: ["billing_event_id"]
@@ -1451,6 +1474,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doctor_payouts_performed_by_practitioner_role_id_fkey"
+            columns: ["performed_by_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
             referencedColumns: ["id"]
           },
           {
@@ -1708,6 +1738,55 @@ export type Database = {
           },
         ]
       }
+      encounter_locks: {
+        Row: {
+          acquired_at: string
+          encounter_id: string
+          expires_at: string
+          heartbeat_at: string
+          organization_id: string
+          practitioner_role_id: string
+        }
+        Insert: {
+          acquired_at?: string
+          encounter_id: string
+          expires_at: string
+          heartbeat_at?: string
+          organization_id: string
+          practitioner_role_id: string
+        }
+        Update: {
+          acquired_at?: string
+          encounter_id?: string
+          expires_at?: string
+          heartbeat_at?: string
+          organization_id?: string
+          practitioner_role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "encounter_locks_encounter_id_fkey"
+            columns: ["encounter_id"]
+            isOneToOne: true
+            referencedRelation: "encounters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "encounter_locks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "encounter_locks_practitioner_role_id_fkey"
+            columns: ["practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       encounters: {
         Row: {
           appointment_id: string | null
@@ -1732,6 +1811,7 @@ export type Database = {
           subject_note: string | null
           type_codes: Json
           updated_at: string
+          version: number
         }
         Insert: {
           appointment_id?: string | null
@@ -1756,6 +1836,7 @@ export type Database = {
           subject_note?: string | null
           type_codes?: Json
           updated_at?: string
+          version?: number
         }
         Update: {
           appointment_id?: string | null
@@ -1780,6 +1861,7 @@ export type Database = {
           subject_note?: string | null
           type_codes?: Json
           updated_at?: string
+          version?: number
         }
         Relationships: [
           {
@@ -4449,23 +4531,57 @@ export type Database = {
           views_remaining: number
         }[]
       }
-      add_soap_note: {
+      acquire_encounter_lock: {
         Args: {
           p_encounter_id: string
-          p_text: string
-          p_supersedes_id?: string
         }
-        Returns: string
+        Returns: {
+          encounter_id: string
+          practitioner_role_id: string
+          organization_id: string
+          acquired_at: string
+          heartbeat_at: string
+          expires_at: string
+        }[]
       }
-      add_soap_observation: {
-        Args: {
-          p_encounter_id: string
-          p_section: string
-          p_text: string
-          p_supersedes_id?: string
-        }
-        Returns: string
-      }
+      add_soap_note:
+        | {
+            Args: {
+              p_encounter_id: string
+              p_text: string
+              p_supersedes_id: string
+              p_expected_version: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_encounter_id: string
+              p_text: string
+              p_supersedes_id?: string
+            }
+            Returns: string
+          }
+      add_soap_observation:
+        | {
+            Args: {
+              p_encounter_id: string
+              p_section: string
+              p_text: string
+              p_supersedes_id: string
+              p_expected_version: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_encounter_id: string
+              p_section: string
+              p_text: string
+              p_supersedes_id?: string
+            }
+            Returns: string
+          }
       adjudicate_claim: {
         Args: {
           p_claim_id: string
@@ -4489,6 +4605,13 @@ export type Database = {
         Args: {
           p_organization_id: string
           p_template_id: string
+        }
+        Returns: undefined
+      }
+      assert_encounter_writer: {
+        Args: {
+          p_encounter: unknown
+          p_role_id: string
         }
         Returns: undefined
       }
@@ -4758,12 +4881,20 @@ export type Database = {
         }
         Returns: Json
       }
-      finish_clinical_encounter: {
-        Args: {
-          p_encounter_id: string
-        }
-        Returns: undefined
-      }
+      finish_clinical_encounter:
+        | {
+            Args: {
+              p_encounter_id: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_encounter_id: string
+              p_expected_version: number
+            }
+            Returns: number
+          }
       gbt_bit_compress: {
         Args: {
           "": unknown
@@ -5223,6 +5354,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_encounter_lock: {
+        Args: {
+          p_encounter_id: string
+        }
+        Returns: {
+          encounter_id: string
+          practitioner_role_id: string
+          practitioner_name: string
+          heartbeat_at: string
+          expires_at: string
+        }[]
+      }
       get_encounter_template_context: {
         Args: {
           p_encounter_id: string
@@ -5433,6 +5576,12 @@ export type Database = {
           allowed_roles: string[]
         }
         Returns: boolean
+      }
+      heartbeat_encounter_lock: {
+        Args: {
+          p_encounter_id: string
+        }
+        Returns: string
       }
       identify_patient_by_qr: {
         Args: {
@@ -5783,6 +5932,12 @@ export type Database = {
           results: Json
         }[]
       }
+      raise_encounter_version_conflict: {
+        Args: {
+          p_actual_version: number
+        }
+        Returns: undefined
+      }
       reassign_appointment: {
         Args: {
           p_appointment_id: string
@@ -5856,6 +6011,12 @@ export type Database = {
         Returns: string
       }
       refresh_doctor_payout: {
+        Args: {
+          p_encounter_id: string
+        }
+        Returns: undefined
+      }
+      release_encounter_lock: {
         Args: {
           p_encounter_id: string
         }

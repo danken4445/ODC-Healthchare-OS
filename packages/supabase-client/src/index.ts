@@ -39,6 +39,8 @@ import {
   type PrescriptionRegimenItem,
   type SoapObservationInput,
   type SoapNoteInput,
+  type SoapWriteResult,
+  type EncounterLockSummary,
   type TriageVitalSignsInput,
   type OrganizationClinicalRecords,
   type PatientAccessRecords,
@@ -121,6 +123,8 @@ export interface PublicSupabaseConfig {
 export interface SupabaseFailure {
   code?: string;
   message: string;
+  details?: string;
+  hint?: string;
 }
 
 export type SupabaseResult<T> =
@@ -799,26 +803,36 @@ export function subscribeToDiagnostics(
 export async function addSoapObservation(
   client: SupabaseClient<Database>,
   input: SoapObservationInput,
-): Promise<SupabaseResult<string>> {
+): Promise<SupabaseResult<SoapWriteResult>> {
   const { data, error } = await client.rpc("add_soap_observation", {
     p_encounter_id: input.encounterId,
     p_section: input.section,
     p_text: input.text,
-    p_supersedes_id: input.supersedesId ?? undefined,
-  });
-  return error ? failure(error) : success(data);
+    p_supersedes_id: input.supersedesId ?? null,
+    p_expected_version: input.expectedVersion ?? null,
+  } as never);
+  if (error) return failure(error);
+  const parsed = z.object({ observation_id: z.string().uuid(), version: z.number().int() }).safeParse(data);
+  return parsed.success
+    ? success({ observationId: parsed.data.observation_id, version: parsed.data.version })
+    : failure({ message: "The SOAP observation response was invalid." });
 }
 
 export async function saveSoapNote(
   client: SupabaseClient<Database>,
   input: SoapNoteInput,
-): Promise<SupabaseResult<string>> {
+): Promise<SupabaseResult<SoapWriteResult>> {
   const { data, error } = await client.rpc("add_soap_note", {
     p_encounter_id: input.encounterId,
     p_text: input.text,
-    p_supersedes_id: input.supersedesId ?? undefined,
-  });
-  return error ? failure(error) : success(data);
+    p_supersedes_id: input.supersedesId ?? null,
+    p_expected_version: input.expectedVersion ?? null,
+  } as never);
+  if (error) return failure(error);
+  const parsed = z.object({ observation_id: z.string().uuid(), version: z.number().int() }).safeParse(data);
+  return parsed.success
+    ? success({ observationId: parsed.data.observation_id, version: parsed.data.version })
+    : failure({ message: "The SOAP note response was invalid." });
 }
 
 export async function getMyEncounterViewMode(
@@ -1017,10 +1031,57 @@ export async function issueMedicalCertificate(
 export async function finishClinicalEncounter(
   client: SupabaseClient<Database>,
   encounterId: string,
-): Promise<SupabaseResult<void>> {
-  const { error } = await client.rpc("finish_clinical_encounter", {
+  expectedVersion?: number | null,
+): Promise<SupabaseResult<number>> {
+  const { data, error } = await client.rpc("finish_clinical_encounter", {
     p_encounter_id: encounterId,
-  });
+    p_expected_version: expectedVersion ?? null,
+  } as never);
+  return error ? failure(error) : success(data);
+}
+
+export async function acquireEncounterLock(
+  client: SupabaseClient<Database>,
+  encounterId: string,
+): Promise<SupabaseResult<EncounterLockSummary>> {
+  const { data, error } = await client.rpc("acquire_encounter_lock", { p_encounter_id: encounterId });
+  if (error) return failure(error);
+  const parsed = z.object({
+    encounter_id: z.string().uuid(),
+    practitioner_role_id: z.string().uuid(),
+    organization_id: z.string().uuid(),
+    acquired_at: z.string(),
+    heartbeat_at: z.string(),
+    expires_at: z.string(),
+  }).safeParse(Array.isArray(data) ? data[0] : data);
+  return parsed.success
+    ? success({ ...parsed.data, practitioner_name: "" })
+    : failure({ message: "The encounter lock response was invalid." });
+}
+
+export async function getEncounterLock(
+  client: SupabaseClient<Database>,
+  encounterId: string,
+): Promise<SupabaseResult<EncounterLockSummary | null>> {
+  const { data, error } = await client.rpc("get_encounter_lock", { p_encounter_id: encounterId });
+  if (error) return failure(error);
+  const parsed = z.array(z.object({
+    encounter_id: z.string().uuid(),
+    practitioner_role_id: z.string().uuid(),
+    practitioner_name: z.string(),
+    heartbeat_at: z.string(),
+    expires_at: z.string(),
+  })).safeParse(data ?? []);
+  return parsed.success ? success(parsed.data[0] ?? null) : failure({ message: "The encounter lock response was invalid." });
+}
+
+export async function heartbeatEncounterLock(client: SupabaseClient<Database>, encounterId: string): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("heartbeat_encounter_lock", { p_encounter_id: encounterId });
+  return error ? failure(error) : success(data);
+}
+
+export async function releaseEncounterLock(client: SupabaseClient<Database>, encounterId: string): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("release_encounter_lock", { p_encounter_id: encounterId });
   return error ? failure(error) : success(undefined);
 }
 

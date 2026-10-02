@@ -349,6 +349,7 @@ export type EncounterSummary = Pick<
   | "period_start"
   | "period_end"
   | "diagnosis"
+  | "version"
 >;
 
 export type CoverageSummary = Pick<
@@ -535,12 +536,27 @@ export interface SoapObservationInput {
   section: "S" | "O" | "A" | "P";
   text: string;
   supersedesId?: string | null;
+  expectedVersion?: number | null;
 }
 
 export interface SoapNoteInput {
   encounterId: string;
   text: string;
   supersedesId?: string | null;
+  expectedVersion?: number | null;
+}
+
+export interface SoapWriteResult {
+  observationId: string;
+  version: number;
+}
+
+export interface EncounterLockSummary {
+  encounter_id: string;
+  practitioner_role_id: string;
+  practitioner_name: string;
+  heartbeat_at: string;
+  expires_at: string;
 }
 
 export interface TriageVitalSignsInput {
@@ -1128,6 +1144,8 @@ export interface DoctorPayoutSummary {
   encounter_id: string;
   billing_event_id: string;
   practitioner_role_id: string;
+  assigned_practitioner_role_id: string;
+  performed_by_practitioner_role_id: string | null;
   practitioner_name: string;
   delivery_mode: AppointmentDeliveryMode;
   service_type: string | null;
