@@ -64,7 +64,7 @@ import type {
   PatientSummary,
   SpecialistOption,
 } from "@odyssey/types";
-import { getEncounterRegionDiagnoses } from "@odyssey/types";
+import { getEncounterRegionDiagnoses, getHumanNameDisplay } from "@odyssey/types";
 import {
   Badge,
   buildClinicalVitalReadings,
@@ -179,6 +179,7 @@ export default function EncounterRecordingPage() {
   const [records, setRecords] = useState<OrganizationClinicalRecords | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [coverages, setCoverages] = useState<CoverageSummary[]>([]);
+  const [coverageLabel, setCoverageLabel] = useState<string | null>(null);
   const [status, setStatus] = useState("Loading the secure encounter record…");
   const [busy, setBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
@@ -287,6 +288,7 @@ export default function EncounterRecordingPage() {
     setRecords(null);
     setOrganizationId(null);
     setCoverages([]);
+    setCoverageLabel(null);
     const client = createBrowserSupabaseClient();
     const { data: sessionData } = await client.auth.getSession();
     if (!sessionData.session) {
@@ -367,6 +369,39 @@ export default function EncounterRecordingPage() {
       setAccessState("unauthorized");
       setStatus("This encounter is unavailable in your assigned clinic.");
       return;
+    }
+
+    const coverageDate = (currentEncounter.period_start ?? new Date().toISOString()).slice(0, 10);
+    const { data: assignedRole } = await client
+      .from("practitioner_roles")
+      .select("id, practitioner_id")
+      .eq("id", currentEncounter.practitioner_role_id ?? "")
+      .maybeSingle();
+    if (assignedRole) {
+      const { data: activeGrant } = await client
+        .from("practitioner_coverage_grants")
+        .select("covered_practitioner_role_id")
+        .eq("organization_id", clinicId)
+        .eq("covering_practitioner_role_id", assignedRole.id)
+        .lte("valid_from", coverageDate)
+        .gt("valid_to", coverageDate)
+        .limit(1)
+        .maybeSingle();
+      if (activeGrant) {
+        const { data: coveredRole } = await client
+          .from("practitioner_roles")
+          .select("practitioner_id")
+          .eq("id", activeGrant.covered_practitioner_role_id)
+          .maybeSingle();
+        if (coveredRole) {
+          const { data: coveredDoctor } = await client
+            .from("practitioners")
+            .select("name")
+            .eq("id", coveredRole.practitioner_id)
+            .maybeSingle();
+          if (coveredDoctor) setCoverageLabel(`Covering for ${getHumanNameDisplay(coveredDoctor.name)}`);
+        }
+      }
     }
 
     const patientResult = await getOrganizationPatient(
@@ -1069,6 +1104,7 @@ export default function EncounterRecordingPage() {
           <Link className="encounter-back" href="/">← Back to daily queue</Link>
           <p className="eyebrow">Focused encounter recording</p>
           <h1>{patient?.displayName ?? "Patient encounter"}</h1>
+          {coverageLabel && <p className="encounter-coverage-indicator">{coverageLabel}</p>}
           <p>{encounter?.service_type ?? "Clinical consultation"} · {patientDetails} · Started {dateTime(encounter?.period_start ?? null)}</p>
         </div>
         <div className="encounter-header-actions">

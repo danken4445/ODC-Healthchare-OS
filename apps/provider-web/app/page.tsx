@@ -13,6 +13,8 @@ import {
   getUpcomingDayRange,
   getOrganizationClinicalRecords,
   getOrganizationFeeSettings,
+  getServicePractitionerOptions,
+  getServiceReassignmentCandidates,
   getProviderAppointmentSlots,
   getProviderWeeklyAvailability,
   getInventoryWorkspace,
@@ -38,6 +40,8 @@ import {
   getSpecialistOptions,
   getLaboratoryServices,
   markClinicalNotificationRead,
+  markPractitionerAbsent,
+  reassignAppointment,
   recordDiagnosticReport,
   subscribeToDiagnostics,
   updateReferralStatus,
@@ -56,6 +60,7 @@ import type {
   LaboratoryServiceSummary,
   ProviderWeeklyAvailabilityRow,
   WeeklyAvailabilityWindow,
+  ReassignmentCandidate,
 } from "@odyssey/types";
 import {
   AppointmentStatusBadge,
@@ -191,6 +196,15 @@ export default function Home() {
   const [clinicalBusy, setClinicalBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
   const [canManageAppointments, setCanManageAppointments] = useState(false);
+  const [canReassignAppointments, setCanReassignAppointments] = useState(false);
+  const [reassignDialog, setReassignDialog] = useState<{
+    appointment: AppointmentQueueItem;
+    candidates: ReassignmentCandidate[];
+  } | null>(null);
+  const [reassignBusy, setReassignBusy] = useState(false);
+  const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
+  const [absenceDoctors, setAbsenceDoctors] = useState<ReassignmentCandidate[]>([]);
+  const [absenceRoleId, setAbsenceRoleId] = useState("");
   const [canManageProfessionalFees, setCanManageProfessionalFees] = useState(false);
   const [queueScope, setQueueScope] = useState<"mine" | "clinic">("mine");
   const [selectedDoctorRoleId, setSelectedDoctorRoleId] = useState("");
@@ -758,6 +772,7 @@ export default function Home() {
       referralPermission,
       templatePermission,
       appointmentManagementPermission,
+      reassignmentPermission,
       professionalFeesPermission,
       feeSettings,
     ] = await Promise.all([
@@ -804,6 +819,11 @@ export default function Home() {
       hasOrganizationPermission(
         createBrowserSupabaseClient(),
         result.data,
+        "can_reassign_appointments",
+      ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
         "can_manage_professional_fees",
       ),
       getOrganizationFeeSettings(
@@ -820,10 +840,11 @@ export default function Home() {
       referralPermission.error ||
       templatePermission.error ||
       appointmentManagementPermission.error ||
+      reassignmentPermission.error ||
       professionalFeesPermission.error
     )
       return setStatus(
-        `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message ?? templatePermission.error?.message ?? appointmentManagementPermission.error?.message ?? professionalFeesPermission.error?.message}`,
+        `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message ?? templatePermission.error?.message ?? appointmentManagementPermission.error?.message ?? reassignmentPermission.error?.message ?? professionalFeesPermission.error?.message}`,
       );
     setOrganizationId(result.data);
     setInventoryDepartmentId(departmentResult.data);
@@ -836,6 +857,7 @@ export default function Home() {
     setCanUpdateReferrals(referralPermission.data);
     setCanManageTemplates(templatePermission.data);
     setCanManageAppointments(appointmentManagementPermission.data);
+    setCanReassignAppointments(reassignmentPermission.data);
     setCanManageProfessionalFees(
       Boolean(professionalFeesPermission.data) &&
         feeSettings.data?.fee_model !== "fixed_rate",
@@ -929,6 +951,64 @@ export default function Home() {
     }
     setStatus(`Encounter ${result.data} is in progress.`);
     router.push(`/encounters/${result.data}`);
+  }
+
+  async function openReassignDialog(appointment: AppointmentQueueItem) {
+    if (!canReassignAppointments || !organizationId || !appointment.clinic_service_id) return;
+    const result = await getServiceReassignmentCandidates(
+      createBrowserSupabaseClient(),
+      organizationId,
+      appointment.clinic_service_id,
+      appointment.practitioner_role_id,
+    );
+    if (result.error) return setStatus(`Unable to load eligible doctors: ${result.error.message}`);
+    setReassignDialog({ appointment, candidates: result.data });
+  }
+
+  async function handleReassign(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reassignDialog) return;
+    const fields = new FormData(event.currentTarget);
+    setReassignBusy(true);
+    const result = await reassignAppointment(createBrowserSupabaseClient(), {
+      appointmentId: reassignDialog.appointment.id,
+      newPractitionerRoleId: String(fields.get("newPractitionerRoleId") ?? ""),
+      reason: String(fields.get("reason") ?? ""),
+    });
+    setReassignBusy(false);
+    if (result.error) return setStatus(`Unable to reassign appointment: ${result.error.message}`);
+    setReassignDialog(null);
+    setStatus("Appointment reassigned. Queue label and billing were preserved.");
+    await Promise.all([loadQueue(), loadClinicalRecords()]);
+  }
+
+  async function openAbsenceDialog() {
+    if (!canReassignAppointments || !organizationId) return;
+    const absentRoleId = selectedDoctorRoleId || providerRoleId || "";
+    if (!absentRoleId) return setStatus("Select a doctor before marking absence.");
+    const result = await getServicePractitionerOptions(createBrowserSupabaseClient(), organizationId);
+    if (result.error) return setStatus(`Unable to load covering doctors: ${result.error.message}`);
+    setAbsenceRoleId(absentRoleId);
+    setAbsenceDoctors(result.data.filter((doctor) => doctor.roleCode === "doctor" && doctor.practitionerRoleId !== absentRoleId));
+    setAbsenceDialogOpen(true);
+  }
+
+  async function handleMarkAbsent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!absenceRoleId) return;
+    const fields = new FormData(event.currentTarget);
+    setReassignBusy(true);
+    const result = await markPractitionerAbsent(createBrowserSupabaseClient(), {
+      practitionerRoleId: absenceRoleId,
+      date: String(fields.get("date") ?? ""),
+      coveringPractitionerRoleId: String(fields.get("coveringPractitionerRoleId") ?? ""),
+      reason: String(fields.get("reason") ?? ""),
+    });
+    setReassignBusy(false);
+    if (result.error) return setStatus(`Unable to mark absence: ${result.error.message}`);
+    setAbsenceDialogOpen(false);
+    setStatus(`Absence recorded: ${result.data.movedCount} moved, ${result.data.notMovableCount} not movable.`);
+    await Promise.all([loadQueue(), loadClinicalRecords()]);
   }
 
   function handleQueueConsultation(appointment: AppointmentQueueItem) {
@@ -1454,6 +1534,57 @@ export default function Home() {
             onSignOut={handleSignOut}
           />
 
+          {reassignDialog && (
+            <dialog open className="encounter-completion-dialog" aria-labelledby="reassign-heading">
+              <form onSubmit={handleReassign}>
+                <p className="eyebrow">Appointment reassignment</p>
+                <h2 id="reassign-heading">Move {reassignDialog.appointment.patientName}</h2>
+                <p>Queue label and billing stay unchanged. Select an active doctor assigned to this service.</p>
+                <Field label="New doctor">
+                  <select className="odyssey-input" name="newPractitionerRoleId" required defaultValue="">
+                    <option value="" disabled>Select a doctor</option>
+                    {reassignDialog.candidates.map((candidate) => (
+                      <option key={candidate.practitionerRoleId} value={candidate.practitionerRoleId}>{candidate.displayName}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Reason">
+                  <Input name="reason" minLength={2} maxLength={1000} required placeholder="Reason for reassignment" />
+                </Field>
+                <div>
+                  <Button type="button" variant="outline" onClick={() => setReassignDialog(null)}>Cancel</Button>
+                  <Button type="submit" disabled={reassignBusy || reassignDialog.candidates.length === 0}>{reassignBusy ? "Reassigning…" : "Confirm reassignment"}</Button>
+                </div>
+              </form>
+            </dialog>
+          )}
+
+          {absenceDialogOpen && (
+            <dialog open className="encounter-completion-dialog" aria-labelledby="absence-heading">
+              <form onSubmit={handleMarkAbsent}>
+                <p className="eyebrow">Coverage</p>
+                <h2 id="absence-heading">Mark doctor absent</h2>
+                <p>Appointments that cannot move are reported individually and remain scheduled without a replacement slot.</p>
+                <Field label="Date">
+                  <Input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                </Field>
+                <Field label="Covering doctor">
+                  <select className="odyssey-input" name="coveringPractitionerRoleId" required defaultValue="">
+                    <option value="" disabled>Select a covering doctor</option>
+                    {absenceDoctors.map((doctor) => <option key={doctor.practitionerRoleId} value={doctor.practitionerRoleId}>{doctor.displayName}</option>)}
+                  </select>
+                </Field>
+                <Field label="Reason">
+                  <Input name="reason" minLength={2} maxLength={1000} required placeholder="Reason for absence" />
+                </Field>
+                <div>
+                  <Button type="button" variant="outline" onClick={() => setAbsenceDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={reassignBusy || absenceDoctors.length === 0}>{reassignBusy ? "Updating…" : "Create coverage and reassign"}</Button>
+                </div>
+              </form>
+            </dialog>
+          )}
+
           {/* Vesper Clinical Overview Dashboard */}
           {activeTab === "all" && (
             <DoctorOverview
@@ -1748,6 +1879,11 @@ export default function Home() {
                     Live queue
                   </h2>
                 </div>
+                {canReassignAppointments && !isNurse && (
+                  <Button size="sm" variant="outline" onClick={() => void openAbsenceDialog()}>
+                    Mark doctor absent
+                  </Button>
+                )}
               </div>
               {!isNurse && (
                 <div className="queue-scope-controls">
@@ -2009,6 +2145,21 @@ export default function Home() {
                       }
 
                       // Doctor actions
+                      if (
+                        canReassignAppointments &&
+                        appointment.status !== "fulfilled" &&
+                        appointment.status !== "cancelled"
+                      ) {
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openReassignDialog(appointment)}
+                          >
+                            Reassign
+                          </Button>
+                        );
+                      }
                       const isAssignedToCurrentPractitioner =
                         providerRoleId !== null &&
                         appointment.practitioner_role_id === providerRoleId;

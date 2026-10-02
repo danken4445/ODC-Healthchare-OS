@@ -1679,6 +1679,7 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
 .history-entries article p { margin: .35rem 0 0; white-space: pre-wrap; font-size: .84rem; line-height: 1.45; }
 .encounter-completion-dialog { box-sizing: border-box; width: min(calc(100% - 2rem), 32rem); max-height: calc(100dvh - 2rem); padding: 0; overflow: auto; border: 1px solid var(--odyssey-border); border-radius: .5rem; color: var(--odyssey-foreground); background: var(--odyssey-card); box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 24%); }
 .encounter-completion-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+.encounter-coverage-indicator { margin: .25rem 0 0; color: var(--odyssey-muted-foreground); font-size: .875rem; font-weight: 600; }
 .encounter-completion-dialog form { padding: 1.25rem; }
 .encounter-completion-dialog h2 { margin: .25rem 0 .75rem; font-size: 1.2rem; }
 .encounter-completion-dialog p:not(.eyebrow) { margin: 0; color: var(--odyssey-muted-foreground); line-height: 1.5; }

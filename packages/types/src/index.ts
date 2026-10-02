@@ -403,7 +403,7 @@ export type ObservationSummary = Pick<
   | "note"
 >;
 
-export type ServiceRequestSummary = Pick<
+export type ServiceRequestSummary = Omit<Pick<
   ServiceRequestRow,
   | "id"
   | "organization_id"
@@ -419,7 +419,7 @@ export type ServiceRequestSummary = Pick<
   | "note"
   | "created_at"
   | "updated_at"
->;
+>, "status"> & { status: string };
 
 export type DiagnosticReportSummary = Pick<
   DiagnosticReportRow,
