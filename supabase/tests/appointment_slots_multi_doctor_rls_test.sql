@@ -113,12 +113,9 @@ set local role authenticated;
 select is(
   (select array_agg(id order by id) from public.appointment_slots),
   array[
-    '91000000-0000-0000-0000-000000000601'::uuid,
-    '91000000-0000-0000-0000-000000000603'::uuid,
-    '91000000-0000-0000-0000-000000000605'::uuid,
-    '91000000-0000-0000-0000-000000000606'::uuid
+    '91000000-0000-0000-0000-000000000603'::uuid
   ],
-  'authenticated patient sees same-clinic future free slots and own booked slot'
+  'authenticated patient sees only own booked slots; doctor-first availability uses its RPC'
 );
 select is(
   (select count(*) from public.appointment_slots where id = '91000000-0000-0000-0000-000000000607'),

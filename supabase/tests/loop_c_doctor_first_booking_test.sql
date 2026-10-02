@@ -1,5 +1,5 @@
 begin;
-select plan(11);
+select plan(12);
 
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000103', true);
@@ -26,6 +26,16 @@ select is_empty(
     where organization_id = '10000000-0000-0000-0000-000000000002'
   $$,
   'patient cannot directly read other organization slots'
+);
+
+select is_empty(
+  $$
+    select id
+    from public.appointment_slots
+    where organization_id = '10000000-0000-0000-0000-000000000001'
+      and status = 'free'
+  $$,
+  'patient no longer directly reads free slots after the doctor-first RPC cutover'
 );
 
 select ok(
