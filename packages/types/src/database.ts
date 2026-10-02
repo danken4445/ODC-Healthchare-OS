@@ -2697,6 +2697,7 @@ export type Database = {
       }
       observations: {
         Row: {
+          authored_by_practitioner_role_id: string | null
           category_codes: Json
           code: string
           code_display: string | null
@@ -2720,6 +2721,7 @@ export type Database = {
           value_unit: string | null
         }
         Insert: {
+          authored_by_practitioner_role_id?: string | null
           category_codes?: Json
           code: string
           code_display?: string | null
@@ -2743,6 +2745,7 @@ export type Database = {
           value_unit?: string | null
         }
         Update: {
+          authored_by_practitioner_role_id?: string | null
           category_codes?: Json
           code?: string
           code_display?: string | null
@@ -2766,6 +2769,13 @@ export type Database = {
           value_unit?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "observations_authored_by_practitioner_role_id_fkey"
+            columns: ["authored_by_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "observations_diagnostic_report_id_fkey"
             columns: ["diagnostic_report_id"]
@@ -3511,6 +3521,64 @@ export type Database = {
           },
           {
             foreignKeyName: "pos_sales_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      practitioner_coverage_grants: {
+        Row: {
+          covered_practitioner_role_id: string
+          covering_practitioner_role_id: string
+          created_at: string
+          created_by: string
+          id: string
+          organization_id: string
+          reason: string
+          valid_from: string
+          valid_to: string
+        }
+        Insert: {
+          covered_practitioner_role_id: string
+          covering_practitioner_role_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          organization_id: string
+          reason: string
+          valid_from: string
+          valid_to: string
+        }
+        Update: {
+          covered_practitioner_role_id?: string
+          covering_practitioner_role_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          organization_id?: string
+          reason?: string
+          valid_from?: string
+          valid_to?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "practitioner_coverage_grants_covered_practitioner_role_id_fkey"
+            columns: ["covered_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "practitioner_coverage_grants_covering_practitioner_role_id_fkey"
+            columns: ["covering_practitioner_role_id"]
+            isOneToOne: false
+            referencedRelation: "practitioner_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "practitioner_coverage_grants_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -5701,6 +5769,27 @@ export type Database = {
           p_notification_id: string
         }
         Returns: undefined
+      }
+      mark_practitioner_absent: {
+        Args: {
+          p_practitioner_role_id: string
+          p_date: string
+          p_covering_practitioner_role_id: string
+          p_reason: string
+        }
+        Returns: {
+          moved_count: number
+          not_movable_count: number
+          results: Json
+        }[]
+      }
+      reassign_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_new_practitioner_role_id: string
+          p_reason: string
+        }
+        Returns: string
       }
       record_diagnostic_report: {
         Args: {

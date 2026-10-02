@@ -13,6 +13,11 @@ export type AppointmentRow = DatabaseRow<"appointments">;
 export type AppointmentSlotRow = DatabaseRow<"appointment_slots">;
 export type ClinicServiceRow = DatabaseRow<"clinic_services">;
 export type ServicePractitionerRow = DatabaseRow<"service_practitioners">;
+export type PractitionerCoverageGrantRow = DatabaseRow<"practitioner_coverage_grants">;
+export interface ReassignmentCandidate {
+  practitionerRoleId: string;
+  displayName: string;
+}
 export type EncounterRow = DatabaseRow<"encounters">;
 export type ObservationRow = DatabaseRow<"observations">;
 export type MedicationRequestRow = DatabaseRow<"medication_requests">;
@@ -314,7 +319,8 @@ export type ClinicRolePermission =
   | "can_manage_services"
   | "can_manage_professional_fees"
   | "can_view_clinic_queue"
-  | "can_manage_rooms";
+  | "can_manage_rooms"
+  | "can_reassign_appointments";
 
 export interface ClinicRoleDefinition {
   code: string;

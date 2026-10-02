@@ -9,6 +9,8 @@ import {
   type AppointmentSummary,
   type ClinicServiceSummary,
   type ServicePractitionerRow,
+  type PractitionerCoverageGrantRow,
+  type ReassignmentCandidate,
   type ClinicServiceInput,
   type ClinicAccountInput,
   type ClinicRoleDefinition,
@@ -166,6 +168,35 @@ export type ServicePractitionerAssignmentInput = z.infer<
 export type ServicePractitionerOption = z.infer<
   typeof servicePractitionerOptionSchema
 >;
+
+export const reassignmentInputSchema = z.object({
+  appointmentId: z.string().uuid(),
+  newPractitionerRoleId: z.string().uuid(),
+  reason: z.string().trim().min(2).max(1000),
+});
+
+export const markPractitionerAbsentInputSchema = z.object({
+  practitionerRoleId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD."),
+  coveringPractitionerRoleId: z.string().uuid(),
+  reason: z.string().trim().min(2).max(1000),
+});
+
+const reassignmentResultSchema = z.object({
+  moved_count: z.number().int().nonnegative(),
+  not_movable_count: z.number().int().nonnegative(),
+  results: z.unknown(),
+});
+
+export type ReassignmentInput = z.infer<typeof reassignmentInputSchema>;
+export type MarkPractitionerAbsentInput = z.infer<
+  typeof markPractitionerAbsentInputSchema
+>;
+export interface MarkPractitionerAbsentResult {
+  movedCount: number;
+  notMovableCount: number;
+  results: Json;
+}
 
 export const bookablePractitionerInputSchema = z.object({
   serviceId: z.string().uuid(),
@@ -1817,6 +1848,100 @@ export async function getServicePractitionerOptions(
   return parsed.success
     ? success(parsed.data)
     : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+export async function getServiceReassignmentCandidates(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  clinicServiceId: string,
+  currentPractitionerRoleId?: string | null,
+): Promise<SupabaseResult<ReassignmentCandidate[]>> {
+  const ids = z.object({ organizationId: z.string().uuid(), clinicServiceId: z.string().uuid() }).safeParse({ organizationId, clinicServiceId });
+  if (!ids.success) return failure({ code: "VALIDATION_ERROR", message: ids.error.message });
+  const { data: memberships, error: membershipError } = await client
+    .from("service_practitioners")
+    .select("practitioner_role_id")
+    .eq("organization_id", ids.data.organizationId)
+    .eq("clinic_service_id", ids.data.clinicServiceId)
+    .eq("is_active", true);
+  if (membershipError) return failure(membershipError);
+  const roleIds = (memberships ?? [])
+    .map((row) => row.practitioner_role_id)
+    .filter((roleId) => roleId !== currentPractitionerRoleId);
+  if (!roleIds.length) return success([]);
+  const { data: roles, error: roleError } = await client
+    .from("practitioner_roles")
+    .select("id, practitioner_id")
+    .eq("organization_id", ids.data.organizationId)
+    .eq("active", true)
+    .eq("role_code", "doctor")
+    .in("id", roleIds);
+  if (roleError) return failure(roleError);
+  const practitionerIds = (roles ?? []).map((role) => role.practitioner_id);
+  const { data: practitioners, error: practitionerError } = await client
+    .from("practitioners")
+    .select("id, name")
+    .eq("organization_id", ids.data.organizationId)
+    .eq("active", true)
+    .in("id", practitionerIds);
+  if (practitionerError) return failure(practitionerError);
+  const names = new Map((practitioners ?? []).map((row) => [row.id, getHumanNameDisplay(row.name)]));
+  return success((roles ?? []).flatMap((role) => {
+    const displayName = names.get(role.practitioner_id);
+    return displayName ? [{ practitionerRoleId: role.id, displayName }] : [];
+  }));
+}
+
+export async function reassignAppointment(
+  client: SupabaseClient<Database>,
+  rawInput: ReassignmentInput,
+): Promise<SupabaseResult<string>> {
+  const input = reassignmentInputSchema.safeParse(rawInput);
+  if (!input.success) return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+  const { data, error } = await client.rpc("reassign_appointment", {
+    p_appointment_id: input.data.appointmentId,
+    p_new_practitioner_role_id: input.data.newPractitionerRoleId,
+    p_reason: input.data.reason,
+  });
+  return error ? failure(error) : success(data);
+}
+
+export async function markPractitionerAbsent(
+  client: SupabaseClient<Database>,
+  rawInput: MarkPractitionerAbsentInput,
+): Promise<SupabaseResult<MarkPractitionerAbsentResult>> {
+  const input = markPractitionerAbsentInputSchema.safeParse(rawInput);
+  if (!input.success) return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+  const { data, error } = await client.rpc("mark_practitioner_absent", {
+    p_practitioner_role_id: input.data.practitionerRoleId,
+    p_date: input.data.date,
+    p_covering_practitioner_role_id: input.data.coveringPractitionerRoleId,
+    p_reason: input.data.reason,
+  });
+  if (error) return failure(error);
+  const parsed = reassignmentResultSchema.safeParse(data?.[0]);
+  return parsed.success
+    ? success({ movedCount: parsed.data.moved_count, notMovableCount: parsed.data.not_movable_count, results: parsed.data.results as Json })
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+export async function getCoverageGrantForDate(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  coveredPractitionerRoleId: string,
+  date: string,
+): Promise<SupabaseResult<PractitionerCoverageGrantRow | null>> {
+  const { data, error } = await client
+    .from("practitioner_coverage_grants")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("covered_practitioner_role_id", coveredPractitionerRoleId)
+    .lte("valid_from", date)
+    .gt("valid_to", date)
+    .order("valid_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return error ? failure(error) : success(data as PractitionerCoverageGrantRow | null);
 }
 
 /** Assigns doctors or specialists to a service through the permissioned B4 RPC. */
