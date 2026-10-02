@@ -1,11 +1,12 @@
 \set ON_ERROR_STOP on
 
 begin;
-select plan(16);
+select plan(17);
 
 select has_function('public', 'list_clinic_calendar', array['uuid','date','uuid','uuid'], 'calendar read RPC exists');
 select has_function('public', 'list_doctor_management', array['uuid','date'], 'doctor management read RPC exists');
 select ok(exists (select 1 from pg_trigger where tgrelid = 'public.room_assignments'::regclass and tgname = 'room_assignments_audit'), 'room assignments are audited');
+select ok((select p.proname from pg_proc p where p.oid = 'public.audit_practitioner_service_fee_change()'::regprocedure) = 'audit_practitioner_service_fee_change', 'fee audit records the target doctor with the actor');
 select ok(exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'teleconsult_rooms' and policyname = 'teleconsult_rooms_participant_select' and qual::text like '%is_active_practitioner_coverage%'), 'teleconsult RLS includes active coverage');
 select ok(not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'audit_log' and cmd = 'INSERT'), 'clients cannot insert audit rows');
 select ok(not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'audit_log' and cmd = 'UPDATE'), 'clients cannot update audit rows');
