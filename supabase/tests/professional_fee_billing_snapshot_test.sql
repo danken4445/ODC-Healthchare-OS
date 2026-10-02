@@ -1,5 +1,5 @@
 begin;
-select plan(5);
+select plan(6);
 
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000106', true);
@@ -58,6 +58,35 @@ select is(
   ),
   250::numeric,
   'professional-fee invoice line remains the bill-generation snapshot after a later fee change'
+);
+
+update public.encounters
+set practitioner_role_id = '30000000-0000-0000-0000-000000000101',
+    status = 'finished'
+where id = '60000000-0000-0000-0000-000000000001';
+
+insert into public.billing_line_items (
+  organization_id, billing_event_id, source_type, description, quantity, unit_price, currency
+) values (
+  '10000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  'professional_fee',
+  'Professional fee - zero-fee regression fixture',
+  1,
+  0,
+  'PHP'
+);
+
+select public.refresh_doctor_payout('60000000-0000-0000-0000-000000000001');
+
+select is(
+  (
+    select payout_amount
+    from public.doctor_payouts
+    where encounter_id = '60000000-0000-0000-0000-000000000001'
+  ),
+  0::numeric,
+  'a declared zero fee remains a zero payout instead of falling back to the facility price'
 );
 
 select * from finish();
