@@ -41,6 +41,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/settings/templates", allowSuperadmin: true, anyOf: ["can_manage_document_templates"] },
   { href: "/settings/branding", allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },
   { href: "/settings/facility", allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
+  { href: "/settings/queue", anyOf: ["can_manage_appointments"] },
   { href: "/settings/features", allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
   { href: "/waiting-room", public: true },
   { href: "/governance", anyOf: ["can_manage_patients"] },

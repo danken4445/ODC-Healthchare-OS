@@ -22,3 +22,8 @@ The reported `max()+1` queue race was disproved by the deterministic 50-way
 baseline: the existing organization/date advisory lock produced 50 unique
 numbers with zero duplicates. Loop D retains that lock and scopes it, along
 with the max query, by organization, queue date, and queue mode scope.
+
+The admin waiting-room/lobby route and legacy teleconsult summary still format
+`queue_number` directly; they have no React-key collision because keys remain
+appointment IDs. Updating those displays to group by doctor and room belongs
+to Loop D-2 and is intentionally not redesigned here.

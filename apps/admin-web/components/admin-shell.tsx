@@ -79,6 +79,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
       { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
+      { href: "/settings/queue", label: "Queue settings", icon: Users, anyOf: ["can_manage_appointments"] },
       { href: "/settings/branding", label: "White-Labeling", icon: Palette, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },
       { href: "/settings/features", label: "Security", icon: Lock, allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
       { href: "/support", label: "Support", icon: HelpCircle, public: true },

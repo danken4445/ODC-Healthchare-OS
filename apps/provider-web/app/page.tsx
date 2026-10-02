@@ -1895,9 +1895,7 @@ export default function Home() {
                     id: "queue",
                     header: "Queue",
                     cell: (appointment) =>
-                      appointment.queue_number
-                        ? `A-${String(appointment.queue_number).padStart(3, "0")}`
-                        : "—",
+                      appointment.queue_label ?? "—",
                   },
                   {
                     id: "time",
