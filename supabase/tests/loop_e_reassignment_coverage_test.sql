@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 
 begin;
-select plan(18);
+select plan(19);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -108,6 +108,7 @@ select is((select practitioner_role_id from public.encounters where id = '600000
 select is((select status::text from public.appointment_slots where id = '51000000-0000-0000-0000-000000000110'), 'free', 'old slot released');
 select is((select status::text from public.appointment_slots where id = '51000000-0000-0000-0000-000000000111'), 'busy', 'replacement slot booked');
 select is((select appointment_id from public.appointment_slots where id = '51000000-0000-0000-0000-000000000111'), '50000000-0000-0000-0000-000000000112'::uuid, 'replacement slot has the appointment');
+select is((select count(*)::integer from public.appointment_slots where id = '51000000-0000-0000-0000-000000000111' and status = 'busy' and appointment_id is not null), 1, 'replacement slot has exactly one active appointment');
 select is((select queue_label from public.appointments where id = '50000000-0000-0000-0000-000000000112'), (select queue_label from public.waiting_room_queue where appointment_id = '50000000-0000-0000-0000-000000000112'), 'queue label remains unchanged');
 select ok(exists (select 1 from public.audit_log where table_name = 'appointments' and record_id = '50000000-0000-0000-0000-000000000112' and metadata ->> 'assigned_practitioner_role_id' = '30000000-0000-0000-0000-000000000101' and metadata ->> 'new_practitioner_role_id' = '30000000-0000-0000-0000-000000000110'), 'reassignment audit records both practitioner roles');
 

@@ -323,13 +323,16 @@ begin
   if auth.uid() is null then raise exception 'Authentication is required.' using errcode = '42501'; end if;
   select encounter.* into v_encounter from public.encounters encounter where encounter.id = p_encounter_id for update;
   if not found or v_encounter.status <> 'in_progress' then raise exception 'An in-progress encounter is required.' using errcode = '22023'; end if;
-  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment
-  where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
   select practitioner.id, role.id into v_practitioner_id, v_caller_role_id
   from public.practitioners practitioner join public.practitioner_roles role on role.practitioner_id = practitioner.id
   where practitioner.auth_user_id = auth.uid() and practitioner.active and role.active
     and role.organization_id = v_encounter.organization_id and role.role_code in ('doctor', 'specialist');
   if v_practitioner_id is null then raise exception 'Clinical documentation access is required.' using errcode = '42501'; end if;
+  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment
+  where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
+  if v_encounter.practitioner_role_id is null or v_encounter.practitioner_role_id <> v_assigned_role_id then
+    raise exception 'The encounter and appointment must have the same assigned practitioner role.' using errcode = '22023';
+  end if;
   if not (
     v_caller_role_id = v_assigned_role_id
     or public.has_organization_permission(v_encounter.organization_id, 'can_reassign_appointments')
@@ -363,11 +366,14 @@ declare
 begin
   select encounter.* into v_encounter from public.encounters encounter where encounter.id = p_encounter_id for update;
   if not found or v_encounter.status <> 'in_progress' then raise exception 'An in-progress encounter is required.' using errcode = '22023'; end if;
-  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
   select practitioner.id, role.id, role.role_code into v_practitioner_id, v_caller_role_id, v_caller_role_code
   from public.practitioners practitioner join public.practitioner_roles role on role.practitioner_id = practitioner.id
   where practitioner.auth_user_id = auth.uid() and practitioner.active and role.active and role.organization_id = v_encounter.organization_id and role.role_code in ('doctor', 'nurse', 'specialist');
   if v_practitioner_id is null then raise exception 'Clinical documentation access is required.' using errcode = '42501'; end if;
+  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
+  if v_encounter.practitioner_role_id is null or v_encounter.practitioner_role_id <> v_assigned_role_id then
+    raise exception 'The encounter and appointment must have the same assigned practitioner role.' using errcode = '22023';
+  end if;
   if v_caller_role_code <> 'nurse' and not (v_caller_role_id = v_assigned_role_id or public.has_organization_permission(v_encounter.organization_id, 'can_reassign_appointments') or exists (select 1 from public.practitioner_coverage_grants grant_row where grant_row.organization_id = v_encounter.organization_id and grant_row.covered_practitioner_role_id = v_assigned_role_id and grant_row.covering_practitioner_role_id = v_caller_role_id and grant_row.valid_from <= (coalesce(v_encounter.period_start, now()) at time zone 'Asia/Manila')::date and grant_row.valid_to > (coalesce(v_encounter.period_start, now()) at time zone 'Asia/Manila')::date)) then raise exception 'Only the assigned doctor or an active covering doctor may document this encounter.' using errcode = '42501'; end if;
   if v_text is null or length(v_text) < 1 or length(v_text) > 20000 then raise exception 'SOAP note text is required and must be 20,000 characters or fewer.' using errcode = '22023'; end if;
   select observation.id into v_latest_id from public.observations observation where observation.encounter_id = v_encounter.id and observation.code = 'SOAP-NOTE' order by observation.created_at desc limit 1;
@@ -385,8 +391,11 @@ declare v_encounter public.encounters%rowtype; v_assigned_role_id uuid; v_caller
 begin
   select encounter.* into v_encounter from public.encounters encounter where encounter.id = p_encounter_id for update;
   if not found or v_encounter.status <> 'in_progress' then raise exception 'An in-progress encounter is required.' using errcode = '22023'; end if;
-  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
   select role.id into v_caller_role_id from public.practitioner_roles role join public.practitioners practitioner on practitioner.id = role.practitioner_id where practitioner.auth_user_id = auth.uid() and practitioner.active and role.active and role.organization_id = v_encounter.organization_id and role.role_code in ('doctor', 'specialist');
+  select appointment.practitioner_role_id into v_assigned_role_id from public.appointments appointment where appointment.id = v_encounter.appointment_id and appointment.organization_id = v_encounter.organization_id;
+  if v_encounter.practitioner_role_id is null or v_encounter.practitioner_role_id <> v_assigned_role_id then
+    raise exception 'The encounter and appointment must have the same assigned practitioner role.' using errcode = '22023';
+  end if;
   if v_caller_role_id is null or not (v_caller_role_id = v_assigned_role_id or public.has_organization_permission(v_encounter.organization_id, 'can_reassign_appointments') or exists (select 1 from public.practitioner_coverage_grants grant_row where grant_row.organization_id = v_encounter.organization_id and grant_row.covered_practitioner_role_id = v_assigned_role_id and grant_row.covering_practitioner_role_id = v_caller_role_id and grant_row.valid_from <= (coalesce(v_encounter.period_start, now()) at time zone 'Asia/Manila')::date and grant_row.valid_to > (coalesce(v_encounter.period_start, now()) at time zone 'Asia/Manila')::date)) then raise exception 'Only the assigned doctor or an active covering doctor may complete this encounter.' using errcode = '42501'; end if;
   update public.encounters set status = 'finished', period_end = now() where id = v_encounter.id and organization_id = v_encounter.organization_id;
   update public.appointments set status = 'fulfilled' where id = v_encounter.appointment_id and organization_id = v_encounter.organization_id;
