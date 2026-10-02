@@ -13,7 +13,19 @@ alter table public.clinic_role_permission_overrides
     'can_start_consultation', 'can_manage_provider_schedule',
     'can_manage_staff_roles', 'can_view_inventory',
     'can_manage_inventory', 'can_tag_inventory_usage',
-    'can_reassign_appointments', 'role_permissions_configured'
+    'can_order_diagnostics', 'can_view_diagnostics',
+    'can_view_lab_worklist', 'can_record_lab_results',
+    'can_view_referrals', 'can_update_referrals',
+    'can_manage_laboratory_services', 'role_permissions_configured',
+    'can_manage_billing', 'can_view_billing', 'can_manage_pos',
+    'can_manage_claims', 'can_view_claims', 'can_view_payouts',
+    'can_manage_payouts', 'can_view_analytics', 'can_manage_patients',
+    'can_view_audit_log', 'can_identify_patients',
+    'can_manage_clinic_branding', 'can_manage_service_catalog',
+    'can_manage_document_templates', 'can_manage_feature_modules',
+    'can_manage_services', 'can_manage_professional_fees',
+    'can_view_clinic_queue', 'can_manage_rooms',
+    'can_reassign_appointments'
   ));
 
 insert into public.role_permissions (role_id, organization_id, permission)
@@ -42,7 +54,18 @@ declare
     'can_manage_appointments', 'can_record_triage', 'can_start_consultation',
     'can_manage_provider_schedule', 'can_manage_staff_roles',
     'can_view_inventory', 'can_manage_inventory', 'can_tag_inventory_usage',
-    'can_reassign_appointments'
+    'can_order_diagnostics', 'can_view_diagnostics',
+    'can_view_lab_worklist', 'can_record_lab_results',
+    'can_view_referrals', 'can_update_referrals',
+    'can_manage_laboratory_services', 'can_manage_billing',
+    'can_view_billing', 'can_manage_pos', 'can_manage_claims',
+    'can_view_claims', 'can_view_payouts', 'can_manage_payouts',
+    'can_view_analytics', 'can_manage_patients', 'can_view_audit_log',
+    'can_identify_patients', 'can_manage_clinic_branding',
+    'can_manage_service_catalog', 'can_manage_document_templates',
+    'can_manage_feature_modules', 'can_manage_services',
+    'can_manage_professional_fees', 'can_view_clinic_queue',
+    'can_manage_rooms', 'can_reassign_appointments'
   ];
 begin
   if not public.can_manage_organization_accounts(p_organization_id) then
