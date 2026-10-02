@@ -12,3 +12,4 @@ coverage/
 test-results/
 supabase/.temp/
 *.tsbuildinfo
+*.pptx
