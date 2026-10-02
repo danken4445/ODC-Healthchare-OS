@@ -194,6 +194,39 @@ export default function InventoryPage() {
     }, [workspace, stockFilter],
   );
 
+  const taggableStockRows = useMemo(() => {
+    const heldQuantityByStockId = new Map<string, number>();
+    for (const hold of workspace.holds) {
+      heldQuantityByStockId.set(
+        hold.stock_id,
+        (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
+      );
+    }
+
+    return workspace.stock
+      .map((stock) => {
+        const item = workspace.items.find((i) => i.id === stock.item_id);
+        const department = workspace.departments.find(
+          (d) => d.id === stock.department_id,
+        );
+        return {
+          ...stock,
+          availableQuantity: Math.max(
+            0,
+            Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0),
+          ),
+          itemName: item?.name ?? "Unknown item",
+          departmentName: department?.name ?? "Unknown",
+        };
+      })
+      .filter(
+        (row) =>
+          row.availableQuantity > 0 &&
+          (!inventoryDepartmentSelection ||
+            row.department_id === inventoryDepartmentSelection),
+      );
+  }, [inventoryDepartmentSelection, workspace]);
+
   /* ─── KPI calculations ───────────────────────────────────── */
   const kpi = useMemo(() => {
     const totalItems = workspace.items.filter((i) => i.active).length;
@@ -1248,11 +1281,23 @@ export default function InventoryPage() {
                     </option>
                   ))}
               </select>
+              <p className="hint" role="status">
+                {inventoryDepartmentId
+                  ? taggableStockRows.length > 0
+                    ? "Only available stock from your assigned department can be tagged."
+                    : "No available stock is assigned to your department. Ask an inventory manager to receive stock here or update your department assignment."
+                  : "Choose the department that owns the stock before selecting an item."}
+              </p>
             </Field>
             <Field label="Department stock">
-              <select className="odyssey-input" name="stockId" required>
+              <select
+                className="odyssey-input"
+                name="stockId"
+                required
+                disabled={!taggableStockRows.length}
+              >
                 <option value="">Select item and location</option>
-                {stockRows
+                {taggableStockRows
                   .filter(
                     (row) =>
                       row.availableQuantity > 0 &&
@@ -1278,7 +1323,7 @@ export default function InventoryPage() {
               />
             </Field>
             <Button
-              disabled={busy || !encounters.length}
+              disabled={busy || !encounters.length || !taggableStockRows.length}
               type="submit"
             >
               Tag usage
