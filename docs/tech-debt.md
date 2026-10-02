@@ -34,3 +34,11 @@ The Loop D-2 database projection and Realtime subscription now carry the
 assigned practitioner display name and room label. The public lobby display
 still needs a dedicated UI pass to group “Now serving” by doctor and room;
 that work is intentionally deferred and remains outside this loop.
+
+## Loop E patient reassignment notifications
+
+The current notification system is limited to diagnostic and referral
+notifications; there is no patient appointment-notification mechanism to reuse.
+Reassignment is therefore audited but does not send a patient notification.
+Add a patient-safe appointment notification path before enabling reassignment
+broadly.
