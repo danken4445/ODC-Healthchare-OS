@@ -132,6 +132,65 @@ language sql stable security definer set search_path = '' as $$
   order by li.created_at;
 $$;
 
+create or replace function public.get_invoice_detail(p_invoice_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_result jsonb;
+begin
+  select jsonb_build_object(
+    'invoice', jsonb_build_object(
+      'id', invoice.id, 'invoice_number', invoice.invoice_number, 'status', invoice.status,
+      'patient_name', coalesce(patient.name ->> 'text', 'Walk-in'),
+      'subtotal', invoice.subtotal, 'total_due', invoice.total_due,
+      'amount_paid', invoice.amount_paid, 'balance_due', invoice.balance_due,
+      'issued_at', invoice.issued_at, 'paid_at', invoice.paid_at,
+      'billing_mode', event.billing_mode, 'payor_type', event.payor_type,
+      'billing_mode_source', event.billing_mode_source, 'billing_event_id', event.id
+    ),
+    'line_items', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', line.id, 'source_type', line.source_type, 'description', line.description,
+        'quantity', line.quantity, 'unit_price', line.unit_price, 'line_total', line.line_total,
+        'payment_status', line.payment_status, 'tagged_at', line.tagged_at,
+        'void_reason', line.void_reason
+      ) order by line.created_at)
+      from public.billing_line_items as line
+      where line.invoice_id = invoice.id
+        and (
+          line.source_type <> 'professional_fee'
+          or public.can_view_professional_fee_line(
+            line.organization_id, line.billing_event_id, line.source_id
+          )
+        )
+    ), '[]'::jsonb),
+    'payments', coalesce((select jsonb_agg(jsonb_build_object(
+      'id', payment.id, 'amount', payment.amount, 'method', payment.method,
+      'status', payment.status, 'reference_number', payment.reference_number,
+      'created_at', payment.created_at, 'confirmed_at', payment.confirmed_at
+    ) order by payment.created_at desc) from public.payments as payment where payment.invoice_id = invoice.id), '[]'::jsonb)
+  ) into v_result
+  from public.invoices as invoice
+  join public.billing_events as event on event.id = invoice.billing_event_id
+  left join public.patients as patient on patient.id = invoice.patient_id
+  where invoice.id = p_invoice_id
+    and (
+      public.has_organization_permission(invoice.organization_id, 'can_view_billing')
+      or public.has_organization_permission(invoice.organization_id, 'can_manage_billing')
+    );
+
+  if v_result is null then
+    raise exception 'Invoice not found or access denied.' using errcode = 'P0002';
+  end if;
+
+  return v_result;
+end;
+$$;
+
 create or replace function public.refresh_doctor_payout(p_encounter_id uuid)
 returns void
 language plpgsql
@@ -185,9 +244,10 @@ begin
     from public.billing_line_items
     where billing_event_id = selected_event.id
       and source_type = 'clinic_service';
-  end if;
-
-  if payout_total < 0 then
+    if payout_total <= 0 then
+      return;
+    end if;
+  elsif payout_total < 0 then
     return;
   end if;
 

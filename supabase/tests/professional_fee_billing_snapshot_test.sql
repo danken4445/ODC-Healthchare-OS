@@ -1,5 +1,5 @@
 begin;
-select plan(6);
+select plan(7);
 
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000106', true);
@@ -87,6 +87,33 @@ select is(
   ),
   0::numeric,
   'a declared zero fee remains a zero payout instead of falling back to the facility price'
+);
+
+delete from public.doctor_payouts
+where encounter_id = '60000000-0000-0000-0000-000000000001';
+
+delete from public.billing_line_items
+where billing_event_id = 'a0000000-0000-0000-0000-000000000001'
+  and source_type = 'professional_fee';
+
+update public.organization_settings
+set fee_model = 'fixed_rate'
+where organization_id = '10000000-0000-0000-0000-000000000001';
+
+update public.billing_line_items
+set unit_price = 0
+where billing_event_id = 'a0000000-0000-0000-0000-000000000001'
+  and source_type = 'clinic_service';
+
+select public.refresh_doctor_payout('60000000-0000-0000-0000-000000000001');
+
+select is_empty(
+  $$
+    select 1
+    from public.doctor_payouts
+    where encounter_id = '60000000-0000-0000-0000-000000000001'
+  $$,
+  'a fixed-rate zero-price service remains ineligible for a payout'
 );
 
 select * from finish();
