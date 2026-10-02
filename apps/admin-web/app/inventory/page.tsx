@@ -1200,7 +1200,7 @@ export default function InventoryPage() {
                     quantity: Number(fields.get("usageQuantity")),
                     departmentId: inventoryDepartmentSelection || null,
                   }),
-                "Consumable held for the patient and added to the draft bill. Stock will deduct when billing is finalized.",
+                "Consumable tagged to the encounter, deducted from stock, and added to the draft bill.",
               )
             }
           >

@@ -13,14 +13,13 @@ begin
   end if;
   if to_regprocedure('public.adjust_department_stock(uuid,uuid,numeric,text,text)') is null
     or to_regprocedure('public.transfer_department_stock(uuid,uuid,uuid,numeric,text)') is null
-    or to_regprocedure('public.tag_inventory_usage(uuid,uuid,numeric)') is null
     or to_regprocedure('public.tag_inventory_usage(uuid,uuid,numeric,uuid)') is null
+    or to_regprocedure('public.tag_inventory_usage(uuid,uuid,numeric)') is not null
     or to_regprocedure('public.assign_staff_department(uuid,uuid,uuid)') is null
     or to_regprocedure('public.has_organization_permission(uuid,text)') is null then
     raise exception 'Loop 3 RPC surface is incomplete.';
   end if;
-  if has_function_privilege('anon', 'public.tag_inventory_usage(uuid,uuid,numeric)', 'EXECUTE')
-    or has_function_privilege('anon', 'public.adjust_department_stock(uuid,uuid,numeric,text,text)', 'EXECUTE') then
+  if has_function_privilege('anon', 'public.adjust_department_stock(uuid,uuid,numeric,text,text)', 'EXECUTE') then
     raise exception 'Anonymous users must not execute inventory mutation RPCs.';
   end if;
   if has_function_privilege('anon', 'public.tag_inventory_usage(uuid,uuid,numeric,uuid)', 'EXECUTE') then
@@ -102,7 +101,8 @@ from public.department_stock where id = '92000000-0000-0000-0000-000000000002';
 select public.tag_inventory_usage(
   '60000000-0000-0000-0000-000000000001',
   '92000000-0000-0000-0000-000000000001',
-  2
+  2,
+  null
 ) is not null as doctor_tags_usage;
 select quantity = 103 as usage_decrements_exact_department
 from public.department_stock where id = '92000000-0000-0000-0000-000000000001';

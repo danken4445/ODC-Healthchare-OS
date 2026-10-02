@@ -1,0 +1,447 @@
+/* ==========================================================================
+   Standard Clinical Document Styles (Prescription & Medical Certificate)
+   ========================================================================== */
+
+.std-doc {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #111827;
+  background-color: #ffffff;
+  line-height: 1.5;
+  font-size: 10pt;
+  margin: 0 auto;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Screen Preview Sizing & Card Appearance */
+@media screen {
+  .std-doc {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm 18mm;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    margin-bottom: 24px;
+    border-radius: 4px;
+    border: 1px solid #d1d5db;
+  }
+
+  .std-doc.size-letter {
+    width: 215.9mm;
+    min-height: 279.4mm;
+  }
+}
+
+/* Print Rules */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm 15mm 12mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .std-doc {
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .std-doc-toolbar,
+  .pmr-toolbar-wrapper,
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* 1. Header & Letterhead */
+.std-doc-header {
+  border-bottom: 2px solid #0f766e;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.std-doc-branding {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+}
+
+.std-doc-logo {
+  max-width: 64px;
+  max-height: 64px;
+  object-fit: contain;
+}
+
+.std-doc-logo-placeholder {
+  font-size: 36px;
+  line-height: 1;
+  color: #0f766e;
+}
+
+.std-doc-facility-name {
+  font-size: 15pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #0f766e;
+  margin: 0 0 2px;
+  letter-spacing: 0.5px;
+}
+
+.std-doc-facility-address {
+  font-size: 8.5pt;
+  color: #4b5563;
+  margin: 0 0 2px;
+}
+
+.std-doc-facility-contact {
+  font-size: 8pt;
+  color: #6b7280;
+  margin: 0;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.std-doc-doctor-card {
+  text-align: right;
+  border-left: 1px solid #e5e7eb;
+  padding-left: 16px;
+  min-width: 200px;
+}
+
+.std-doc-doctor-name {
+  font-size: 12pt;
+  font-weight: 700;
+  color: #111827;
+}
+
+.std-doc-doctor-spec {
+  font-size: 9pt;
+  font-weight: 600;
+  color: #0f766e;
+  margin-top: 1px;
+}
+
+.std-doc-doctor-ids {
+  font-size: 7.5pt;
+  color: #4b5563;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* 2. Patient Information Strip */
+.std-doc-patient-bar {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+}
+
+.std-doc-patient-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.std-doc-col-span-2 {
+  grid-column: span 2;
+}
+
+.std-doc-col-span-full {
+  grid-column: 1 / -1;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.std-doc-label {
+  display: block;
+  font-size: 7pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 1px;
+}
+
+.std-doc-value {
+  display: block;
+  font-size: 9pt;
+  color: #1e293b;
+}
+
+.std-doc-value-bold {
+  font-weight: 700;
+  font-size: 10pt;
+}
+
+.std-doc-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* 3. Prescription Specifics */
+.std-rx-body {
+  position: relative;
+  min-height: 480px;
+  padding-top: 8px;
+}
+
+.std-rx-symbol {
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 38pt;
+  font-weight: bold;
+  color: #0f766e;
+  line-height: 1;
+  margin-bottom: 16px;
+  user-select: none;
+}
+
+.std-rx-template-body {
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background-color: #f0fdfa;
+  border-left: 3px solid #0f766e;
+  border-radius: 0 4px 4px 0;
+  font-size: 9.5pt;
+  color: #134e4a;
+}
+
+.std-rx-items {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.std-rx-item {
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 14px;
+}
+
+.std-rx-item:last-child {
+  border-bottom: none;
+}
+
+.std-rx-item-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.std-rx-num {
+  font-weight: 700;
+  color: #0f766e;
+  font-size: 11pt;
+  min-width: 20px;
+}
+
+.std-rx-drug-name {
+  font-size: 12pt;
+  font-weight: 800;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.25px;
+  flex: 1;
+}
+
+.std-rx-quantity {
+  font-size: 10.5pt;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.std-rx-item-details {
+  margin-left: 28px;
+  margin-top: 4px;
+}
+
+.std-rx-sig {
+  font-size: 10pt;
+  color: #1e293b;
+  margin-bottom: 3px;
+}
+
+.std-rx-item-notes {
+  font-size: 8.5pt;
+  font-style: italic;
+  color: #64748b;
+}
+
+.std-rx-special-notes {
+  margin-top: 24px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 8.5pt;
+}
+
+.std-rx-special-notes p {
+  margin: 4px 0 0;
+}
+
+/* 4. Medical Certificate Specifics */
+.std-cert-title-container {
+  text-align: center;
+  margin: 18px 0 24px;
+}
+
+.std-cert-title {
+  font-size: 18pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #0f766e;
+  margin: 0;
+}
+
+.std-cert-date {
+  font-size: 8.5pt;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.std-cert-salutation {
+  font-size: 11pt;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #1e293b;
+  margin-bottom: 18px;
+}
+
+.std-cert-body {
+  font-size: 11pt;
+  line-height: 1.7;
+  color: #1e293b;
+  min-height: 380px;
+}
+
+.std-cert-default-content p {
+  margin-bottom: 14px;
+}
+
+.std-cert-statement {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-style: italic;
+}
+
+.std-cert-disclaimer-body {
+  font-size: 9.5pt;
+  color: #64748b;
+  margin-top: 24px;
+}
+
+.std-cert-meta-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px 14px;
+  margin-bottom: 24px;
+  font-size: 8.5pt;
+}
+
+.std-cert-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* 5. Footer & Signature Block */
+.std-doc-footer {
+  border-top: 2px solid #e2e8f0;
+  padding-top: 20px;
+  margin-top: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  break-inside: avoid;
+}
+
+.std-doc-compliance {
+  flex: 1;
+  max-width: 380px;
+}
+
+.std-doc-compliance-title {
+  font-size: 7.5pt;
+  font-weight: 800;
+  color: #0f766e;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+
+.std-doc-compliance-text {
+  font-size: 7pt;
+  line-height: 1.35;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.std-doc-security-hash {
+  font-size: 6.5pt;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #94a3b8;
+}
+
+.std-doc-signature-block {
+  text-align: right;
+  min-width: 220px;
+}
+
+.std-doc-signature-space {
+  height: 48px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.std-doc-digital-badge {
+  font-size: 6.5pt;
+  font-weight: 700;
+  color: #0f766e;
+  border: 1px dashed #0f766e;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background-color: #f0fdfa;
+  letter-spacing: 0.5px;
+}
+
+.std-doc-signature-line {
+  border-top: 1.5px solid #0f172a;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.std-doc-doctor-signoff {
+  font-size: 8pt;
+  color: #334155;
+}
+
+.std-doc-doctor-signoff strong {
+  display: block;
+  font-size: 10pt;
+  color: #0f172a;
+}

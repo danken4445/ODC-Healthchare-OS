@@ -59,9 +59,23 @@ export function PmrToolbar({
   const [createdShare, setCreatedShare] = useState<PmrShareLinkSummary | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isSavingPdf, setIsSavingPdf] = useState(false);
 
   function handlePrint() {
     window.print();
+  }
+
+  async function handleSavePdf() {
+    if (onSavePdf) {
+      setIsSavingPdf(true);
+      try {
+        await onSavePdf();
+      } finally {
+        setIsSavingPdf(false);
+      }
+    } else {
+      handlePrint();
+    }
   }
 
   function handleSizeToggle(size: PmrPageSize) {
@@ -172,10 +186,15 @@ export function PmrToolbar({
           {/* Save PDF */}
           <button
             type="button"
-            onClick={() => onSavePdf ? onSavePdf() : handlePrint()}
-            style={outlineBtnStyle}
+            onClick={() => void handleSavePdf()}
+            disabled={isSavingPdf}
+            style={{
+              ...outlineBtnStyle,
+              opacity: isSavingPdf ? 0.7 : 1,
+              cursor: isSavingPdf ? "wait" : "pointer",
+            }}
           >
-            💾 Save PDF
+            {isSavingPdf ? "⏳ Saving PDF..." : "💾 Save PDF"}
           </button>
 
           {/* Share Link */}

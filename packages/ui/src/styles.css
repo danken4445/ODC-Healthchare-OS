@@ -1,4 +1,5 @@
 @import "./pmr/pmr-print.css";
+@import "./documents/clinical-document.css";
 :root,
 [data-odyssey-theme="default"] {
   --odyssey-background: #f6f8fc;

@@ -898,17 +898,30 @@ export default function EncounterRecordingPage() {
     setStatus("Developer debug mode disabled.");
   }
 
-  function previewPrescription(prescription: MedicationRequestSummary) {
+  function previewPrescription(prescriptionOrList: MedicationRequestSummary | MedicationRequestSummary[]) {
+    const list = Array.isArray(prescriptionOrList) ? prescriptionOrList : [prescriptionOrList];
+    const first = list[0];
+    if (!first) return;
+
+    const body = list
+      .map((p, idx) => {
+        const prefix = list.length > 1 ? `℞ ${idx + 1}. ` : "Medication: ";
+        return [
+          `${prefix}${p.medication_display ?? p.medication_code}`,
+          `Directions: ${dosageText(p.dosage_instruction) || "Not recorded"}`,
+          p.note ? `Note: ${p.note}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      })
+      .join("\n\n");
+
     const opened = openExportPreview({
       title: "Medical Prescription",
       patientName: patient?.displayName ?? "Patient",
       patientDetails,
-      issuedAt: dateTime(prescription.authored_on),
-      body: [
-        `Medication: ${prescription.medication_display ?? prescription.medication_code}`,
-        `Directions: ${dosageText(prescription.dosage_instruction) || "Not recorded"}`,
-        prescription.note ? `Note: ${prescription.note}` : "",
-      ].filter(Boolean).join("\n\n"),
+      issuedAt: dateTime(first.authored_on),
+      body,
     });
     if (!opened) setStatus("Allow pop-ups to preview and export the prescription.");
   }
@@ -1403,10 +1416,129 @@ export default function EncounterRecordingPage() {
                             onChange={(e) => setRxNote(e.target.value)}
                           />
                         </Field>
-                        {additionalPrescriptionLines.map((line, index) => <fieldset className="encounter-field-full template-issued-medication" key={`${line.name}-${index}`}><legend>Additional medication {index + 2}</legend><Field label="Medication"><Input value={line.name} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} required /></Field><Field label="Dosage and directions"><Input value={[line.dosage, line.frequency, line.duration].filter(Boolean).join(" · ")} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, dosage: event.target.value, frequency: "", duration: "" } : item))} required /></Field><Field label="Note"><Input value={line.notes} onChange={(event) => setAdditionalPrescriptionLines((lines) => lines.map((item, itemIndex) => itemIndex === index ? { ...item, notes: event.target.value } : item))} /></Field></fieldset>)}
+                        {additionalPrescriptionLines.map((line, index) => (
+                          <fieldset
+                            className="encounter-field-full template-issued-medication"
+                            key={`${line.name}-${index}`}
+                            style={{
+                              position: "relative",
+                              border: "1px dashed var(--odyssey-border, #cbd5e1)",
+                              borderRadius: "8px",
+                              padding: "10px 12px",
+                              marginBottom: "8px",
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                              <legend style={{ fontWeight: 600, color: "#0f766e", fontSize: "0.875rem" }}>
+                                Additional medication #{index + 2}
+                              </legend>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setAdditionalPrescriptionLines((lines) =>
+                                    lines.filter((_, itemIndex) => itemIndex !== index)
+                                  )
+                                }
+                                style={{ color: "#b91c1c", fontSize: "0.8rem", padding: "2px 8px" }}
+                              >
+                                ✕ Remove
+                              </Button>
+                            </div>
+                            <Field label="Medication">
+                              <Input
+                                value={line.name}
+                                placeholder="Medication name and strength"
+                                onChange={(event) =>
+                                  setAdditionalPrescriptionLines((lines) =>
+                                    lines.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, name: event.target.value } : item
+                                    )
+                                  )
+                                }
+                                required
+                              />
+                            </Field>
+                            <Field label="Dosage and directions">
+                              <Input
+                                value={[line.dosage, line.frequency, line.duration].filter(Boolean).join(" · ")}
+                                placeholder="Dosage, frequency, duration"
+                                onChange={(event) =>
+                                  setAdditionalPrescriptionLines((lines) =>
+                                    lines.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? { ...item, dosage: event.target.value, frequency: "", duration: "" }
+                                        : item
+                                    )
+                                  )
+                                }
+                                required
+                              />
+                            </Field>
+                            <Field label="Note">
+                              <Input
+                                value={line.notes ?? ""}
+                                placeholder="Optional instruction (e.g. after meals)"
+                                onChange={(event) =>
+                                  setAdditionalPrescriptionLines((lines) =>
+                                    lines.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, notes: event.target.value } : item
+                                    )
+                                  )
+                                }
+                              />
+                            </Field>
+                          </fieldset>
+                        ))}
+                        <div style={{ marginTop: "6px", marginBottom: "10px" }}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setAdditionalPrescriptionLines((lines) => [
+                                ...lines,
+                                { name: "", dosage: "", frequency: "", duration: "", notes: "" },
+                              ])
+                            }
+                            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                          >
+                            ➕ Add another medication to prescription
+                          </Button>
+                        </div>
                         <Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button>
                       </form>
-                      <CurrentRecords title="Issued prescriptions" items={records.medicationRequests.filter((item) => item.encounter_id === encounterId)} render={(item) => <><strong>{item.medication_display ?? item.medication_code}</strong><p>{dosageText(item.dosage_instruction)}</p>{item.note && <p>{item.note}</p>}<Button className="encounter-export-button" onClick={() => previewPrescription(item)} size="sm" type="button" variant="outline">Preview and export</Button></>} />
+                      {(() => {
+                        const encounterMeds = records.medicationRequests.filter((item) => item.encounter_id === encounterId);
+                        if (!encounterMeds.length) return null;
+                        return (
+                          <div className="encounter-current-records">
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+                              <h4 style={{ margin: 0 }}>Issued prescription ({encounterMeds.length} {encounterMeds.length === 1 ? "medication" : "medications"})</h4>
+                              <Button
+                                className="encounter-export-button"
+                                onClick={() => previewPrescription(encounterMeds)}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                Preview and export prescription
+                              </Button>
+                            </div>
+                            <article>
+                              {encounterMeds.map((item, idx) => (
+                                <div key={item.id} style={{ marginBottom: idx < encounterMeds.length - 1 ? "8px" : "0", paddingBottom: idx < encounterMeds.length - 1 ? "8px" : "0", borderBottom: idx < encounterMeds.length - 1 ? "1px solid var(--odyssey-border, #e2e8f0)" : "none" }}>
+                                  <strong>{encounterMeds.length > 1 ? `${idx + 1}. ` : ""}{item.medication_display ?? item.medication_code}</strong>
+                                  <p>{dosageText(item.dosage_instruction)}</p>
+                                  {item.note && <p style={{ fontSize: "0.85rem", color: "#64748b" }}>{item.note}</p>}
+                                </div>
+                              ))}
+                            </article>
+                          </div>
+                        );
+                      })()}
                     </section>
                   )}
                   {canPrescribe && activeAction === "certificate" && (

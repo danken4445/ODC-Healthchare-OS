@@ -23,6 +23,7 @@ import {
   type ClinicalDocumentTemplate,
   type ClinicalDocumentTemplateInput,
   type ClinicalDocumentTemplateType,
+  type PatientDocumentTemplate,
   type Icd10ReferenceCondition,
   type EncounterTemplateContext,
   type EncounterSummary,
@@ -231,8 +232,12 @@ export const availableBookingSlotSchema = z.object({
   practitioner_role_id: z.string().uuid(),
   clinic_service_id: z.string().uuid(),
   service_type: z.string().nullable(),
-  start_at: z.string().datetime(),
-  end_at: z.string().datetime(),
+  // PostgREST may serialize PostgreSQL timestamptz values with an explicit
+  // offset (for example, "+00:00") instead of a trailing "Z". Both forms
+  // represent an absolute instant and are valid inputs to Date/Intl on the
+  // patient booking UI.
+  start_at: z.iso.datetime({ offset: true }),
+  end_at: z.iso.datetime({ offset: true }),
   display_name: z.string().min(1),
   specialty: z.string().nullable(),
   title: z.string().nullable(),
@@ -264,9 +269,9 @@ const encounterSummaryColumns =
 const observationSummaryColumns =
   "id, organization_id, patient_id, encounter_id, status, code, code_display, effective_at, issued_at, value, value_unit, supersedes_id, diagnostic_report_id, reference_range, note";
 const medicationRequestSummaryColumns =
-  "id, organization_id, patient_id, encounter_id, status, medication_code, medication_display, authored_on, dosage_instruction, note";
+  "id, organization_id, patient_id, encounter_id, requester_practitioner_id, status, medication_code, medication_display, authored_on, dosage_instruction, note, template_id, template_version";
 const documentReferenceSummaryColumns =
-  "id, organization_id, patient_id, encounter_id, status, type_code, type_display, date_at, description, content_title";
+  "id, organization_id, patient_id, encounter_id, author_practitioner_id, status, type_code, type_display, date_at, description, content_title, template_id, template_version";
 const departmentSummaryColumns =
   "id, organization_id, code, name, description, active";
 const inventoryItemSummaryColumns =
@@ -4559,6 +4564,119 @@ export async function saveCompanyCoverage(
   return error ? failure(error) : success(data as unknown as string);
 }
 
-export * from "./pmr-builder.ts";
-export * from "./professional-fees.ts";
-export * from "./queue-settings.ts";
+export * from "./pmr-builder";
+export * from "./professional-fees";
+export * from "./queue-settings";
+
+export interface PractitionerProfileSummary {
+  id: string;
+  organizationId: string;
+  displayName: string;
+  title?: string;
+  specialty?: string;
+  licenseNumber?: string;
+  prcNumber?: string;
+  ptrNumber?: string;
+}
+
+export async function getOrganizationPractitioners(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<PractitionerProfileSummary[]>> {
+  const { data, error } = await client
+    .from("practitioners")
+    .select("id, organization_id, name, identifier, qualification")
+    .eq("organization_id", organizationId)
+    .eq("active", true);
+  if (error) return failure(error);
+  return success(
+    (data ?? []).map((row) => {
+      const idents = Array.isArray(row.identifier)
+        ? (row.identifier as Array<{ system?: string; value?: string }>)
+        : [];
+      const quals = Array.isArray(row.qualification)
+        ? (row.qualification as Array<{ code?: { text?: string } }>)
+        : [];
+      const licenseVal =
+        idents.find((i) => i.system === "license" || i.system === "license_no")?.value ??
+        idents.find((i) => i.system?.toLowerCase().includes("lic"))?.value ??
+        (idents[0]?.value ? idents[0].value : "");
+      const prcVal =
+        idents.find((i) => i.system === "prc" || i.system === "prc_no")?.value ??
+        idents.find((i) => i.system?.toLowerCase().includes("prc"))?.value ??
+        (idents[1]?.value ? idents[1].value : "");
+      const ptrVal =
+        idents.find((i) => i.system === "ptr" || i.system === "ptr_no")?.value ??
+        idents.find((i) => i.system?.toLowerCase().includes("ptr"))?.value ??
+        "";
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        displayName: getHumanNameDisplay(row.name),
+        title: idents.find((i) => i.system === "title")?.value ?? "MD",
+        specialty: quals[0]?.code?.text ?? "General Practice",
+        licenseNumber: licenseVal,
+        prcNumber: prcVal,
+        ptrNumber: ptrVal,
+      };
+    }),
+  );
+}
+
+export async function getPatientDocumentTemplate(
+  client: SupabaseClient<Database>,
+  templateId: string,
+  templateVersion?: number | null,
+): Promise<SupabaseResult<PatientDocumentTemplate | null>> {
+  const { data, error } = await client.rpc(
+    "get_patient_document_template" as never,
+    {
+      p_template_id: templateId,
+      p_template_version: templateVersion ?? null,
+    } as never,
+  );
+  if (error) return failure(error);
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (!row) return success(null);
+  return success({
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    category: row.category as "prescription" | "medical_certificate",
+    name: String(row.name ?? "Clinical Template"),
+    conditionCode: row.condition_code ? String(row.condition_code) : null,
+    conditionDisplay: row.condition_display ? String(row.condition_display) : null,
+    content: asTemplateContent(row.structured_body),
+    version: Number(row.version ?? 1),
+  });
+}
+
+export async function getPatientDefaultTemplate(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  type: "prescription" | "medical_certificate",
+  conditionCode?: string | null,
+): Promise<SupabaseResult<PatientDocumentTemplate | null>> {
+  const { data, error } = await client.rpc(
+    "get_patient_default_template" as never,
+    {
+      p_organization_id: organizationId,
+      p_type: type,
+      p_condition_code: conditionCode ?? null,
+    } as never,
+  );
+  if (error) return failure(error);
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (!row) return success(null);
+  return success({
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    category: row.category as "prescription" | "medical_certificate",
+    name: String(row.name ?? "Clinical Template"),
+    conditionCode: row.condition_code ? String(row.condition_code) : null,
+    conditionDisplay: row.condition_display ? String(row.condition_display) : null,
+    content: asTemplateContent(row.structured_body),
+    version: Number(row.version ?? 1),
+  });
+}

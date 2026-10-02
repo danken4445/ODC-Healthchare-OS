@@ -6428,24 +6428,15 @@ export type Database = {
         }
         Returns: string
       }
-      tag_inventory_usage:
-        | {
-            Args: {
-              p_encounter_id: string
-              p_stock_id: string
-              p_quantity: number
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_encounter_id: string
-              p_stock_id: string
-              p_quantity: number
-              p_department_id: string
-            }
-            Returns: string
-          }
+      tag_inventory_usage: {
+        Args: {
+          p_encounter_id: string
+          p_stock_id: string
+          p_quantity: number
+          p_department_id: string | null
+        }
+        Returns: string
+      }
       transfer_department_stock: {
         Args: {
           p_item_id: string
@@ -6715,4 +6706,3 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-

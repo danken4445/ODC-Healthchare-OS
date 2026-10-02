@@ -26,13 +26,18 @@ import {
   getPatientInvoices,
   subscribeToInvoiceUpdates,
   getOrganizationBranding,
+  getOrganizationFacilityClassification,
   isOrganizationModuleEnabled,
   buildPmrDocument,
   createPmrShareLink,
+  getPatientDocumentTemplate,
+  getPatientDefaultTemplate,
+  getOrganizationPractitioners,
 } from "@odyssey/supabase-client";
 import type {
   AvailableBookingSlot,
   BookablePractitioner,
+  PractitionerProfileSummary,
 } from "@odyssey/supabase-client";
 import type {
   AppointmentDeliveryMode,
@@ -46,6 +51,10 @@ import type {
   AnatomyView,
   CoverageSummary,
   PmrDocument,
+  PatientDocumentTemplate,
+  MedicationRequestSummary,
+  DocumentReferenceSummary,
+  EncounterSummary,
 } from "@odyssey/types";
 import { getEncounterRegionDiagnoses } from "@odyssey/types";
 import {
@@ -68,7 +77,13 @@ import {
   PmrDocumentView,
   PmrToolbar,
   type PmrEncounterOption,
+  StandardPrescriptionDocument,
+  StandardMedicalCertificateDocument,
+  type PrescriptionItem,
 } from "@odyssey/ui";
+import { ClinicalDocumentModal } from "./components/ClinicalDocumentModal";
+import { exportClinicalDocumentToPdf } from "./lib/clinical-document-pdf-export";
+import { exportPmrDocumentToPdf } from "./lib/pmr-pdf-export";
 import Image from "next/image";
 import {
   useEffect,
@@ -127,6 +142,7 @@ export default function Home() {
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [isGovernmentNoBilling, setIsGovernmentNoBilling] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<PatientTab>("all");
   const [bookingSlots, setBookingSlots] = useState<AvailableBookingSlot[]>([]);
   const [bookablePractitioners, setBookablePractitioners] = useState<
@@ -191,6 +207,237 @@ export default function Home() {
       setPmrError(err instanceof Error ? err.message : "Failed to load document.");
     } finally {
       setPmrLoading(false);
+    }
+  }
+
+  const [practitioners, setPractitioners] = useState<PractitionerProfileSummary[]>([]);
+  const [activeClinicalDoc, setActiveClinicalDoc] = useState<{
+    title: string;
+    filename: string;
+    node: React.ReactNode;
+  } | null>(null);
+  const [docActionLoadingId, setDocActionLoadingId] = useState<string | null>(null);
+
+  function resolvePractitioner(practitionerId?: string | null): PractitionerProfileSummary {
+    if (practitionerId) {
+      const match = practitioners.find((p) => p.id === practitionerId);
+      if (match) return match;
+    }
+    if (practitioners.length > 0) return practitioners[0];
+    return {
+      id: "doc-generic",
+      organizationId: organizationId ?? "",
+      displayName: "Attending Physician, MD",
+      title: "MD",
+      specialty: "General Medicine / Family Medicine",
+      licenseNumber: "PRC-000000",
+      prcNumber: "PRC-000000",
+      ptrNumber: "PTR-000000",
+    };
+  }
+
+  async function resolveTemplate(
+    templateId?: string | null,
+    templateVersion?: number | null,
+    category?: "prescription" | "medical_certificate",
+    conditionCode?: string | null
+  ): Promise<PatientDocumentTemplate | null> {
+    if (!organizationId) return null;
+    const client = createBrowserSupabaseClient();
+    if (templateId) {
+      const tplResult = await getPatientDocumentTemplate(client, templateId, templateVersion);
+      if (!tplResult.error && tplResult.data) return tplResult.data;
+    }
+    if (category) {
+      const defResult = await getPatientDefaultTemplate(client, organizationId, category, conditionCode);
+      if (!defResult.error && defResult.data) return defResult.data;
+    }
+    return null;
+  }
+
+  async function handleOpenPrescription(
+    itemsOrItem: MedicationRequestSummary[] | MedicationRequestSummary,
+    encounter: EncounterSummary
+  ) {
+    const medList = Array.isArray(itemsOrItem) ? itemsOrItem : [itemsOrItem];
+    if (!medList.length) return;
+    const firstItem = medList[0];
+
+    setDocActionLoadingId(`rx-encounter-${encounter.id}`);
+    try {
+      const doctor = resolvePractitioner(firstItem.requester_practitioner_id);
+      const conditionCode =
+        encounter.diagnosis &&
+        typeof encounter.diagnosis === "object" &&
+        !Array.isArray(encounter.diagnosis) &&
+        typeof (encounter.diagnosis as Record<string, unknown>).code === "string"
+          ? String((encounter.diagnosis as Record<string, unknown>).code)
+          : null;
+
+      const template = await resolveTemplate(
+        firstItem.template_id,
+        firstItem.template_version,
+        "prescription",
+        conditionCode
+      );
+
+      const rxItems: PrescriptionItem[] = medList.map((item) => {
+        const dosageText =
+          Array.isArray(item.dosage_instruction) &&
+          typeof item.dosage_instruction[0] === "object" &&
+          item.dosage_instruction[0] &&
+          !Array.isArray(item.dosage_instruction[0]) &&
+          typeof item.dosage_instruction[0].text === "string"
+            ? item.dosage_instruction[0].text
+            : "Take as directed by physician";
+        return {
+          medication: item.medication_display ?? "Prescribed Medication",
+          dosage: dosageText,
+          notes: item.note ?? undefined,
+        };
+      });
+
+      const diagnosisStr = jsonDisplay(encounter.diagnosis) ?? undefined;
+
+      const clinicProps = {
+        name: selectedClinic?.name ?? branding?.displayName ?? "Odyssey Health Clinic",
+        address: selectedClinic?.address ? (typeof selectedClinic.address === "string" ? selectedClinic.address : jsonDisplay(selectedClinic.address) ?? undefined) : undefined,
+        logoUrl: branding?.logoUrl,
+      };
+
+      const doctorProps = {
+        name: doctor.displayName,
+        title: doctor.title ?? "MD",
+        specialty: doctor.specialty ?? "General Practice",
+        licenseNo: doctor.licenseNumber ?? undefined,
+        prcNo: doctor.prcNumber ?? undefined,
+        ptrNo: doctor.ptrNumber ?? undefined,
+      };
+
+      const patientProps = {
+        name: currentPatient?.displayName ?? signedInAs ?? "Patient",
+        dob: currentPatient?.birth_date ?? undefined,
+        gender: currentPatient?.gender ?? undefined,
+      };
+
+      const dateStr = encounter.period_start
+        ? new Date(encounter.period_start).toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : new Date().toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+
+      const primaryMedName = firstItem.medication_display ?? "Prescription";
+      const fileTitle =
+        medList.length === 1
+          ? `Prescription-${primaryMedName.replace(/[^a-z0-9]+/gi, "-")}.pdf`
+          : `Prescription-Regimen-${primaryMedName.replace(/[^a-z0-9]+/gi, "-")}.pdf`;
+
+      setActiveClinicalDoc({
+        title:
+          medList.length === 1
+            ? `Prescription · ${primaryMedName}`
+            : `Prescription Regimen (${medList.length} medications)`,
+        filename: fileTitle,
+        node: (
+          <StandardPrescriptionDocument
+            clinic={clinicProps}
+            doctor={doctorProps}
+            patient={patientProps}
+            date={dateStr}
+            encounterId={encounter.id}
+            diagnosisSummary={diagnosisStr}
+            items={rxItems}
+            template={template ? { title: template.name, html: template.content.html } : null}
+            notes={medList.map((m) => m.note).filter(Boolean).join(" · ") || null}
+          />
+        ),
+      });
+    } finally {
+      setDocActionLoadingId(null);
+    }
+  }
+
+  async function handleOpenCertificate(
+    item: DocumentReferenceSummary,
+    encounter: EncounterSummary
+  ) {
+    setDocActionLoadingId(`cert-${item.id}`);
+    try {
+      const title = item.content_title ?? item.type_display ?? "Medical Certificate";
+      const doctor = resolvePractitioner(item.author_practitioner_id);
+      const conditionCode =
+        encounter.diagnosis &&
+        typeof encounter.diagnosis === "object" &&
+        !Array.isArray(encounter.diagnosis) &&
+        typeof (encounter.diagnosis as Record<string, unknown>).code === "string"
+          ? String((encounter.diagnosis as Record<string, unknown>).code)
+          : null;
+
+      const template = await resolveTemplate(
+        item.template_id,
+        item.template_version,
+        "medical_certificate",
+        conditionCode
+      );
+
+      const clinicProps = {
+        name: selectedClinic?.name ?? branding?.displayName ?? "Odyssey Health Clinic",
+        address: selectedClinic?.address ? (typeof selectedClinic.address === "string" ? selectedClinic.address : jsonDisplay(selectedClinic.address) ?? undefined) : undefined,
+        logoUrl: branding?.logoUrl,
+      };
+
+      const doctorProps = {
+        name: doctor.displayName,
+        title: doctor.title ?? "MD",
+        specialty: doctor.specialty ?? "General Practice",
+        licenseNo: doctor.licenseNumber ?? undefined,
+        prcNo: doctor.prcNumber ?? undefined,
+        ptrNo: doctor.ptrNumber ?? undefined,
+      };
+
+      const patientProps = {
+        name: currentPatient?.displayName ?? signedInAs ?? "Patient",
+        dob: currentPatient?.birth_date ?? undefined,
+        gender: currentPatient?.gender ?? undefined,
+      };
+
+      const dateStr = item.date_at
+        ? new Date(item.date_at).toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : new Date().toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+
+      setActiveClinicalDoc({
+        title,
+        filename: `${title.replace(/[^a-z0-9]+/gi, "-")}.pdf`,
+        node: (
+          <StandardMedicalCertificateDocument
+            clinic={clinicProps}
+            doctor={doctorProps}
+            patient={patientProps}
+            date={dateStr}
+            encounterId={encounter.id}
+            title={title.toUpperCase()}
+            statement={item.description ?? "This certifies that the patient was examined and evaluated."}
+            diagnosisSummary={jsonDisplay(encounter.diagnosis) ?? undefined}
+            template={template ? { title: template.name, html: template.content.html } : null}
+          />
+        ),
+      });
+    } finally {
+      setDocActionLoadingId(null);
     }
   }
 
@@ -273,6 +520,10 @@ export default function Home() {
       );
       return;
     }
+    const pracResult = await getOrganizationPractitioners(client, clinicId);
+    if (!pracResult.error && pracResult.data) {
+      setPractitioners(pracResult.data);
+    }
     await loadInvoices(clinicId);
   }
 
@@ -287,6 +538,7 @@ export default function Home() {
   function selectClinic(clinicId: string) {
     setOrganizationId(clinicId);
     setRecords(null);
+    setPractitioners([]);
     setSelectedBookingServiceId(null);
     setSelectedPractitioner(null);
     setBookablePractitioners([]);
@@ -319,8 +571,23 @@ export default function Home() {
 
   useEffect(() => {
     if (!organizationId) return;
+    setIsGovernmentNoBilling(null);
     void loadPublicPortal(organizationId);
-    if (signedInAs) void loadPatientDashboard(organizationId);
+    if (signedInAs) {
+      void loadPatientDashboard(organizationId);
+      void (async () => {
+        const result = await getOrganizationFacilityClassification(
+          createBrowserSupabaseClient(),
+          organizationId,
+        );
+        if (!result.error) {
+          setIsGovernmentNoBilling(
+            result.data?.isGovernmentNoBilling === true ||
+              result.data?.defaultPayorType === "government_subsidized",
+          );
+        }
+      })();
+    }
   }, [organizationId, signedInAs]);
 
   useEffect(() => {
@@ -600,6 +867,8 @@ export default function Home() {
     }
     setSignedInAs(null);
     setRecords(null);
+    setPractitioners([]);
+    setActiveClinicalDoc(null);
     setLiveStatus("Offline");
     setStatus("Signed out.");
   }
@@ -880,7 +1149,9 @@ export default function Home() {
                     <div className="doctor-card-grid">
                       {bookablePractitioners.map((practitioner) => {
                         const credential = [practitioner.title, practitioner.specialty].filter(Boolean).join(" · ");
-                        const price = new Intl.NumberFormat(undefined, { style: "currency", currency: practitioner.currency }).format(practitioner.total_price);
+                        const price = isGovernmentNoBilling !== false
+                          ? null
+                          : new Intl.NumberFormat(undefined, { style: "currency", currency: practitioner.currency }).format(practitioner.total_price);
                         return (
                           <button
                             aria-pressed={selectedPractitioner?.practitioner_role_id === practitioner.practitioner_role_id}
@@ -893,7 +1164,7 @@ export default function Home() {
                             <span className="doctor-card__content">
                               <strong>{practitioner.display_name}</strong>
                               {credential ? <span>{credential}</span> : <span>Clinic practitioner</span>}
-                              <b>{price} total</b>
+                              {price ? <b>{price} total</b> : null}
                             </span>
                           </button>
                         );
@@ -1199,27 +1470,103 @@ export default function Home() {
                               )}
                             </div>
                           ))}
-                        {records.medicationRequests
-                          .filter((item) => item.encounter_id === encounter.id)
-                          .map((item) => (
-                            <div key={item.id}>
-                              <strong>
-                                Prescription: {item.medication_display}
-                              </strong>
-                              <p>
-                                {Array.isArray(item.dosage_instruction) &&
-                                typeof item.dosage_instruction[0] ===
-                                  "object" &&
-                                item.dosage_instruction[0] &&
-                                !Array.isArray(item.dosage_instruction[0]) &&
-                                typeof item.dosage_instruction[0].text ===
-                                  "string"
-                                  ? item.dosage_instruction[0].text
-                                  : "Directions recorded"}
-                              </p>
-                              {item.note && <p>{item.note}</p>}
+                        {(() => {
+                          const encounterMedications = records.medicationRequests.filter(
+                            (item) => item.encounter_id === encounter.id,
+                          );
+                          if (!encounterMedications.length) return null;
+
+                          return (
+                            <div
+                              className="clinical-prescription-regimen-card"
+                              style={{
+                                padding: "12px 14px",
+                                border: "1px solid var(--odyssey-border, #cbd5e1)",
+                                borderRadius: "8px",
+                                background: "#f8fafc",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                  marginBottom: "8px",
+                                  borderBottom: "1px solid #e2e8f0",
+                                  paddingBottom: "8px",
+                                }}
+                              >
+                                <div>
+                                  <strong style={{ color: "#0f766e", fontSize: "0.95rem" }}>
+                                    Prescription: {encounterMedications[0].medication_display}
+                                    {encounterMedications.length > 1
+                                      ? ` (+ ${encounterMedications.length - 1} more)`
+                                      : ""}
+                                  </strong>
+                                  <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                                    {encounterMedications.length === 1
+                                      ? "Prescribed medication"
+                                      : `Complete prescription regimen (${encounterMedications.length} medications)`}
+                                  </p>
+                                </div>
+                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void handleOpenPrescription(encounterMedications, encounter)}
+                                    disabled={docActionLoadingId === `rx-encounter-${encounter.id}`}
+                                  >
+                                    {docActionLoadingId === `rx-encounter-${encounter.id}`
+                                      ? "Loading…"
+                                      : "📄 View Prescription (PDF)"}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div style={{ display: "grid", gap: "6px" }}>
+                                {encounterMedications.map((item, idx) => (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      padding: "6px 10px",
+                                      background: "#ffffff",
+                                      borderRadius: "6px",
+                                      border: "1px solid #e2e8f0",
+                                    }}
+                                  >
+                                    <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                                      {encounterMedications.length > 1 && (
+                                        <span style={{ fontWeight: 700, color: "#0f766e", fontSize: "0.85rem" }}>
+                                          {idx + 1}.
+                                        </span>
+                                      )}
+                                      <strong style={{ fontSize: "0.875rem", color: "#0f172a" }}>
+                                        {item.medication_display ?? "Medication"}
+                                      </strong>
+                                    </div>
+                                    <p style={{ margin: "2px 0 0", fontSize: "0.85rem", color: "#334155" }}>
+                                      {Array.isArray(item.dosage_instruction) &&
+                                      typeof item.dosage_instruction[0] === "object" &&
+                                      item.dosage_instruction[0] &&
+                                      !Array.isArray(item.dosage_instruction[0]) &&
+                                      typeof item.dosage_instruction[0].text === "string"
+                                        ? item.dosage_instruction[0].text
+                                        : "Directions recorded"}
+                                    </p>
+                                    {item.note && (
+                                      <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                                        Note: {item.note}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          ))}
+                          );
+                        })()}
                         {records.documentReferences
                           .filter((item) => item.encounter_id === encounter.id)
                           .map((item) => {
@@ -1228,22 +1575,50 @@ export default function Home() {
                               item.type_display ??
                               "Medical certificate";
                             return (
-                              <div key={item.id}>
-                                <strong>{title}</strong>
-                                <p>{item.description}</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    downloadClinicalDocument(
-                                      title,
-                                      item.description ?? "",
-                                      item.date_at,
-                                    )
-                                  }
-                                >
-                                  Download certificate
-                                </Button>
+                              <div
+                                key={item.id}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                  padding: "8px 12px",
+                                  border: "1px solid var(--odyssey-border, #e2e8f0)",
+                                  borderRadius: "8px",
+                                  background: "#f8fafc",
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                <div>
+                                  <strong>{title}</strong>
+                                  <p style={{ margin: "4px 0 0" }}>{item.description}</p>
+                                </div>
+                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void handleOpenCertificate(item, encounter)}
+                                    disabled={docActionLoadingId === `cert-${item.id}`}
+                                  >
+                                    {docActionLoadingId === `cert-${item.id}`
+                                      ? "Loading…"
+                                      : "📄 View Certificate (PDF)"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      downloadClinicalDocument(
+                                        title,
+                                        item.description ?? "",
+                                        item.date_at,
+                                      )
+                                    }
+                                  >
+                                    Download certificate
+                                  </Button>
+                                </div>
                               </div>
                             );
                           })}
@@ -1595,8 +1970,16 @@ export default function Home() {
               });
               setPmrDocument(updated);
             }}
-            onSavePdf={() => {
-              window.print();
+            onSavePdf={async () => {
+              const element = document.querySelector<HTMLElement>(".pmr-document-container");
+              if (!element) {
+                window.print();
+                return;
+              }
+              await exportPmrDocumentToPdf(element, {
+                filename: `${pmrDocument.controlBlock.documentId}.pdf`,
+                pageSize: pmrDocument.options.pageSize,
+              });
             }}
             onCreateShareLink={async (input) => {
               if (!currentPatient || !organizationId) return null;
@@ -1620,6 +2003,21 @@ export default function Home() {
           </div>
         </div>
       )}
+      <ClinicalDocumentModal
+        isOpen={Boolean(activeClinicalDoc)}
+        onClose={() => setActiveClinicalDoc(null)}
+        title={activeClinicalDoc?.title ?? "Clinical Document"}
+        downloadFilename={activeClinicalDoc?.filename ?? "clinical-document.pdf"}
+        onDownloadPdf={async () => {
+          if (!activeClinicalDoc) return;
+          await exportClinicalDocumentToPdf(
+            "clinical-document-pdf-target",
+            { filename: activeClinicalDoc.filename }
+          );
+        }}
+      >
+        {activeClinicalDoc?.node}
+      </ClinicalDocumentModal>
     </main>
   );
 }

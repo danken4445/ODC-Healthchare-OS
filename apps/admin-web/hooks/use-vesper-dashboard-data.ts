@@ -707,7 +707,7 @@ export function useVesperDashboardData() {
           organization_id: organization.id,
           patient_id: input.patientId,
           category: "referral",
-          status: "active",
+          status: "PENDING",
           priority: input.priority,
           code: "44054006",
           code_display: input.codeDisplay,

@@ -509,12 +509,15 @@ export type MedicationRequestSummary = Pick<
   | "organization_id"
   | "patient_id"
   | "encounter_id"
+  | "requester_practitioner_id"
   | "status"
   | "medication_code"
   | "medication_display"
   | "authored_on"
   | "dosage_instruction"
   | "note"
+  | "template_id"
+  | "template_version"
 >;
 
 export type DocumentReferenceSummary = Pick<
@@ -523,13 +526,27 @@ export type DocumentReferenceSummary = Pick<
   | "organization_id"
   | "patient_id"
   | "encounter_id"
+  | "author_practitioner_id"
   | "status"
   | "type_code"
   | "type_display"
   | "date_at"
   | "description"
   | "content_title"
+  | "template_id"
+  | "template_version"
 >;
+
+export interface PatientDocumentTemplate {
+  id: string;
+  organizationId: string;
+  category: "prescription" | "medical_certificate";
+  name: string;
+  conditionCode: string | null;
+  conditionDisplay: string | null;
+  content: ClinicalDocumentTemplateContent;
+  version: number;
+}
 
 export interface SoapObservationInput {
   encounterId: string;
@@ -1385,4 +1402,15 @@ export interface FacilityClassification {
   canManage: boolean;
 }
 
-export * from "./pmr.ts";
+export * from "./pmr";
+
+export interface PractitionerProfileSummary {
+  id: string;
+  organizationId: string;
+  displayName: string;
+  title?: string;
+  specialty?: string;
+  licenseNumber?: string;
+  prcNumber?: string;
+  ptrNumber?: string;
+}

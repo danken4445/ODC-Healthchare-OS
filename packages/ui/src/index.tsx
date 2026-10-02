@@ -541,3 +541,10 @@ export function QrPaymentCode({
 }
 
 export * from "./pmr";
+export { StandardPrescriptionDocument } from "./documents/StandardPrescriptionDocument";
+export type {
+  StandardPrescriptionDocumentProps,
+  PrescriptionItem,
+} from "./documents/StandardPrescriptionDocument";
+export { StandardMedicalCertificateDocument } from "./documents/StandardMedicalCertificateDocument";
+export type { StandardMedicalCertificateDocumentProps } from "./documents/StandardMedicalCertificateDocument";
