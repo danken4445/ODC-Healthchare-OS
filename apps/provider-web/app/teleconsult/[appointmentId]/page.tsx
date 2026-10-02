@@ -235,9 +235,9 @@ export default function ProviderTeleconsultRoomPage() {
         return false;
       }
 
-      latestSoapNoteIdRef.current = result.data;
+      latestSoapNoteIdRef.current = result.data.observationId;
       lastSavedSoapTextRef.current = text;
-      setLatestSoapNoteId(result.data);
+      setLatestSoapNoteId(result.data.observationId);
       const savedDate = new Date();
       setSoapLastSavedAt(savedDate);
 

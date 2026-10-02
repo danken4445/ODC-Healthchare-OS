@@ -42,3 +42,6 @@ notifications; there is no patient appointment-notification mechanism to reuse.
 Reassignment is therefore audited but does not send a patient notification.
 Add a patient-safe appointment notification path before enabling reassignment
 broadly.
+# Loop E-2
+
+- TODO: define and implement explicit coverage payout splits/admin payout arrangements. E-2 records original assigned and performed practitioner roles while retaining assigned-doctor fee ownership; no split logic is intentionally implemented.

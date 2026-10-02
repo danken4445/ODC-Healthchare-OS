@@ -31,6 +31,7 @@ import {
   createDiagnosticServiceRequest,
   createBrowserSupabaseClient,
   createPatientQrPayload,
+  acquireEncounterLock,
   finishClinicalEncounter,
   getCurrentStaffDepartment,
   getInventoryWorkspace,
@@ -38,14 +39,17 @@ import {
   getMyEncounterViewMode,
   getOrganizationClinicalRecords,
   getOrganizationPatient,
+  getEncounterLock,
   getPatientCoverages,
   getPortalAccess,
   getSpecialistOptions,
   hasOrganizationPermission,
+  heartbeatEncounterLock,
   issueMedicalCertificate,
   issuePrescription,
   issuePrescriptionRegimen,
   recordEncounterRegionDiagnosis,
+  releaseEncounterLock,
   saveMyEncounterViewMode,
   saveSoapNote,
   tagInventoryUsage,
@@ -180,6 +184,9 @@ export default function EncounterRecordingPage() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [coverages, setCoverages] = useState<CoverageSummary[]>([]);
   const [coverageLabel, setCoverageLabel] = useState<string | null>(null);
+  const [lockHolderName, setLockHolderName] = useState<string | null>(null);
+  const [versionConflictOpen, setVersionConflictOpen] = useState(false);
+  const lockOwnedRef = useRef(false);
   const [status, setStatus] = useState("Loading the secure encounter record…");
   const [busy, setBusy] = useState(false);
   const [canPrescribe, setCanPrescribe] = useState(false);
@@ -289,6 +296,8 @@ export default function EncounterRecordingPage() {
     setOrganizationId(null);
     setCoverages([]);
     setCoverageLabel(null);
+    setLockHolderName(null);
+    lockOwnedRef.current = false;
     const client = createBrowserSupabaseClient();
     const { data: sessionData } = await client.auth.getSession();
     if (!sessionData.session) {
@@ -485,6 +494,42 @@ export default function EncounterRecordingPage() {
   useEffect(() => {
     void loadEncounter();
   }, [loadEncounter]);
+
+  useEffect(() => {
+    if (!encounter || encounter.status !== "in_progress") return;
+    let cancelled = false;
+    const client = createBrowserSupabaseClient();
+    const refreshPresence = async () => {
+      if (!lockOwnedRef.current) {
+        const current = await getEncounterLock(client, encounter.id);
+        if (!cancelled && current.data) setLockHolderName(current.data.practitioner_name);
+        if (!current.data && !cancelled) {
+          const acquired = await acquireEncounterLock(client, encounter.id);
+          if (!acquired.error) {
+            lockOwnedRef.current = true;
+            setLockHolderName(null);
+          }
+        }
+        return;
+      }
+      const heartbeat = await heartbeatEncounterLock(client, encounter.id);
+      if (heartbeat.error) {
+        lockOwnedRef.current = false;
+        const current = await getEncounterLock(client, encounter.id);
+        if (!cancelled) setLockHolderName(current.data?.practitioner_name ?? null);
+      }
+    };
+    void refreshPresence();
+    const timer = window.setInterval(() => void refreshPresence(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if (lockOwnedRef.current) {
+        lockOwnedRef.current = false;
+        void releaseEncounterLock(client, encounter.id);
+      }
+    };
+  }, [encounter]);
 
   const currentSoapNote = useMemo(
     () => records?.observations.find(
@@ -700,18 +745,25 @@ export default function EncounterRecordingPage() {
         encounterId,
         text,
         supersedesId: latestSoapNoteIdRef.current ?? undefined,
+        expectedVersion: encounter?.version,
       });
       soapSaveInFlightRef.current = false;
 
       if (result.error) {
+        if (result.error.message === "ENCOUNTER_VERSION_CONFLICT" || result.error.details === "ENCOUNTER_VERSION_CONFLICT") {
+          setVersionConflictOpen(true);
+          setStatus("This chart changed since you opened it.");
+          return false;
+        }
         setSoapAutosaveState("error");
         setStatus(`Unable to save the consultation note: ${result.error.message}`);
         return false;
       }
 
-      latestSoapNoteIdRef.current = result.data;
+      latestSoapNoteIdRef.current = result.data.observationId;
       lastSavedSoapTextRef.current = text;
-      setLatestSoapNoteId(result.data);
+      setLatestSoapNoteId(result.data.observationId);
+      setEncounter((current) => current ? { ...current, version: result.data.version } : current);
       const savedDate = new Date();
       setSoapLastSavedAt(savedDate);
 
@@ -740,7 +792,7 @@ export default function EncounterRecordingPage() {
         soapSavePromiseRef.current = null;
       }
     }
-  }, [encounterId, soapAutosaveRevision, soapLastSavedAt]);
+  }, [encounter, encounterId, soapAutosaveRevision, soapLastSavedAt]);
 
   useEffect(() => {
     if (
@@ -884,9 +936,14 @@ export default function EncounterRecordingPage() {
       return;
     }
     setBusy(true);
-    const result = await finishClinicalEncounter(createBrowserSupabaseClient(), encounterId);
+    const result = await finishClinicalEncounter(createBrowserSupabaseClient(), encounterId, encounter?.version);
     setBusy(false);
     if (result.error) {
+      if (result.error.message === "ENCOUNTER_VERSION_CONFLICT" || result.error.details === "ENCOUNTER_VERSION_CONFLICT") {
+        setVersionConflictOpen(true);
+        setStatus("This chart changed since you opened it.");
+        return;
+      }
       setStatus(`Unable to complete encounter: ${result.error.message}`);
       return;
     }
@@ -1180,6 +1237,22 @@ export default function EncounterRecordingPage() {
       )}
 
       <p className="encounter-status" role="status" aria-live="polite">{status}</p>
+      {lockHolderName && (
+        <p className="encounter-presence" role="status">
+          Dr. {lockHolderName} is editing this chart. You can still save your work.
+        </p>
+      )}
+
+      {versionConflictOpen && (
+        <div className="encounter-conflict-dialog" role="dialog" aria-modal="true" aria-labelledby="encounter-conflict-heading">
+          <h2 id="encounter-conflict-heading">This chart changed since you opened it</h2>
+          <p>Your typed draft is still here. Reload latest updates the chart context without discarding this draft.</p>
+          <div className="encounter-conflict-dialog__actions">
+            <Button type="button" variant="outline" onClick={() => setVersionConflictOpen(false)}>Keep editing</Button>
+            <Button type="button" onClick={() => { setVersionConflictOpen(false); void loadEncounter(); }}>Reload latest</Button>
+          </div>
+        </div>
+      )}
 
       {encounter && patient && records && (
         <div className="encounter-layout">

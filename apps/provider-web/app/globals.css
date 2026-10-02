@@ -1591,6 +1591,9 @@ main > [role="status"] { margin: 1rem 0 0; color: var(--odyssey-muted-foreground
   border-bottom: 1px solid var(--odyssey-border);
 }
 .encounter-back { display: inline-block; margin-bottom: .85rem; color: var(--odyssey-primary); font-size: .875rem; font-weight: 700; text-decoration: none; }
+.encounter-presence { margin: .5rem 0; color: var(--odyssey-muted-foreground); font-size: .875rem; font-weight: 700; }
+.encounter-conflict-dialog { position: fixed; inset: 1rem; z-index: 20; width: min(32rem, calc(100% - 2rem)); margin: auto; padding: 1.25rem; border: 1px solid var(--odyssey-border); border-radius: .75rem; background: var(--odyssey-card); box-shadow: 0 1rem 3rem #0f172a33; }
+.encounter-conflict-dialog__actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1rem; }
 .encounter-back:focus-visible { outline: 3px solid var(--odyssey-focus); outline-offset: 3px; }
 .encounter-header h1, .encounter-header p { margin: 0; }
 .encounter-header h1 { font-size: clamp(1.35rem, 2vw, 1.8rem); }
