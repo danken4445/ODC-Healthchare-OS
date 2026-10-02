@@ -59,3 +59,34 @@ export interface SpatialChoroplethFeature {
     readonly isSuppressed: boolean;
   };
 }
+
+export type SurveillanceTrendLabel = "Rising" | "Stable" | "Declining";
+
+export interface MorbidityTrend {
+  readonly icd10Code: string;
+  readonly diseaseName: string;
+  readonly caseCount: number | null;
+  readonly previousWeekCaseCount: number | null;
+  readonly growthVelocity: number | null;
+  readonly trend: SurveillanceTrendLabel;
+}
+
+export interface EpidemicCurvePoint {
+  readonly epiYear: number;
+  readonly epiWeek: number;
+  readonly caseCount: number | null;
+  readonly movingAverage5Week: number | null;
+  readonly alertThreshold: number | null;
+}
+
+export interface DemographicBreakdownCell {
+  readonly ageBracket: AgeBracket;
+  readonly gender: "male" | "female" | "other" | "unknown";
+  readonly caseCount: number | null;
+  readonly isSuppressed: boolean;
+}
+
+export interface BarangayChoroplethData {
+  readonly type: "FeatureCollection";
+  readonly features: readonly SpatialChoroplethFeature[];
+}
