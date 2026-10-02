@@ -165,6 +165,52 @@ export type ServicePractitionerOption = z.infer<
   typeof servicePractitionerOptionSchema
 >;
 
+export const bookablePractitionerInputSchema = z.object({
+  serviceId: z.string().uuid(),
+});
+
+export const bookablePractitionerSchema = z.object({
+  practitioner_role_id: z.string().uuid(),
+  display_name: z.string().min(1),
+  specialty: z.string().nullable(),
+  title: z.string().nullable(),
+  photo_url: z.string().url().nullable(),
+  total_price: z.coerce.number().nonnegative(),
+  currency: z.string().min(3).max(3),
+});
+
+export const availableBookingSlotsInputSchema = z.object({
+  serviceId: z.string().uuid(),
+  practitionerRoleId: z.string().uuid(),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+}).refine(({ startsAt, endsAt }) => endsAt > startsAt, {
+  message: "The availability range must end after it starts.",
+  path: ["endsAt"],
+});
+
+export const availableBookingSlotSchema = z.object({
+  id: z.string().uuid(),
+  practitioner_role_id: z.string().uuid(),
+  clinic_service_id: z.string().uuid(),
+  service_type: z.string().nullable(),
+  start_at: z.string().datetime(),
+  end_at: z.string().datetime(),
+  display_name: z.string().min(1),
+  specialty: z.string().nullable(),
+  title: z.string().nullable(),
+  photo_url: z.string().url().nullable(),
+});
+
+export const bookAppointmentInputSchema = z.object({
+  slotId: z.string().uuid(),
+  deliveryMode: z.enum(["in_person", "virtual"]),
+});
+
+export type BookablePractitioner = z.infer<typeof bookablePractitionerSchema>;
+export type AvailableBookingSlot = z.infer<typeof availableBookingSlotSchema>;
+export type AvailableBookingSlotsInput = z.infer<typeof availableBookingSlotsInputSchema>;
+
 const patientSummaryColumns =
   "id, organization_id, active, name, birth_date, blood_type, gender, photo_url, telecom, address, contact, walk_in_id, created_at, updated_at";
 const appointmentSummaryColumns =
@@ -2208,6 +2254,79 @@ export async function bookAppointmentSlot(
     patientId,
     deliveryMode,
     status: "booked",
+  });
+  return success(data);
+}
+
+/** Patient-safe doctor cards for one bookable service. */
+export async function getBookablePractitioners(
+  client: SupabaseClient<Database>,
+  serviceId: string,
+): Promise<SupabaseResult<BookablePractitioner[]>> {
+  const input = bookablePractitionerInputSchema.safeParse({ serviceId });
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data, error } = await client.rpc("bookable_practitioners", {
+    p_service_id: input.data.serviceId,
+  });
+  if (error) return failure(error);
+  const parsed = z.array(bookablePractitionerSchema).safeParse(data ?? []);
+  return parsed.success
+    ? success(parsed.data)
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+/** Patient-safe free slots for one required doctor and service. */
+export async function getAvailableBookingSlots(
+  client: SupabaseClient<Database>,
+  input: AvailableBookingSlotsInput,
+): Promise<SupabaseResult<AvailableBookingSlot[]>> {
+  const parsedInput = availableBookingSlotsInputSchema.safeParse(input);
+  if (!parsedInput.success)
+    return failure({ code: "VALIDATION_ERROR", message: parsedInput.error.message });
+
+  const { data, error } = await client.rpc("get_available_slots", {
+    p_service_id: parsedInput.data.serviceId,
+    p_practitioner_role_id: parsedInput.data.practitionerRoleId,
+    p_date_range: `[${parsedInput.data.startsAt.toISOString()},${parsedInput.data.endsAt.toISOString()})`,
+  });
+  if (error) return failure(error);
+  const parsed = z.array(availableBookingSlotSchema).safeParse(data ?? []);
+  return parsed.success
+    ? success(parsed.data)
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+/** Atomically reserves a selected doctor slot and creates its bill. */
+export async function bookAppointment(
+  client: SupabaseClient<Database>,
+  slotId: string,
+  deliveryMode: AppointmentDeliveryMode = "in_person",
+  organizationId?: string,
+): Promise<SupabaseResult<string>> {
+  const input = bookAppointmentInputSchema.safeParse({ slotId, deliveryMode });
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data, error } = await client.rpc("book_appointment", {
+    p_slot_id: input.data.slotId,
+    p_delivery_mode: input.data.deliveryMode,
+  });
+  if (error) {
+    if (error.code === "PT409" && error.message === "SLOT_TAKEN") {
+      return failure({
+        code: "SLOT_TAKEN",
+        message: "That appointment time was just taken. We refreshed the available times.",
+      });
+    }
+    return failure(error);
+  }
+  broadcastAppointmentBooked({
+    appointmentId: data,
+    organizationId,
+    deliveryMode: input.data.deliveryMode,
+    status: "pending",
   });
   return success(data);
 }
