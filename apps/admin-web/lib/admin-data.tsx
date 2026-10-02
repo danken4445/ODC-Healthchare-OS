@@ -40,6 +40,8 @@ export const permissionOptions: Array<{
   { value: "can_identify_patients", label: "Patient QR identification", hint: "Identify an active patient from a clinic QR code." },
   { value: "can_manage_clinic_branding", label: "Clinic branding", hint: "Maintain clinic identity and support details." },
   { value: "can_manage_service_catalog", label: "Services and pricing", hint: "Maintain services, prices, and booking rules." },
+  { value: "can_manage_services", label: "Service and fee administration", hint: "Maintain service assignments, professional-fee models, and fee limits." },
+  { value: "can_manage_professional_fees", label: "Professional fees", hint: "Use the provider Fees tab to declare fees for assigned services." },
   { value: "can_manage_document_templates", label: "Document templates", hint: "Maintain reusable document definitions." },
   { value: "can_manage_feature_modules", label: "Feature modules", hint: "Control staged module availability." },
 ];

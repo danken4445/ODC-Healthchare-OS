@@ -26,6 +26,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/support", public: true },
   { href: "/billing/claims", anyOf: ["can_view_claims", "can_manage_claims"] },
   { href: "/billing", anyOf: ["can_view_billing", "can_manage_billing"] },
+  { href: "/fees", anyOf: ["can_manage_services"] },
   { href: "/companies", anyOf: ["can_view_billing", "can_manage_billing", "can_view_claims", "can_manage_claims"] },
   { href: "/pos", anyOf: ["can_manage_pos"] },
   { href: "/payouts", anyOf: ["can_view_payouts", "can_manage_payouts"] },

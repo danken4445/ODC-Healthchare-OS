@@ -246,6 +246,38 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
 .org-selector { min-height: 30px; padding: 0.25rem 1.8rem 0.25rem 0.5rem; color: var(--foreground); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.72rem; font-weight: 700; }
 .panel-section { margin-top: 1rem; padding: 1rem; }
 .panel-section > .data-table { margin: 0 -1rem -1rem; border-width: 1px 0 0; border-radius: 0; }
+.section-eyebrow { margin: 0 0 .25rem; color: var(--muted-foreground); font-size: .68rem; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; }
+.fee-model-panel { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 1rem; align-items: start; }
+.fee-model-panel h2 { margin: 0; font-size: 1rem; }
+.fee-model-panel p:not(.section-eyebrow) { max-width: 68ch; margin: .35rem 0 0; color: var(--muted-foreground); font-size: .78rem; line-height: 1.55; }
+.fee-model-options { display: grid; gap: .5rem; margin: 0; padding: 0; border: 0; }
+.fee-model-options label { display: flex; min-height: 44px; align-items: center; gap: .65rem; padding: .55rem .7rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.fee-model-options label:has(input:checked) { border-color: var(--primary); background: var(--muted); }
+.fee-model-options label:has(input:focus-visible) { outline: 2px solid color-mix(in srgb, var(--ring) 35%, transparent); outline-offset: 2px; }
+.fee-model-options input { width: 1rem; height: 1rem; accent-color: var(--primary); }
+.fee-model-options span { display: grid; gap: .1rem; }
+.fee-model-options strong { font-size: .78rem; }
+.fee-model-options small { color: var(--muted-foreground); font-size: .72rem; }
+.fee-model-options:disabled label { cursor: not-allowed; opacity: .65; }
+.fee-model-message { grid-column: 1 / -1; }
+.fee-overview-table { overflow-x: auto; margin: 0 -1rem -1rem; border-top: 1px solid var(--border); }
+.fee-overview-table table { width: 100%; min-width: 940px; border-collapse: collapse; text-align: left; }
+.fee-overview-table th { padding: .65rem .75rem; color: var(--table-heading); background: var(--surface-subtle); border-bottom: 1px solid var(--border); font-size: .68rem; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; }
+.fee-overview-table td { padding: .7rem .75rem; color: var(--secondary-foreground); border-bottom: 1px solid var(--row-border); font-size: .78rem; vertical-align: top; }
+.fee-overview-table tbody tr:last-child td { border-bottom: 0; }
+.fee-overview-table td small { display: block; margin-top: .2rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 400; }
+.fee-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem; min-width: 255px; }
+.fee-action { min-height: 44px; }
+.fee-history { min-height: 44px; }
+.fee-history summary { display: inline-flex; min-height: 44px; align-items: center; gap: .45rem; padding: .45rem .15rem; color: var(--foreground); font-size: .76rem; font-weight: 700; cursor: pointer; }
+.fee-history summary::marker { color: var(--muted-foreground); }
+.fee-history__content { min-width: 240px; max-width: 300px; padding: .55rem .65rem; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+.fee-history__content p { margin: 0; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+.fee-history__retry { min-height: 36px; margin-top: .25rem; }
+.fee-history__content ol { display: grid; gap: .45rem; margin: 0; padding-left: 1.15rem; }
+.fee-history__content li { display: grid; gap: .1rem; padding-left: .15rem; font-size: .72rem; }
+.fee-history__content li span { color: var(--muted-foreground); }
+.form-success { margin: 0; color: var(--primary); font-size: .76rem; }
 
 .dialog-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(10, 24, 22, 0.58); animation: fade-in 140ms ease-out; }
 .dialog-content { position: fixed; top: 50%; left: 50%; z-index: 61; width: min(calc(100vw - 2rem), 520px); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem; background: var(--popover); border: 1px solid var(--border); border-radius: 0.5rem; box-shadow: var(--shadow-dialog); transform: translate(-50%, -50%); animation: dialog-in 160ms ease-out; }
@@ -489,6 +521,7 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
   .dialog-actions .ui-button { width: 100%; }
   .management-tab-header { align-items: stretch; flex-direction: column; }
   .management-tab-header .ui-button { width: 100%; }
+  .fee-model-panel { grid-template-columns: 1fr; }
 }
 
 /* ==========================================================================
