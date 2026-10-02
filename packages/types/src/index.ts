@@ -1403,6 +1403,7 @@ export interface FacilityClassification {
 }
 
 export * from "./pmr";
+export * from "./surveillance";
 
 export interface PractitionerProfileSummary {
   id: string;

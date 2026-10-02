@@ -124,7 +124,7 @@ export async function computeSha256Hex(content: string): Promise<string> {
 }
 
 /** Sensitive category classification rule matcher */
-function detectSensitiveCategory(text: string): PmrSensitiveCategory | null {
+export function detectSensitiveCategory(text: string): PmrSensitiveCategory | null {
   const lower = text.toLowerCase();
   if (/hiv|aids|antiretroviral|cd4|viral load/i.test(lower)) return "infectious_disease_hiv";
   if (/depress|bipolar|schizo|psych|suicid|anxiety disorder/i.test(lower)) return "mental_health";

@@ -4680,3 +4680,4 @@ export async function getPatientDefaultTemplate(
     version: Number(row.version ?? 1),
   });
 }
+export * from "./clinical-nlp-classifier";
