@@ -17,7 +17,7 @@ import Link from "next/link";
 import React from "react";
 import { AppointmentNotificationControl } from "@odyssey/ui";
 
-export type WorkspaceTab = "all" | "queue" | "chart" | "diagnostics" | "schedule";
+export type WorkspaceTab = "all" | "queue" | "chart" | "diagnostics" | "schedule" | "fees";
 
 interface WorkspaceHeaderProps {
   signedInAs: string | null;
@@ -33,6 +33,7 @@ interface WorkspaceHeaderProps {
   notificationsCount: number;
   hasActiveEncounter: boolean;
   canManageTemplates: boolean;
+  canManageProfessionalFees: boolean;
   onSignOut: () => void;
 }
 
@@ -62,6 +63,7 @@ export function WorkspaceHeader({
   notificationsCount,
   hasActiveEncounter,
   canManageTemplates,
+  canManageProfessionalFees,
   onSignOut,
 }: WorkspaceHeaderProps) {
   // Extract clinician name appropriately based on role
@@ -102,7 +104,10 @@ export function WorkspaceHeader({
         .slice(0, 2)
         .join("") || "DR";
 
-  const visibleTabs = isNurse ? nurseTabs : doctorTabs;
+  const baseTabs = isNurse ? nurseTabs : doctorTabs;
+  const visibleTabs = canManageProfessionalFees
+    ? [...baseTabs, { id: "fees" as const, label: "Fees" }]
+    : baseTabs;
 
   return (
     <header className="vesper-provider-header">
