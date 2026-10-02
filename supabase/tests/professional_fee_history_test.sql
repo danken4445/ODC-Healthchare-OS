@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(13);
 
 insert into public.service_practitioners (
   organization_id, clinic_service_id, practitioner_role_id, is_active
@@ -32,11 +32,13 @@ select is(
   'practitioner_declared',
   'service manager enables practitioner-declared fees for a private facility'
 );
+select lives_ok(
+  $$ select public.set_clinic_service_professional_fee_bounds(
+    '52000000-0000-0000-0000-000000000001', 100, 400
+  ) $$,
+  'service manager can set professional-fee bounds'
+);
 reset role;
-
-update public.clinic_services
-set min_professional_fee = 100, max_professional_fee = 400
-where id = '52000000-0000-0000-0000-000000000001';
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', true);
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101"}', true);
