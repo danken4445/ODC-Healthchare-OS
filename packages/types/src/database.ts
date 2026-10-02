@@ -4353,6 +4353,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      book_appointment: {
+        Args: {
+          p_slot_id: string
+          p_delivery_mode?: Database["public"]["Enums"]["appointment_delivery_mode"]
+        }
+        Returns: string
+      }
       book_appointment_slot: {
         Args: {
           p_slot_id: string
@@ -4360,6 +4367,20 @@ export type Database = {
           p_delivery_mode?: Database["public"]["Enums"]["appointment_delivery_mode"]
         }
         Returns: string
+      }
+      bookable_practitioners: {
+        Args: {
+          p_service_id: string
+        }
+        Returns: {
+          practitioner_role_id: string
+          display_name: string
+          specialty: string
+          title: string
+          photo_url: string
+          total_price: number
+          currency: string
+        }[]
       }
       can_access_organization: {
         Args: {
@@ -4589,6 +4610,25 @@ export type Database = {
           p_organization_id: string
         }
         Returns: string
+      }
+      get_available_slots: {
+        Args: {
+          p_service_id: string
+          p_date_range: unknown
+          p_practitioner_role_id: string
+        }
+        Returns: {
+          id: string
+          practitioner_role_id: string
+          clinic_service_id: string
+          service_type: string
+          start_at: string
+          end_at: string
+          display_name: string
+          specialty: string
+          title: string
+          photo_url: string
+        }[]
       }
       get_billable_encounters: {
         Args: {
