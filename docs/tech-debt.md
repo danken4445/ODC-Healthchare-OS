@@ -15,3 +15,10 @@ the existing doctor-payout calculation. Coverage-specific allocation and
 multi-practitioner payout splitting are intentionally not implemented in this
 loop; they remain a follow-up when coverage adjudication and encounter
 attribution are introduced.
+
+## Loop D queue allocator finding F3
+
+The reported `max()+1` queue race was disproved by the deterministic 50-way
+baseline: the existing organization/date advisory lock produced 50 unique
+numbers with zero duplicates. Loop D retains that lock and scopes it, along
+with the max query, by organization, queue date, and queue mode scope.
