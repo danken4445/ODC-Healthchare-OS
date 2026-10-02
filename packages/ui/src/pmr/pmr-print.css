@@ -1,0 +1,360 @@
+/* ==========================================================================
+   Patient Medical Record (PMR) - Dedicated Print & Clinical Document Stylesheet
+   Compliant with WCAG 2.2 AA, PDF/A print fidelity, A4 & Letter page geometry.
+   ========================================================================== */
+
+@page {
+  size: A4 portrait;
+  margin: 18mm 15mm 20mm 15mm;
+}
+
+@page letter {
+  size: letter portrait;
+  margin: 18mm 15mm 20mm 15mm;
+}
+
+:root {
+  --pmr-primary: #173f3b;
+  --pmr-primary-dark: #0e2926;
+  --pmr-text-main: #111827;
+  --pmr-text-muted: #4b5563;
+  --pmr-border: #9ca3af;
+  --pmr-border-subtle: #e5e7eb;
+  --pmr-bg-subtle: #f9fafb;
+  --pmr-alert-border: #b91c1c;
+  --pmr-alert-bg: #fef2f2;
+}
+
+/* Document Container */
+.pmr-document-container {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--pmr-text-main);
+  background-color: #ffffff;
+  line-height: 1.4;
+  font-size: 10pt;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Screen preview card wrapper */
+@media screen {
+  .pmr-screen-wrapper {
+    background-color: #525659;
+    padding: 24px 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .pmr-document-container {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm 18mm;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    margin-bottom: 24px;
+    border-radius: 2px;
+  }
+
+  .pmr-document-container.size-letter {
+    width: 215.9mm;
+    min-height: 279.4mm;
+  }
+}
+
+/* Print Rules */
+@media print {
+  body {
+    background: transparent !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .pmr-screen-toolbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .pmr-screen-wrapper {
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .pmr-document-container {
+    width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Orphan heading prevention */
+  h1, h2, h3, h4, .pmr-section-header {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr, .pmr-row-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* Watermark print fidelity */
+  .pmr-watermark-overlay {
+    position: fixed;
+    top: 45%;
+    left: 5%;
+    width: 90%;
+    text-align: center;
+    font-size: 52pt;
+    font-weight: 900;
+    color: rgba(180, 0, 0, 0.12) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    transform: rotate(-35deg);
+    pointer-events: none;
+    z-index: 9999;
+  }
+}
+
+/* Watermark */
+.pmr-watermark-overlay {
+  position: absolute;
+  top: 45%;
+  left: 5%;
+  width: 90%;
+  text-align: center;
+  font-size: 52pt;
+  font-weight: 900;
+  color: rgba(180, 0, 0, 0.12);
+  transform: rotate(-35deg);
+  pointer-events: none;
+  z-index: 100;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+}
+
+/* Header Component */
+.pmr-header {
+  border-bottom: 2px solid var(--pmr-primary-dark);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  break-inside: avoid;
+}
+
+.pmr-facility-name {
+  font-size: 13pt;
+  font-weight: 800;
+  color: var(--pmr-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 2px 0;
+}
+
+.pmr-facility-sub {
+  font-size: 8.5pt;
+  color: var(--pmr-text-muted);
+  line-height: 1.35;
+}
+
+.pmr-doc-title-block {
+  text-align: right;
+}
+
+.pmr-doc-title {
+  font-size: 15pt;
+  font-weight: 900;
+  color: var(--pmr-primary-dark);
+  letter-spacing: 0.8px;
+  margin: 0;
+}
+
+.pmr-copy-badge {
+  display: inline-block;
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: var(--pmr-primary);
+  text-transform: uppercase;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--pmr-primary);
+  border-radius: 3px;
+}
+
+/* Document Control Block */
+.pmr-control-block {
+  background: var(--pmr-bg-subtle);
+  border: 1px solid var(--pmr-border);
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  font-size: 8.5pt;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px 12px;
+  break-inside: avoid;
+}
+
+.pmr-control-item strong {
+  display: block;
+  font-size: 7.5pt;
+  text-transform: uppercase;
+  color: var(--pmr-text-muted);
+}
+
+.pmr-control-item span {
+  font-size: 8.5pt;
+  font-weight: 600;
+}
+
+/* Section Components */
+.pmr-section {
+  margin-bottom: 14px;
+}
+
+.pmr-section-header {
+  font-size: 9.5pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  background-color: var(--pmr-primary);
+  color: #ffffff;
+  padding: 3px 8px;
+  margin: 0 0 6px 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  break-after: avoid;
+}
+
+/* Tables */
+.pmr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+  margin-bottom: 8px;
+  break-inside: auto;
+}
+
+.pmr-table th,
+.pmr-table td {
+  border: 1px solid var(--pmr-border);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pmr-table th {
+  background-color: #eaeded;
+  font-weight: 700;
+  color: #111;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.pmr-table tr:nth-child(even) td {
+  background-color: #fafbfb;
+}
+
+/* Flags (Color + Text Indicator for B/W Accessibility) */
+.flag-high {
+  font-weight: bold;
+  color: #b91c1c;
+}
+
+.flag-critical {
+  font-weight: 800;
+  color: #7f1d1d;
+  background-color: #fee2e2;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* Alerts Banner */
+.pmr-alerts-banner {
+  border: 2px solid var(--pmr-alert-border);
+  background-color: var(--pmr-alert-bg);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  break-inside: avoid;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.pmr-alerts-banner strong {
+  color: var(--pmr-alert-border);
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pmr-alerts-banner p {
+  margin: 3px 0 0;
+  font-size: 9pt;
+  font-weight: 600;
+}
+
+/* Encounter Cards */
+.pmr-encounter-card {
+  border: 1px solid var(--pmr-border);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 8.5pt;
+  break-inside: avoid;
+}
+
+.pmr-encounter-head {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--pmr-border-subtle);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+/* Signature Block */
+.pmr-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 20px;
+  break-inside: avoid;
+}
+
+.pmr-signature-line {
+  border-top: 1px solid #111;
+  padding-top: 4px;
+  font-size: 8.5pt;
+}
+
+/* Footer */
+.pmr-footer {
+  border-top: 1.5px solid var(--pmr-border);
+  padding-top: 6px;
+  margin-top: 20px;
+  font-size: 7.5pt;
+  color: var(--pmr-text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  break-inside: avoid;
+}
+
+.pmr-qr-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

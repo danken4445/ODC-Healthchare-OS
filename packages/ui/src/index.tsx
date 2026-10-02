@@ -5,7 +5,11 @@ import type {
   SelectHTMLAttributes,
   TableHTMLAttributes,
 } from "react";
-import type { AppointmentStatus, InvoiceStatus, PayorType } from "@odyssey/types";
+import type {
+  AppointmentStatus,
+  InvoiceStatus,
+  PayorType,
+} from "@odyssey/types";
 
 export { TeleconsultWebRtcRoom } from "./teleconsult-video-room";
 export type { TeleconsultWebRtcRoomProps } from "./teleconsult-video-room";
@@ -14,6 +18,7 @@ export {
   AppointmentNotificationProvider,
   AppointmentNotificationToast,
   useAppointmentNotifications,
+  useOptionalAppointmentNotifications,
 } from "./appointment-notifications";
 export type {
   AppointmentNotificationItem,
@@ -23,9 +28,15 @@ export { PatientQrCode } from "./patient-qr-code";
 export { QrCameraScanner } from "./qr-camera-scanner";
 export type { QrCameraScannerProps, QrCameraState } from "./qr-camera-scanner";
 export { ClinicalPatientCard } from "./clinical-patient-card";
-export { ClinicalVitalsPanel, buildClinicalVitalReadings } from "./clinical-vitals-panel";
+export {
+  ClinicalVitalsPanel,
+  buildClinicalVitalReadings,
+} from "./clinical-vitals-panel";
 export type { ClinicalVitalReading } from "./clinical-vitals-panel";
-export { MusculoskeletalFigure, MUSCULOSKELETAL_REGIONS } from "./musculoskeletal-figure";
+export {
+  MusculoskeletalFigure,
+  MUSCULOSKELETAL_REGIONS,
+} from "./musculoskeletal-figure";
 export type { BodyRegionDefinition } from "./musculoskeletal-figure";
 export { MusculoskeletalRegionPanel } from "./musculoskeletal-region-panel";
 export { AccessState } from "./access-state";
@@ -113,16 +124,27 @@ export function Select({
   className,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cn("odyssey-input odyssey-select", className)} {...props} />;
+  return (
+    <select
+      className={cn("odyssey-input odyssey-select", className)}
+      {...props}
+    />
+  );
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn("odyssey-skeleton", className)} />;
+  return (
+    <div aria-hidden="true" className={cn("odyssey-skeleton", className)} />
+  );
 }
 
 export function Card({ children, className, variant = "default" }: CardProps) {
   return (
-    <section className={cn("odyssey-card", `odyssey-card--${variant}`, className)}>{children}</section>
+    <section
+      className={cn("odyssey-card", `odyssey-card--${variant}`, className)}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -131,16 +153,50 @@ export interface DepartmentTagProps {
   department?: "general" | "cardiology" | "pediatrics" | "laboratory";
 }
 
-export function DepartmentTag({ children, department = "general" }: DepartmentTagProps) {
-  return <span className={cn("odyssey-department-tag", `odyssey-department-tag--${department}`)}>{children}</span>;
+export function DepartmentTag({
+  children,
+  department = "general",
+}: DepartmentTagProps) {
+  return (
+    <span
+      className={cn(
+        "odyssey-department-tag",
+        `odyssey-department-tag--${department}`,
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
-  return <div className="odyssey-empty-state"><strong>{title}</strong>{description ? <p>{description}</p> : null}</div>;
+export function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="odyssey-empty-state">
+      <strong>{title}</strong>
+      {description ? <p>{description}</p> : null}
+    </div>
+  );
 }
 
-export function ErrorState({ title = "Unable to load this information.", description }: { title?: string; description?: string }) {
-  return <div className="odyssey-error-state" role="alert"><strong>{title}</strong>{description ? <p>{description}</p> : null}</div>;
+export function ErrorState({
+  title = "Unable to load this information.",
+  description,
+}: {
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <div className="odyssey-error-state" role="alert">
+      <strong>{title}</strong>
+      {description ? <p>{description}</p> : null}
+    </div>
+  );
 }
 
 export interface DataTableColumn<Row> {
@@ -243,7 +299,9 @@ export function Badge({
   variant = "default",
 }: BadgeProps) {
   return (
-    <span className={cn("odyssey-badge", `odyssey-badge--${variant}`, className)}>
+    <span
+      className={cn("odyssey-badge", `odyssey-badge--${variant}`, className)}
+    >
       {children}
     </span>
   );
@@ -280,7 +338,9 @@ export function TabGroup({
             )}
             onClick={() => onTabChange(tab.id)}
           >
-            {tab.icon ? <span className="odyssey-tabs__icon">{tab.icon}</span> : null}
+            {tab.icon ? (
+              <span className="odyssey-tabs__icon">{tab.icon}</span>
+            ) : null}
             {tab.label}
           </button>
         ))}
@@ -374,7 +434,11 @@ const claimStatusLabels: Record<string, string> = {
 export function ClaimStatusBadge({ status }: { status: string }) {
   const label = claimStatusLabels[status] ?? status;
   const variant: BadgeProps["variant"] =
-    status === "active" ? "success" : status === "cancelled" ? "danger" : "muted";
+    status === "active"
+      ? "success"
+      : status === "cancelled"
+        ? "danger"
+        : "muted";
   return <Badge variant={variant}>{label}</Badge>;
 }
 
@@ -475,3 +539,5 @@ export function QrPaymentCode({
     </div>
   );
 }
+
+export * from "./pmr";

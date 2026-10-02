@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAdminData } from "../components/admin-data-context";
 import {
+  broadcastAppointmentBooked,
+  getDailyAppointmentQueue,
   getDiagnosticsWorkspace,
   getWaitingRoomQueue,
   markClinicalNotificationRead,
+  subscribeToAppointmentQueue,
+  subscribeToWaitingRoomQueue,
 } from "@odyssey/supabase-client";
+import { useOptionalAppointmentNotifications } from "@odyssey/ui";
+import type { AppointmentQueueItem } from "@odyssey/types";
 
 export interface VesperKpis {
   avgConsultationTime: {
@@ -115,11 +121,16 @@ export function useVesperDashboardData() {
     },
   });
 
-  const [patientRecords, setPatientRecords] = useState<VesperPatientRecord[]>([]);
-  const [diagnosticTests, setDiagnosticTests] = useState<VesperDiagnosticTest[]>([]);
+  const [patientRecords, setPatientRecords] = useState<VesperPatientRecord[]>(
+    [],
+  );
+  const [diagnosticTests, setDiagnosticTests] = useState<
+    VesperDiagnosticTest[]
+  >([]);
   const [tasks, setTasks] = useState<VesperTask[]>([]);
   const [recentModules, setRecentModules] = useState<VesperRecentModule[]>([]);
   const [notifications, setNotifications] = useState<VesperNotification[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentQueueItem[]>([]);
 
   const loadData = useCallback(async () => {
     if (!organization) {
@@ -134,7 +145,9 @@ export function useVesperDashboardData() {
       // 1. Fetch real patients from Supabase
       const patientsPromise = client
         .from("patients")
-        .select("id, name, birth_date, gender, telecom, address, walk_in_id, created_at")
+        .select(
+          "id, name, birth_date, gender, telecom, address, walk_in_id, created_at",
+        )
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -156,7 +169,9 @@ export function useVesperDashboardData() {
       // 5. Fetch claims to compute overdue claims
       const claimsPromise = client
         .from("claims")
-        .select("id, status, submitted_at, payor_type, total_claimed, created_at")
+        .select(
+          "id, status, submitted_at, payor_type, total_claimed, created_at",
+        )
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -170,6 +185,14 @@ export function useVesperDashboardData() {
         .order("created_at", { ascending: false })
         .limit(20);
 
+      // 7. Fetch active appointments for real-time dashboard display
+      const appointmentsPromise = getDailyAppointmentQueue(
+        client,
+        organization.id,
+        undefined,
+        ["proposed", "pending", "booked", "arrived", "fulfilled"],
+      );
+
       const [
         patientsRes,
         encountersRes,
@@ -177,6 +200,7 @@ export function useVesperDashboardData() {
         diagRes,
         claimsRes,
         referralsRes,
+        appointmentsRes,
       ] = await Promise.allSettled([
         patientsPromise,
         encountersPromise,
@@ -184,51 +208,89 @@ export function useVesperDashboardData() {
         diagPromise,
         claimsPromise,
         referralsPromise,
+        appointmentsPromise,
       ]);
 
+      // --- Process Appointments ---
+      if (
+        appointmentsRes.status === "fulfilled" &&
+        !appointmentsRes.value.error &&
+        appointmentsRes.value.data
+      ) {
+        setAppointments(appointmentsRes.value.data);
+      } else {
+        setAppointments([]);
+      }
+
       // --- Process Patients ---
-      if (patientsRes.status === "fulfilled" && !patientsRes.value.error && patientsRes.value.data) {
-        const dbPatients: VesperPatientRecord[] = patientsRes.value.data.map((p: any, idx: number) => {
-          let fullName = "Unnamed Patient";
-          if (typeof p.name === "string") fullName = p.name;
-          else if (Array.isArray(p.name) && p.name[0]?.text) fullName = p.name[0].text;
-          else if (typeof p.name === "object" && p.name?.text) fullName = p.name.text;
-          else if (p.name?.family || p.name?.given) {
-            const given = Array.isArray(p.name.given) ? p.name.given.join(" ") : p.name.given ?? "";
-            fullName = `${given} ${p.name.family ?? ""}`.trim();
-          }
+      if (
+        patientsRes.status === "fulfilled" &&
+        !patientsRes.value.error &&
+        patientsRes.value.data
+      ) {
+        const dbPatients: VesperPatientRecord[] = patientsRes.value.data.map(
+          (p: any, idx: number) => {
+            let fullName = "Unnamed Patient";
+            if (typeof p.name === "string") fullName = p.name;
+            else if (Array.isArray(p.name) && p.name[0]?.text)
+              fullName = p.name[0].text;
+            else if (typeof p.name === "object" && p.name?.text)
+              fullName = p.name.text;
+            else if (p.name?.family || p.name?.given) {
+              const given = Array.isArray(p.name.given)
+                ? p.name.given.join(" ")
+                : (p.name.given ?? "");
+              fullName = `${given} ${p.name.family ?? ""}`.trim();
+            }
 
-          const initials = fullName
-            .split(" ")
-            .filter(Boolean)
-            .map((w: string) => w[0]?.toUpperCase())
-            .slice(0, 2)
-            .join("") || "PT";
+            const initials =
+              fullName
+                .split(" ")
+                .filter(Boolean)
+                .map((w: string) => w[0]?.toUpperCase())
+                .slice(0, 2)
+                .join("") || "PT";
 
-          let age: number | string = "—";
-          if (p.birth_date) {
-            const birthYear = new Date(p.birth_date).getFullYear();
-            if (!isNaN(birthYear)) age = Math.max(1, new Date().getFullYear() - birthYear);
-          }
+            let age: number | string = "—";
+            if (p.birth_date) {
+              const birthYear = new Date(p.birth_date).getFullYear();
+              if (!isNaN(birthYear))
+                age = Math.max(1, new Date().getFullYear() - birthYear);
+            }
 
-          const gender: "female" | "male" | "other" =
-            p.gender === "female" ? "female" : p.gender === "male" ? "male" : "other";
+            const gender: "female" | "male" | "other" =
+              p.gender === "female"
+                ? "female"
+                : p.gender === "male"
+                  ? "male"
+                  : "other";
 
-          return {
-            id: p.id,
-            fullName,
-            initials,
-            age,
-            gender,
-            bedOrQueue: String(301 + idx),
-            alertsCount: 0,
-            status: "Active",
-            birthDate: p.birth_date,
-            telecom: typeof p.telecom === "string" ? p.telecom : Array.isArray(p.telecom) ? p.telecom[0]?.value : undefined,
-            address: typeof p.address === "string" ? p.address : Array.isArray(p.address) ? p.address[0]?.text : undefined,
-            mrn: p.walk_in_id || `MRN-${p.id.slice(0, 8).toUpperCase()}`,
-          };
-        });
+            return {
+              id: p.id,
+              fullName,
+              initials,
+              age,
+              gender,
+              bedOrQueue: String(301 + idx),
+              alertsCount: 0,
+              status: "Active",
+              birthDate: p.birth_date,
+              telecom:
+                typeof p.telecom === "string"
+                  ? p.telecom
+                  : Array.isArray(p.telecom)
+                    ? p.telecom[0]?.value
+                    : undefined,
+              address:
+                typeof p.address === "string"
+                  ? p.address
+                  : Array.isArray(p.address)
+                    ? p.address[0]?.text
+                    : undefined,
+              mrn: p.walk_in_id || `MRN-${p.id.slice(0, 8).toUpperCase()}`,
+            };
+          },
+        );
 
         setPatientRecords(dbPatients);
       } else {
@@ -238,8 +300,14 @@ export function useVesperDashboardData() {
       // --- Process Encounters -> Consultation time KPI ---
       let avgConsultMins = 0;
       let consultDelta = "—";
-      if (encountersRes.status === "fulfilled" && !encountersRes.value.error && encountersRes.value.data) {
-        const finished = encountersRes.value.data.filter((e: any) => e.period_start && e.period_end && e.status === "finished");
+      if (
+        encountersRes.status === "fulfilled" &&
+        !encountersRes.value.error &&
+        encountersRes.value.data
+      ) {
+        const finished = encountersRes.value.data.filter(
+          (e: any) => e.period_start && e.period_end && e.status === "finished",
+        );
         if (finished.length > 0) {
           const totalMins = finished.reduce((acc: number, curr: any) => {
             const start = new Date(curr.period_start).getTime();
@@ -256,7 +324,11 @@ export function useVesperDashboardData() {
       let waitTimeValue: number | string = 0;
       let waitTimeUnit = "mins";
       let queueDelta = "—";
-      if (queueRes.status === "fulfilled" && !queueRes.value.error && queueRes.value.data) {
+      if (
+        queueRes.status === "fulfilled" &&
+        !queueRes.value.error &&
+        queueRes.value.data
+      ) {
         const qData = queueRes.value.data;
         if (qData.length > 0) {
           waitTimeValue = qData.length * 15;
@@ -268,15 +340,27 @@ export function useVesperDashboardData() {
       let pendingLabCount = 0;
       const realTests: VesperDiagnosticTest[] = [];
 
-      if (diagRes.status === "fulfilled" && !diagRes.value.error && diagRes.value.data) {
+      if (
+        diagRes.status === "fulfilled" &&
+        !diagRes.value.error &&
+        diagRes.value.data
+      ) {
         const dWorkspace = diagRes.value.data;
         const pendingReqs = dWorkspace.serviceRequests.filter(
-          (sr) => sr.status === "active" || sr.status === "draft"
+          (sr) => sr.status === "active" || sr.status === "draft",
         );
         pendingLabCount = pendingReqs.length;
 
-        const shapes: Array<"square" | "circle" | "triangle"> = ["square", "circle", "triangle"];
-        const colors: Array<"red" | "teal" | "amber"> = ["red", "teal", "amber"];
+        const shapes: Array<"square" | "circle" | "triangle"> = [
+          "square",
+          "circle",
+          "triangle",
+        ];
+        const colors: Array<"red" | "teal" | "amber"> = [
+          "red",
+          "teal",
+          "amber",
+        ];
 
         dWorkspace.serviceRequests.forEach((sr, i) => {
           const reqDate = new Date(sr.created_at);
@@ -291,8 +375,18 @@ export function useVesperDashboardData() {
             requestedDate: reqFormatted,
             completedDate: sr.status === "completed" ? reqFormatted : null,
             status: sr.status === "completed" ? "completed" : "in_progress",
-            shape: sr.status === "completed" ? "circle" : sr.priority === "urgent" || sr.priority === "stat" ? "square" : "triangle",
-            color: sr.status === "completed" ? "teal" : sr.priority === "urgent" || sr.priority === "stat" ? "red" : "amber",
+            shape:
+              sr.status === "completed"
+                ? "circle"
+                : sr.priority === "urgent" || sr.priority === "stat"
+                  ? "square"
+                  : "triangle",
+            color:
+              sr.status === "completed"
+                ? "teal"
+                : sr.priority === "urgent" || sr.priority === "stat"
+                  ? "red"
+                  : "amber",
           });
         });
 
@@ -306,7 +400,7 @@ export function useVesperDashboardData() {
               kind: n.kind,
               read: Boolean(n.read_at),
               createdAt: n.created_at,
-            }))
+            })),
           );
         } else {
           setNotifications([]);
@@ -318,10 +412,14 @@ export function useVesperDashboardData() {
       let overdueClaimsCount = 0;
       const realTasks: VesperTask[] = [];
 
-      if (claimsRes.status === "fulfilled" && !claimsRes.value.error && claimsRes.value.data) {
+      if (
+        claimsRes.status === "fulfilled" &&
+        !claimsRes.value.error &&
+        claimsRes.value.data
+      ) {
         const claimsData = claimsRes.value.data;
         const pendingClaims = claimsData.filter(
-          (c: any) => c.status === "draft" || c.status === "submitted"
+          (c: any) => c.status === "draft" || c.status === "submitted",
         );
         overdueClaimsCount = pendingClaims.length;
 
@@ -339,7 +437,11 @@ export function useVesperDashboardData() {
       }
 
       // Turn active referrals into real tasks
-      if (referralsRes.status === "fulfilled" && !referralsRes.value.error && referralsRes.value.data) {
+      if (
+        referralsRes.status === "fulfilled" &&
+        !referralsRes.value.error &&
+        referralsRes.value.data
+      ) {
         const referralsData = referralsRes.value.data;
         referralsData.slice(0, 5).forEach((refItem: any) => {
           realTasks.push({
@@ -355,16 +457,19 @@ export function useVesperDashboardData() {
 
       // Add unread clinical notification tasks if any
       if (diagRes.status === "fulfilled" && diagRes.value.data?.notifications) {
-        diagRes.value.data.notifications.filter((n) => !n.read_at).slice(0, 3).forEach((n) => {
-          realTasks.push({
-            id: `notif-${n.id}`,
-            label: n.title || n.message,
-            completed: false,
-            fromName: "Lab & Diagnostics",
-            fromAvatar: "LD",
-            category: "clinical",
+        diagRes.value.data.notifications
+          .filter((n) => !n.read_at)
+          .slice(0, 3)
+          .forEach((n) => {
+            realTasks.push({
+              id: `notif-${n.id}`,
+              label: n.title || n.message,
+              completed: false,
+              fromName: "Lab & Diagnostics",
+              fromAvatar: "LD",
+              category: "clinical",
+            });
           });
-        });
       }
 
       setTasks(realTasks);
@@ -383,14 +488,54 @@ export function useVesperDashboardData() {
         setRecentModules(storedModules);
       } else {
         // Default to active modules that exist in this clinic
-        const todayDate = new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }).format(new Date());
+        const todayDate = new Intl.DateTimeFormat("en-US", {
+          month: "2-digit",
+          day: "2-digit",
+          year: "numeric",
+        }).format(new Date());
         setRecentModules([
-          { name: "Queue", href: "/waiting-room", iconName: "Users", date: todayDate, actionLabel: "See details" },
-          { name: "Outpatients", href: "/patients", iconName: "UserCheck", date: todayDate, actionLabel: "See details" },
-          { name: "Teleconsult", href: "/teleconsult", iconName: "Video", date: todayDate, actionLabel: "See details" },
-          { name: "Diagnostics / Mini-LIS", href: "/laboratory-services", iconName: "FlaskConical", date: todayDate, actionLabel: "See details" },
-          { name: "Inventory", href: "/inventory", iconName: "Boxes", date: todayDate, actionLabel: "See details" },
-          { name: "HMO Claims", href: "/billing/claims", iconName: "ClipboardCheck", date: todayDate, actionLabel: "See details" },
+          {
+            name: "Queue",
+            href: "/waiting-room",
+            iconName: "Users",
+            date: todayDate,
+            actionLabel: "See details",
+          },
+          {
+            name: "Outpatients",
+            href: "/patients",
+            iconName: "UserCheck",
+            date: todayDate,
+            actionLabel: "See details",
+          },
+          {
+            name: "Teleconsult",
+            href: "/teleconsult",
+            iconName: "Video",
+            date: todayDate,
+            actionLabel: "See details",
+          },
+          {
+            name: "Diagnostics / Mini-LIS",
+            href: "/laboratory-services",
+            iconName: "FlaskConical",
+            date: todayDate,
+            actionLabel: "See details",
+          },
+          {
+            name: "Inventory",
+            href: "/inventory",
+            iconName: "Boxes",
+            date: todayDate,
+            actionLabel: "See details",
+          },
+          {
+            name: "HMO Claims",
+            href: "/billing/claims",
+            iconName: "ClipboardCheck",
+            date: todayDate,
+            actionLabel: "See details",
+          },
         ]);
       }
 
@@ -409,12 +554,14 @@ export function useVesperDashboardData() {
         },
         pendingLabResults: {
           value: pendingLabCount,
-          delta: pendingLabCount > 0 ? `${pendingLabCount} pending` : "0 pending",
+          delta:
+            pendingLabCount > 0 ? `${pendingLabCount} pending` : "0 pending",
           isPositive: pendingLabCount === 0,
         },
         overdueClaims: {
           value: overdueClaimsCount,
-          delta: overdueClaimsCount > 0 ? `${overdueClaimsCount} open` : "0 open",
+          delta:
+            overdueClaimsCount > 0 ? `${overdueClaimsCount} open` : "0 open",
           isPositive: overdueClaimsCount === 0,
         },
       });
@@ -427,12 +574,36 @@ export function useVesperDashboardData() {
   }, [client, organization]);
 
   useEffect(() => {
+    if (!organization) return;
     void loadData();
-  }, [loadData]);
+    const unsubscribeQueue = subscribeToAppointmentQueue(
+      client,
+      organization.id,
+      () => void loadData(),
+    );
+    const unsubscribeWaiting = subscribeToWaitingRoomQueue(
+      client,
+      organization.id,
+      () => void loadData(),
+    );
+    return () => {
+      unsubscribeQueue();
+      unsubscribeWaiting();
+    };
+  }, [client, organization, loadData]);
+
+  const appointmentNotifs = useOptionalAppointmentNotifications();
+  useEffect(() => {
+    if (appointmentNotifs?.latestNotification && organization) {
+      void loadData();
+    }
+  }, [appointmentNotifs?.latestNotification, organization, loadData]);
 
   const toggleTask = useCallback((taskId: string) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
+      prev.map((t) =>
+        t.id === taskId ? { ...t, completed: !t.completed } : t,
+      ),
     );
   }, []);
 
@@ -440,10 +611,10 @@ export function useVesperDashboardData() {
     async (notificationId: string) => {
       await markClinicalNotificationRead(client, notificationId);
       setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
     },
-    [client]
+    [client],
   );
 
   const createPatient = useCallback(
@@ -458,16 +629,16 @@ export function useVesperDashboardData() {
       const [given, ...familyParts] = input.fullName.trim().split(" ");
       const family = familyParts.join(" ") || given;
 
-      const { error: insertError } = await client
-        .from("patients")
-        .insert({
-          organization_id: organization.id,
-          name: [{ family, given: [given], text: input.fullName }],
-          birth_date: input.birthDate,
-          gender: input.gender,
-          telecom: input.telecom ? [{ system: "phone", value: input.telecom }] : [],
-          address: input.address ? [{ text: input.address }] : [],
-        });
+      const { error: insertError } = await client.from("patients").insert({
+        organization_id: organization.id,
+        name: [{ family, given: [given], text: input.fullName }],
+        birth_date: input.birthDate,
+        gender: input.gender,
+        telecom: input.telecom
+          ? [{ system: "phone", value: input.telecom }]
+          : [],
+        address: input.address ? [{ text: input.address }] : [],
+      });
 
       if (insertError) {
         console.error("Patient creation failed:", insertError);
@@ -477,7 +648,7 @@ export function useVesperDashboardData() {
       await loadData();
       return true;
     },
-    [client, loadData, organization]
+    [client, loadData, organization],
   );
 
   const createBooking = useCallback(
@@ -489,7 +660,8 @@ export function useVesperDashboardData() {
     }): Promise<boolean> => {
       if (!organization) return false;
       const endAt = new Date(
-        new Date(input.startAt).getTime() + (input.minutesDuration ?? 30) * 60000
+        new Date(input.startAt).getTime() +
+          (input.minutesDuration ?? 30) * 60000,
       ).toISOString();
 
       const { error: insertError } = await client.from("appointments").insert({
@@ -507,10 +679,18 @@ export function useVesperDashboardData() {
         return false;
       }
 
+      broadcastAppointmentBooked({
+        organizationId: organization.id,
+        patientId: input.patientId,
+        serviceType: input.serviceType,
+        startAt: input.startAt,
+        status: "booked",
+      });
+
       await loadData();
       return true;
     },
-    [client, loadData, organization]
+    [client, loadData, organization],
   );
 
   const createReferral = useCallback(
@@ -521,16 +701,18 @@ export function useVesperDashboardData() {
       note?: string;
     }): Promise<boolean> => {
       if (!organization) return false;
-      const { error: insertError } = await client.from("service_requests").insert({
-        organization_id: organization.id,
-        patient_id: input.patientId,
-        category: "referral",
-        status: "active",
-        priority: input.priority,
-        code: "44054006",
-        code_display: input.codeDisplay,
-        note: input.note ?? "Specialist referral issued from dashboard.",
-      });
+      const { error: insertError } = await client
+        .from("service_requests")
+        .insert({
+          organization_id: organization.id,
+          patient_id: input.patientId,
+          category: "referral",
+          status: "active",
+          priority: input.priority,
+          code: "44054006",
+          code_display: input.codeDisplay,
+          note: input.note ?? "Specialist referral issued from dashboard.",
+        });
 
       if (insertError) {
         console.error("Referral creation failed:", insertError);
@@ -540,7 +722,7 @@ export function useVesperDashboardData() {
       await loadData();
       return true;
     },
-    [client, loadData, organization]
+    [client, loadData, organization],
   );
 
   return {
@@ -552,6 +734,7 @@ export function useVesperDashboardData() {
     recentModules,
     tasks,
     notifications,
+    appointments,
     toggleTask,
     markNotificationRead,
     createPatient,

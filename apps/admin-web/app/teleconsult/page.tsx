@@ -26,7 +26,10 @@ import {
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminData } from "../../components/admin-data-context";
-import { updateAppointmentStatus } from "@odyssey/supabase-client";
+import {
+  subscribeToAppointmentQueue,
+  updateAppointmentStatus,
+} from "@odyssey/supabase-client";
 
 interface TeleconsultAppointment {
   id: string;
@@ -53,7 +56,9 @@ function parsePatientName(pName: any): string {
   if (Array.isArray(pName) && pName[0]?.text) return pName[0].text;
   if (typeof pName === "object" && pName?.text) return pName.text;
   if (pName?.family || pName?.given) {
-    const given = Array.isArray(pName.given) ? pName.given.join(" ") : pName.given ?? "";
+    const given = Array.isArray(pName.given)
+      ? pName.given.join(" ")
+      : (pName.given ?? "");
     return `${given} ${pName.family ?? ""}`.trim();
   }
   return "Patient";
@@ -137,39 +142,56 @@ function formatStatusLabel(status: string): string {
 
 export default function TeleconsultPage() {
   const { client, organization } = useAdminData();
-  const [teleconsults, setTeleconsults] = useState<TeleconsultAppointment[]>([]);
+  const [teleconsults, setTeleconsults] = useState<TeleconsultAppointment[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "booked" | "arrived" | "fulfilled" | "cancelled">("all");
-  const [selectedConsult, setSelectedConsult] = useState<TeleconsultAppointment | null>(null);
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "booked" | "arrived" | "fulfilled" | "cancelled"
+  >("all");
+  const [selectedConsult, setSelectedConsult] =
+    useState<TeleconsultAppointment | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "info";
+  } | null>(null);
 
-  const showToast = useCallback((message: string, type: "success" | "info" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 3200);
-  }, []);
+  const showToast = useCallback(
+    (message: string, type: "success" | "info" = "success") => {
+      setToast({ message, type });
+      setTimeout(() => {
+        setToast((prev) => (prev?.message === message ? null : prev));
+      }, 3200);
+    },
+    [],
+  );
 
-  const copyToClipboard = useCallback((text: string, label: string, targetId?: string) => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text);
-    } else {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-    if (targetId) {
-      setCopiedId(targetId);
-      setTimeout(() => setCopiedId((curr) => (curr === targetId ? null : curr)), 2500);
-    }
-    showToast(`${label} copied to clipboard!`, "success");
-  }, [showToast]);
+  const copyToClipboard = useCallback(
+    (text: string, label: string, targetId?: string) => {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      if (targetId) {
+        setCopiedId(targetId);
+        setTimeout(
+          () => setCopiedId((curr) => (curr === targetId ? null : curr)),
+          2500,
+        );
+      }
+      showToast(`${label} copied to clipboard!`, "success");
+    },
+    [showToast],
+  );
 
   const loadTeleconsults = useCallback(async () => {
     if (!organization) return;
@@ -185,7 +207,9 @@ export default function TeleconsultPage() {
           .eq("organization_id", organization.id);
         if (rolesData) {
           for (const r of rolesData as any[]) {
-            const pracRaw = Array.isArray(r.practitioners) ? r.practitioners[0] : r.practitioners;
+            const pracRaw = Array.isArray(r.practitioners)
+              ? r.practitioners[0]
+              : r.practitioners;
             const pName = parsePatientName(pracRaw?.name);
             if (pName && pName !== "Patient") {
               practitionerRoleMap.set(r.id, `Dr. ${pName}`);
@@ -198,7 +222,8 @@ export default function TeleconsultPage() {
 
       const { data, error } = await client
         .from("appointments")
-        .select(`
+        .select(
+          `
           id,
           start_at,
           status,
@@ -215,7 +240,8 @@ export default function TeleconsultPage() {
             birth_date,
             telecom
           )
-        `)
+        `,
+        )
         .eq("organization_id", organization.id)
         .order("start_at", { ascending: false })
         .limit(100);
@@ -238,7 +264,9 @@ export default function TeleconsultPage() {
       });
 
       const mapped: TeleconsultAppointment[] = virtual.map((a: any) => {
-        const patientRaw = Array.isArray(a.patients) ? a.patients[0] : a.patients;
+        const patientRaw = Array.isArray(a.patients)
+          ? a.patients[0]
+          : a.patients;
         const patientName = parsePatientName(patientRaw?.name);
         const initials = getInitials(patientName);
 
@@ -256,15 +284,23 @@ export default function TeleconsultPage() {
         }
 
         const practitionerName =
-          (a.practitioner_role_id && practitionerRoleMap.get(a.practitioner_role_id)) ||
+          (a.practitioner_role_id &&
+            practitionerRoleMap.get(a.practitioner_role_id)) ||
           "Clinic Medical Staff";
 
         let telecomStr: string | null = null;
         if (patientRaw?.telecom) {
-          if (typeof patientRaw.telecom === "string") telecomStr = patientRaw.telecom;
-          else if (Array.isArray(patientRaw.telecom) && patientRaw.telecom[0]?.value) {
+          if (typeof patientRaw.telecom === "string")
+            telecomStr = patientRaw.telecom;
+          else if (
+            Array.isArray(patientRaw.telecom) &&
+            patientRaw.telecom[0]?.value
+          ) {
             telecomStr = patientRaw.telecom[0].value;
-          } else if (typeof patientRaw.telecom === "object" && patientRaw.telecom.value) {
+          } else if (
+            typeof patientRaw.telecom === "object" &&
+            patientRaw.telecom.value
+          ) {
             telecomStr = patientRaw.telecom.value;
           }
         }
@@ -299,30 +335,47 @@ export default function TeleconsultPage() {
   }, [client, organization]);
 
   useEffect(() => {
+    if (!organization) return;
     void loadTeleconsults();
-  }, [loadTeleconsults]);
+    const unsub = subscribeToAppointmentQueue(
+      client,
+      organization.id,
+      () => void loadTeleconsults(),
+    );
+    return () => {
+      unsub();
+    };
+  }, [client, organization, loadTeleconsults]);
 
   const handleStatusChange = async (
     appointmentId: string,
-    newStatus: "arrived" | "cancelled" | "noshow"
+    newStatus: "arrived" | "cancelled" | "noshow",
   ) => {
     setActionInProgress(appointmentId);
     try {
-      const res = await updateAppointmentStatus(client, appointmentId, newStatus);
+      const res = await updateAppointmentStatus(
+        client,
+        appointmentId,
+        newStatus,
+      );
       if (res.error) {
         showToast(`Failed to update status: ${res.error.message}`, "info");
       } else {
         setTeleconsults((prev) =>
-          prev.map((item) => (item.id === appointmentId ? { ...item, status: newStatus } : item))
+          prev.map((item) =>
+            item.id === appointmentId ? { ...item, status: newStatus } : item,
+          ),
         );
         if (selectedConsult && selectedConsult.id === appointmentId) {
-          setSelectedConsult((prev) => (prev ? { ...prev, status: newStatus } : null));
+          setSelectedConsult((prev) =>
+            prev ? { ...prev, status: newStatus } : null,
+          );
         }
         showToast(
           newStatus === "arrived"
             ? "Patient checked in and marked ready in waiting room."
             : `Appointment marked as ${formatStatusLabel(newStatus)}.`,
-          "success"
+          "success",
         );
       }
     } catch (err: any) {
@@ -335,10 +388,18 @@ export default function TeleconsultPage() {
   // Metrics computation
   const metrics = useMemo(() => {
     const total = teleconsults.length;
-    const booked = teleconsults.filter((t) => ["booked", "scheduled", "proposed"].includes(t.status.toLowerCase())).length;
-    const arrived = teleconsults.filter((t) => t.status.toLowerCase() === "arrived").length;
-    const fulfilled = teleconsults.filter((t) => ["fulfilled", "completed"].includes(t.status.toLowerCase())).length;
-    const cancelled = teleconsults.filter((t) => ["cancelled", "noshow"].includes(t.status.toLowerCase())).length;
+    const booked = teleconsults.filter((t) =>
+      ["booked", "scheduled", "proposed"].includes(t.status.toLowerCase()),
+    ).length;
+    const arrived = teleconsults.filter(
+      (t) => t.status.toLowerCase() === "arrived",
+    ).length;
+    const fulfilled = teleconsults.filter((t) =>
+      ["fulfilled", "completed"].includes(t.status.toLowerCase()),
+    ).length;
+    const cancelled = teleconsults.filter((t) =>
+      ["cancelled", "noshow"].includes(t.status.toLowerCase()),
+    ).length;
     return { total, booked, arrived, fulfilled, cancelled };
   }, [teleconsults]);
 
@@ -355,7 +416,9 @@ export default function TeleconsultPage() {
       if (!matchesSearch) return false;
 
       if (statusFilter === "booked") {
-        return ["booked", "scheduled", "proposed"].includes(t.status.toLowerCase());
+        return ["booked", "scheduled", "proposed"].includes(
+          t.status.toLowerCase(),
+        );
       }
       if (statusFilter === "arrived") {
         return t.status.toLowerCase() === "arrived";
@@ -387,8 +450,8 @@ export default function TeleconsultPage() {
         <div>
           <h1 className="vesper-h1">Teleconsultation</h1>
           <p className="vesper-header-subcopy">
-            Virtual visit coordination, secure room dispatch, and patient check-in for{" "}
-            {organization?.name ?? "Odyssey Clinic"}.
+            Virtual visit coordination, secure room dispatch, and patient
+            check-in for {organization?.name ?? "Odyssey Clinic"}.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
@@ -397,7 +460,8 @@ export default function TeleconsultPage() {
             className="vesper-btn-outline"
             onClick={() => void loadTeleconsults()}
           >
-            <RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh Schedule
+            <RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh
+            Schedule
           </button>
           <Link href="/appointments" className="vesper-btn-primary">
             <Calendar size={14} /> Schedule Virtual Visit
@@ -406,33 +470,46 @@ export default function TeleconsultPage() {
       </div>
 
       {/* KPI / Metric Chips Strip */}
-      <div className="vesper-kpi-grid" style={{ marginTop: "20px", marginBottom: "20px" }}>
+      <div
+        className="vesper-kpi-grid"
+        style={{ marginTop: "20px", marginBottom: "20px" }}
+      >
         <div className="vesper-kpi-card">
           <span className="vesper-kpi-card__label">Total Virtual Visits</span>
           <div className="vesper-kpi-card__value-group">
             <span className="vesper-kpi-card__value">{metrics.total}</span>
-            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">All Records</span>
+            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">
+              All Records
+            </span>
           </div>
         </div>
         <div className="vesper-kpi-card">
           <span className="vesper-kpi-card__label">In Waiting Room</span>
           <div className="vesper-kpi-card__value-group">
-            <span className="vesper-kpi-card__value vesper-text-emerald">{metrics.arrived}</span>
-            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--success">Ready for Doctor</span>
+            <span className="vesper-kpi-card__value vesper-text-emerald">
+              {metrics.arrived}
+            </span>
+            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--success">
+              Ready for Doctor
+            </span>
           </div>
         </div>
         <div className="vesper-kpi-card">
           <span className="vesper-kpi-card__label">Upcoming Scheduled</span>
           <div className="vesper-kpi-card__value-group">
             <span className="vesper-kpi-card__value">{metrics.booked}</span>
-            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">Awaiting Intake</span>
+            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">
+              Awaiting Intake
+            </span>
           </div>
         </div>
         <div className="vesper-kpi-card">
           <span className="vesper-kpi-card__label">Completed Sessions</span>
           <div className="vesper-kpi-card__value-group">
             <span className="vesper-kpi-card__value">{metrics.fulfilled}</span>
-            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">Fulfilled</span>
+            <span className="vesper-kpi-card__pill vesper-kpi-card__pill--neutral">
+              Fulfilled
+            </span>
           </div>
         </div>
       </div>
@@ -445,7 +522,8 @@ export default function TeleconsultPage() {
             <div>
               <h2 className="vesper-card__title">Scheduled Video Visits</h2>
               <p className="vesper-card__subtitle">
-                {filteredTeleconsults.length} consultation{filteredTeleconsults.length === 1 ? "" : "s"} visible
+                {filteredTeleconsults.length} consultation
+                {filteredTeleconsults.length === 1 ? "" : "s"} visible
               </p>
             </div>
           </div>
@@ -538,9 +616,13 @@ export default function TeleconsultPage() {
                         <div className="vesper-patient-cell">
                           <div className="vesper-avatar-chip">{t.initials}</div>
                           <div>
-                            <span className="vesper-patient-name">{t.patientName}</span>
+                            <span className="vesper-patient-name">
+                              {t.patientName}
+                            </span>
                             {t.patientTelecom && (
-                              <div style={{ fontSize: "11px", color: "#64748b" }}>
+                              <div
+                                style={{ fontSize: "11px", color: "#64748b" }}
+                              >
                                 {t.patientTelecom}
                               </div>
                             )}
@@ -548,19 +630,34 @@ export default function TeleconsultPage() {
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12.5px", color: "#334155" }}>
-                          <Stethoscope size={13} style={{ color: "#2563eb", flexShrink: 0 }} />
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            fontSize: "12.5px",
+                            color: "#334155",
+                          }}
+                        >
+                          <Stethoscope
+                            size={13}
+                            style={{ color: "#2563eb", flexShrink: 0 }}
+                          />
                           <span>{t.practitionerName}</span>
                         </div>
                       </td>
-                      <td style={{ fontSize: "12.5px" }}>{t.appointmentTime}</td>
+                      <td style={{ fontSize: "12.5px" }}>
+                        {t.appointmentTime}
+                      </td>
                       <td>
                         <span className="vesper-alert-pill vesper-alert-pill--low">
                           {t.mode}
                         </span>
                       </td>
                       <td>
-                        <span className={`vesper-alert-pill ${getStatusPillClass(t.status)}`}>
+                        <span
+                          className={`vesper-alert-pill ${getStatusPillClass(t.status)}`}
+                        >
                           {formatStatusLabel(t.status)}
                         </span>
                       </td>
@@ -570,7 +667,11 @@ export default function TeleconsultPage() {
                           <button
                             type="button"
                             className="vesper-btn-outline"
-                            style={{ padding: "4px 10px", fontSize: "12px", gap: "4px" }}
+                            style={{
+                              padding: "4px 10px",
+                              fontSize: "12px",
+                              gap: "4px",
+                            }}
                             onClick={() => setSelectedConsult(t)}
                             title="View visit details and manage link dispatch"
                           >
@@ -581,26 +682,37 @@ export default function TeleconsultPage() {
                           <button
                             type="button"
                             className="vesper-btn-outline"
-                            style={{ padding: "4px 10px", fontSize: "12px", gap: "4px" }}
+                            style={{
+                              padding: "4px 10px",
+                              fontSize: "12px",
+                              gap: "4px",
+                            }}
                             title="Copy secure patient consultation invite link"
                             onClick={() =>
                               copyToClipboard(
                                 getPatientMeetingLink(t.id),
                                 "Patient consultation link",
-                                t.id
+                                t.id,
                               )
                             }
                           >
                             {copiedId === t.id ? (
-                              <Check size={13} className="vesper-text-emerald" />
+                              <Check
+                                size={13}
+                                className="vesper-text-emerald"
+                              />
                             ) : (
                               <Link2 size={13} />
                             )}
-                            <span>{copiedId === t.id ? "Copied" : "Copy Link"}</span>
+                            <span>
+                              {copiedId === t.id ? "Copied" : "Copy Link"}
+                            </span>
                           </button>
 
                           {/* Quick Check-in for Booked Patients */}
-                          {["booked", "scheduled"].includes(t.status.toLowerCase()) && (
+                          {["booked", "scheduled"].includes(
+                            t.status.toLowerCase(),
+                          ) && (
                             <button
                               type="button"
                               className="vesper-btn-primary"
@@ -612,7 +724,9 @@ export default function TeleconsultPage() {
                                 borderColor: "#059669",
                               }}
                               disabled={actionInProgress === t.id}
-                              onClick={() => void handleStatusChange(t.id, "arrived")}
+                              onClick={() =>
+                                void handleStatusChange(t.id, "arrived")
+                              }
                               title="Mark patient as arrived in virtual waiting room"
                             >
                               <UserCheck size={13} /> Check In
@@ -628,8 +742,8 @@ export default function TeleconsultPage() {
                       {loading
                         ? "Loading scheduled video consultations..."
                         : searchQuery || statusFilter !== "all"
-                        ? "No scheduled consultations match your current filter."
-                        : "No scheduled video visits available for this organization."}
+                          ? "No scheduled consultations match your current filter."
+                          : "No scheduled video visits available for this organization."}
                     </td>
                   </tr>
                 )}
@@ -642,8 +756,12 @@ export default function TeleconsultPage() {
         <div className="vesper-card">
           <div className="vesper-card__header">
             <div>
-              <h2 className="vesper-card__title">Telehealth Operations & Media Gateway</h2>
-              <p className="vesper-card__subtitle">Odyssey Private Media Gateway · Virtual Care Oversight</p>
+              <h2 className="vesper-card__title">
+                Telehealth Operations & Media Gateway
+              </h2>
+              <p className="vesper-card__subtitle">
+                Odyssey Private Media Gateway · Virtual Care Oversight
+              </p>
             </div>
           </div>
 
@@ -651,9 +769,19 @@ export default function TeleconsultPage() {
             {/* System Status Indicators */}
             <div className="vesper-contact-list">
               <div className="vesper-contact-item">
-                <ShieldCheck size={16} className="vesper-text-emerald" style={{ flexShrink: 0 }} />
+                <ShieldCheck
+                  size={16}
+                  className="vesper-text-emerald"
+                  style={{ flexShrink: 0 }}
+                />
                 <div>
-                  <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
+                  <strong
+                    style={{
+                      fontSize: "12.5px",
+                      color: "#0f172a",
+                      display: "block",
+                    }}
+                  >
                     Private WebRTC Gateway Operational
                   </strong>
                   <span style={{ fontSize: "11.5px", color: "#64748b" }}>
@@ -662,24 +790,46 @@ export default function TeleconsultPage() {
                 </div>
               </div>
               <div className="vesper-contact-item">
-                <Lock size={16} className="vesper-text-emerald" style={{ flexShrink: 0 }} />
+                <Lock
+                  size={16}
+                  className="vesper-text-emerald"
+                  style={{ flexShrink: 0 }}
+                />
                 <div>
-                  <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
+                  <strong
+                    style={{
+                      fontSize: "12.5px",
+                      color: "#0f172a",
+                      display: "block",
+                    }}
+                  >
                     Clinical Privacy & Role Restriction
                   </strong>
                   <span style={{ fontSize: "11.5px", color: "#64748b" }}>
-                    Video rooms are strictly restricted to attending physicians and verified patients.
+                    Video rooms are strictly restricted to attending physicians
+                    and verified patients.
                   </span>
                 </div>
               </div>
               <div className="vesper-contact-item">
-                <CheckCircle2 size={16} className="vesper-text-emerald" style={{ flexShrink: 0 }} />
+                <CheckCircle2
+                  size={16}
+                  className="vesper-text-emerald"
+                  style={{ flexShrink: 0 }}
+                />
                 <div>
-                  <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
+                  <strong
+                    style={{
+                      fontSize: "12.5px",
+                      color: "#0f172a",
+                      display: "block",
+                    }}
+                  >
                     Integrated SOAP Documentation
                   </strong>
                   <span style={{ fontSize: "11.5px", color: "#64748b" }}>
-                    Clinical encounters sync live to patient EHR upon physician admission.
+                    Clinical encounters sync live to patient EHR upon physician
+                    admission.
                   </span>
                 </div>
               </div>
@@ -695,7 +845,14 @@ export default function TeleconsultPage() {
                 border: "1px solid #e2e8f0",
               }}
             >
-              <h3 style={{ fontSize: "12.5px", fontWeight: 600, color: "#1e293b", margin: "0 0 8px 0" }}>
+              <h3
+                style={{
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  color: "#1e293b",
+                  margin: "0 0 8px 0",
+                }}
+              >
                 Administrator Operating Procedures
               </h3>
               <ul
@@ -708,19 +865,31 @@ export default function TeleconsultPage() {
                 }}
               >
                 <li>
-                  <strong>Dispatch Invites:</strong> Use the <em>Manage</em> or <em>Copy Link</em> action to send patient access URLs via SMS or email when patients need reconnection.
+                  <strong>Dispatch Invites:</strong> Use the <em>Manage</em> or{" "}
+                  <em>Copy Link</em> action to send patient access URLs via SMS
+                  or email when patients need reconnection.
                 </li>
                 <li>
-                  <strong>Triage & Check-in:</strong> Verify patient contact details and click <em>Check In</em> to place them into the virtual waiting room for the assigned doctor.
+                  <strong>Triage & Check-in:</strong> Verify patient contact
+                  details and click <em>Check In</em> to place them into the
+                  virtual waiting room for the assigned doctor.
                 </li>
                 <li>
-                  <strong>Rescheduling:</strong> Manage appointments directly or open the Booking Manager to reschedule or reassign clinicians.
+                  <strong>Rescheduling:</strong> Manage appointments directly or
+                  open the Booking Manager to reschedule or reassign clinicians.
                 </li>
               </ul>
             </div>
 
             {/* Quick Action Navigation */}
-            <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div
+              style={{
+                marginTop: "18px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
               <Link
                 href="/appointments"
                 className="vesper-btn-outline"
@@ -742,7 +911,10 @@ export default function TeleconsultPage() {
 
       {/* Virtual Consultation Management & Dispatch Modal */}
       {selectedConsult && (
-        <div className="vesper-modal-backdrop" onClick={() => setSelectedConsult(null)}>
+        <div
+          className="vesper-modal-backdrop"
+          onClick={() => setSelectedConsult(null)}
+        >
           <div
             className="vesper-modal vesper-modal--wide"
             onClick={(e) => e.stopPropagation()}
@@ -752,11 +924,23 @@ export default function TeleconsultPage() {
             {/* Modal Header */}
             <div className="vesper-modal__header">
               <div className="vesper-patient-modal-title-group">
-                <div className="vesper-patient-modal-avatar">{selectedConsult.initials}</div>
+                <div className="vesper-patient-modal-avatar">
+                  {selectedConsult.initials}
+                </div>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <h2 className="vesper-modal__title">{selectedConsult.patientName}</h2>
-                    <span className={`vesper-alert-pill ${getStatusPillClass(selectedConsult.status)}`}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <h2 className="vesper-modal__title">
+                      {selectedConsult.patientName}
+                    </h2>
+                    <span
+                      className={`vesper-alert-pill ${getStatusPillClass(selectedConsult.status)}`}
+                    >
                       {formatStatusLabel(selectedConsult.status)}
                     </span>
                   </div>
@@ -781,12 +965,18 @@ export default function TeleconsultPage() {
               {/* Session Overview Grid */}
               <div className="vesper-patient-info-grid">
                 <div className="vesper-info-card">
-                  <span className="vesper-info-card__label">Scheduled Time</span>
-                  <strong className="vesper-info-card__value">{selectedConsult.appointmentTime}</strong>
+                  <span className="vesper-info-card__label">
+                    Scheduled Time
+                  </span>
+                  <strong className="vesper-info-card__value">
+                    {selectedConsult.appointmentTime}
+                  </strong>
                 </div>
 
                 <div className="vesper-info-card">
-                  <span className="vesper-info-card__label">Attending Clinician</span>
+                  <span className="vesper-info-card__label">
+                    Attending Clinician
+                  </span>
                   <strong className="vesper-info-card__value vesper-text-emerald">
                     {selectedConsult.practitionerName}
                   </strong>
@@ -795,12 +985,16 @@ export default function TeleconsultPage() {
                 <div className="vesper-info-card">
                   <span className="vesper-info-card__label">Queue / Slip</span>
                   <strong className="vesper-info-card__value">
-                    {selectedConsult.queueNumber ? `Queue #${selectedConsult.queueNumber}` : "Direct Booking"}
+                    {selectedConsult.queueNumber
+                      ? `Queue #${selectedConsult.queueNumber}`
+                      : "Direct Booking"}
                   </strong>
                 </div>
 
                 <div className="vesper-info-card">
-                  <span className="vesper-info-card__label">Patient Contact</span>
+                  <span className="vesper-info-card__label">
+                    Patient Contact
+                  </span>
                   <strong className="vesper-info-card__value">
                     {selectedConsult.patientTelecom ?? "No phone recorded"}
                   </strong>
@@ -808,18 +1002,39 @@ export default function TeleconsultPage() {
               </div>
 
               {/* Secure Link Dispatch Section (Admin Superpower) */}
-              <div className="vesper-detail-section" style={{ marginTop: "16px" }}>
-                <h3 className="vesper-detail-section__title" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Link2 size={15} className="vesper-text-emerald" /> Secure Room Access & Link Dispatch
+              <div
+                className="vesper-detail-section"
+                style={{ marginTop: "16px" }}
+              >
+                <h3
+                  className="vesper-detail-section__title"
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Link2 size={15} className="vesper-text-emerald" /> Secure
+                  Room Access & Link Dispatch
                 </h3>
-                <p style={{ fontSize: "12px", color: "#64748b", margin: "4px 0 12px 0" }}>
-                  Consultation audio & video rooms are restricted to the verified patient and attending physician.
-                  As clinic administrator, copy and dispatch the direct join links below to assist patients or doctors.
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "#64748b",
+                    margin: "4px 0 12px 0",
+                  }}
+                >
+                  Consultation audio & video rooms are restricted to the
+                  verified patient and attending physician. As clinic
+                  administrator, copy and dispatch the direct join links below
+                  to assist patients or doctors.
                 </p>
 
                 {/* Patient Room Link */}
                 <div style={{ marginBottom: "12px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: "#334155",
+                    }}
+                  >
                     Patient Consultation Link
                   </label>
                   <div className="vesper-link-box">
@@ -831,12 +1046,16 @@ export default function TeleconsultPage() {
                     <button
                       type="button"
                       className="vesper-btn-outline"
-                      style={{ padding: "5px 12px", fontSize: "12px", gap: "4px" }}
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: "12px",
+                        gap: "4px",
+                      }}
                       onClick={() =>
                         copyToClipboard(
                           getPatientMeetingLink(selectedConsult.id),
                           "Patient consultation link",
-                          `modal-patient-${selectedConsult.id}`
+                          `modal-patient-${selectedConsult.id}`,
                         )
                       }
                     >
@@ -846,7 +1065,9 @@ export default function TeleconsultPage() {
                         <Copy size={13} />
                       )}
                       <span>
-                        {copiedId === `modal-patient-${selectedConsult.id}` ? "Copied" : "Copy"}
+                        {copiedId === `modal-patient-${selectedConsult.id}`
+                          ? "Copied"
+                          : "Copy"}
                       </span>
                     </button>
                   </div>
@@ -854,7 +1075,13 @@ export default function TeleconsultPage() {
 
                 {/* Provider Room Link */}
                 <div style={{ marginBottom: "12px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: "#334155",
+                    }}
+                  >
                     Attending Physician Portal Link
                   </label>
                   <div className="vesper-link-box">
@@ -866,12 +1093,16 @@ export default function TeleconsultPage() {
                     <button
                       type="button"
                       className="vesper-btn-outline"
-                      style={{ padding: "5px 12px", fontSize: "12px", gap: "4px" }}
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: "12px",
+                        gap: "4px",
+                      }}
                       onClick={() =>
                         copyToClipboard(
                           getDoctorMeetingLink(selectedConsult.id),
                           "Physician room link",
-                          `modal-doctor-${selectedConsult.id}`
+                          `modal-doctor-${selectedConsult.id}`,
                         )
                       }
                     >
@@ -881,7 +1112,9 @@ export default function TeleconsultPage() {
                         <Copy size={13} />
                       )}
                       <span>
-                        {copiedId === `modal-doctor-${selectedConsult.id}` ? "Copied" : "Copy"}
+                        {copiedId === `modal-doctor-${selectedConsult.id}`
+                          ? "Copied"
+                          : "Copy"}
                       </span>
                     </button>
                   </div>
@@ -892,14 +1125,22 @@ export default function TeleconsultPage() {
                   <button
                     type="button"
                     className="vesper-btn-outline"
-                    style={{ width: "100%", justifyContent: "center", gap: "6px" }}
+                    style={{
+                      width: "100%",
+                      justifyContent: "center",
+                      gap: "6px",
+                    }}
                     onClick={() => {
                       const msg = `Hello ${selectedConsult.patientName}, your virtual medical consultation with ${
                         organization?.name ?? "Odyssey Clinic"
                       } is scheduled for ${selectedConsult.appointmentTime}. Please click the secure link to enter your private consultation room: ${getPatientMeetingLink(
-                        selectedConsult.id
+                        selectedConsult.id,
                       )}`;
-                      copyToClipboard(msg, "Patient SMS / Messaging invitation template", "modal-sms");
+                      copyToClipboard(
+                        msg,
+                        "Patient SMS / Messaging invitation template",
+                        "modal-sms",
+                      );
                     }}
                   >
                     <MessageSquare size={14} />
@@ -911,16 +1152,32 @@ export default function TeleconsultPage() {
               </div>
 
               {/* Administrative Status Actions */}
-              <div className="vesper-detail-section" style={{ marginTop: "16px" }}>
-                <h3 className="vesper-detail-section__title">Administrative Status & Triage</h3>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
-                  {["booked", "scheduled"].includes(selectedConsult.status.toLowerCase()) && (
+              <div
+                className="vesper-detail-section"
+                style={{ marginTop: "16px" }}
+              >
+                <h3 className="vesper-detail-section__title">
+                  Administrative Status & Triage
+                </h3>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                    marginTop: "10px",
+                  }}
+                >
+                  {["booked", "scheduled"].includes(
+                    selectedConsult.status.toLowerCase(),
+                  ) && (
                     <button
                       type="button"
                       className="vesper-btn-primary"
                       style={{ background: "#059669", borderColor: "#059669" }}
                       disabled={actionInProgress === selectedConsult.id}
-                      onClick={() => void handleStatusChange(selectedConsult.id, "arrived")}
+                      onClick={() =>
+                        void handleStatusChange(selectedConsult.id, "arrived")
+                      }
                     >
                       <UserCheck size={14} /> Check In Patient (Mark Ready)
                     </button>
@@ -940,17 +1197,22 @@ export default function TeleconsultPage() {
                         fontWeight: 500,
                       }}
                     >
-                      <CheckCircle2 size={16} /> Patient is in the virtual waiting room ready for doctor.
+                      <CheckCircle2 size={16} /> Patient is in the virtual
+                      waiting room ready for doctor.
                     </div>
                   )}
 
-                  {["booked", "scheduled", "arrived"].includes(selectedConsult.status.toLowerCase()) && (
+                  {["booked", "scheduled", "arrived"].includes(
+                    selectedConsult.status.toLowerCase(),
+                  ) && (
                     <>
                       <button
                         type="button"
                         className="vesper-btn-outline"
                         disabled={actionInProgress === selectedConsult.id}
-                        onClick={() => void handleStatusChange(selectedConsult.id, "noshow")}
+                        onClick={() =>
+                          void handleStatusChange(selectedConsult.id, "noshow")
+                        }
                       >
                         Mark as No-Show
                       </button>
@@ -960,8 +1222,15 @@ export default function TeleconsultPage() {
                         style={{ color: "#dc2626", borderColor: "#fecdd3" }}
                         disabled={actionInProgress === selectedConsult.id}
                         onClick={() => {
-                          if (window.confirm("Are you sure you want to cancel this virtual appointment?")) {
-                            void handleStatusChange(selectedConsult.id, "cancelled");
+                          if (
+                            window.confirm(
+                              "Are you sure you want to cancel this virtual appointment?",
+                            )
+                          ) {
+                            void handleStatusChange(
+                              selectedConsult.id,
+                              "cancelled",
+                            );
                           }
                         }}
                       >

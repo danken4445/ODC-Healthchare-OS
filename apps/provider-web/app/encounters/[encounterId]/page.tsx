@@ -209,6 +209,7 @@ export default function EncounterRecordingPage() {
   const latestSoapNoteIdRef = useRef<string | null>(null);
   const lastSavedSoapTextRef = useRef("");
   const soapSaveInFlightRef = useRef(false);
+  const soapSavePromiseRef = useRef<Promise<boolean> | null>(null);
   const [rxMedication, setRxMedication] = useState<string>("");
   const [rxDosage, setRxDosage] = useState<string>("");
   const [rxNote, setRxNote] = useState<string>("");
@@ -626,42 +627,85 @@ export default function EncounterRecordingPage() {
 
   const persistSoapNote = useCallback(async (source: "auto" | "manual") => {
     const text = soapInputRef.current.trim();
-    if (!text || soapSaveInFlightRef.current) return false;
+    if (!text) return false;
 
-    soapSaveInFlightRef.current = true;
-    setSoapAutosaveState("saving");
-    const result = await saveSoapNote(createBrowserSupabaseClient(), {
-      encounterId,
-      text,
-      supersedesId: latestSoapNoteIdRef.current ?? undefined,
-    });
-    soapSaveInFlightRef.current = false;
-
-    if (result.error) {
-      setSoapAutosaveState("error");
-      setStatus(`Unable to save the consultation note: ${result.error.message}`);
-      return false;
+    // If a save operation is already in-flight, wait for it to complete
+    if (soapSaveInFlightRef.current && soapSavePromiseRef.current) {
+      const inFlightSuccess = await soapSavePromiseRef.current;
+      if (source === "manual" && inFlightSuccess) {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: soapAutosaveRevision > 0 ? soapAutosaveRevision : 1,
+          timestamp: soapLastSavedAt ?? new Date(),
+        });
+      }
+      return inFlightSuccess;
     }
 
-    latestSoapNoteIdRef.current = result.data;
-    lastSavedSoapTextRef.current = text;
-    setLatestSoapNoteId(result.data);
-    setSoapLastSavedAt(new Date());
+    // If identical text is already saved in the database, don't spam duplicate records
+    if (text === lastSavedSoapTextRef.current) {
+      setSoapDirty(false);
+      setSoapAutosaveState("saved");
+      if (source === "manual") {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: soapAutosaveRevision > 0 ? soapAutosaveRevision : 1,
+          timestamp: soapLastSavedAt ?? new Date(),
+        });
+      }
+      return true;
+    }
 
-    const hasNewerChanges = soapInputRef.current.trim() !== text;
-    setSoapDirty(hasNewerChanges);
-    setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
-    if (hasNewerChanges) setSoapAutosaveRevision((revision) => revision + 1);
-    if (source === "manual") {
-      setStatus("Consultation note saved.");
-      setSoapSaveConfirmation({
-        noteSnippet: text,
-        revisionNumber: soapAutosaveRevision + 1,
-        timestamp: new Date(),
+    const saveExecution = (async () => {
+      soapSaveInFlightRef.current = true;
+      setSoapAutosaveState("saving");
+      const result = await saveSoapNote(createBrowserSupabaseClient(), {
+        encounterId,
+        text,
+        supersedesId: latestSoapNoteIdRef.current ?? undefined,
       });
+      soapSaveInFlightRef.current = false;
+
+      if (result.error) {
+        setSoapAutosaveState("error");
+        setStatus(`Unable to save the consultation note: ${result.error.message}`);
+        return false;
+      }
+
+      latestSoapNoteIdRef.current = result.data;
+      lastSavedSoapTextRef.current = text;
+      setLatestSoapNoteId(result.data);
+      const savedDate = new Date();
+      setSoapLastSavedAt(savedDate);
+
+      const hasNewerChanges = soapInputRef.current.trim() !== text;
+      setSoapDirty(hasNewerChanges);
+      setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
+      const nextRev = soapAutosaveRevision + 1;
+      setSoapAutosaveRevision(nextRev);
+
+      if (source === "manual") {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: nextRev,
+          timestamp: savedDate,
+        });
+      }
+      return true;
+    })();
+
+    soapSavePromiseRef.current = saveExecution;
+    try {
+      return await saveExecution;
+    } finally {
+      if (soapSavePromiseRef.current === saveExecution) {
+        soapSavePromiseRef.current = null;
+      }
     }
-    return true;
-  }, [encounterId]);
+  }, [encounterId, soapAutosaveRevision, soapLastSavedAt]);
 
   useEffect(() => {
     if (
@@ -1144,6 +1188,7 @@ export default function EncounterRecordingPage() {
                   debugMode={debugMode}
                   encounterId={encounterId}
                   autosaveState={soapAutosaveState}
+                  isDirty={soapDirty}
                   lastSavedAt={soapLastSavedAt ? soapLastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null}
                   onChange={handleSoapChange}
                   onRetryAutosave={() => void persistSoapNote("manual")}

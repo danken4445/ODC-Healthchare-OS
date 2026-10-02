@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@odyssey/types": "workspace:*",
     "@supabase/supabase-js": "^2.49.1",
-    "@odyssey/types": "workspace:*"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

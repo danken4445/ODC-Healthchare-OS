@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import {
   getHumanNameDisplay,
   type AppointmentQueueItem,
@@ -7,6 +8,7 @@ import {
   type AppointmentStatus,
   type AppointmentSummary,
   type ClinicServiceSummary,
+  type ServicePractitionerRow,
   type ClinicServiceInput,
   type ClinicAccountInput,
   type ClinicRoleDefinition,
@@ -119,6 +121,49 @@ export interface SupabaseFailure {
 
 export type SupabaseResult<T> =
   { data: T; error: null } | { data: null; error: SupabaseFailure };
+
+export const servicePractitionerSelectionInputSchema = z.object({
+  organizationId: z.string().uuid(),
+  clinicServiceId: z.string().uuid(),
+  practitionerRoleIds: z.array(z.string().uuid()).min(1),
+});
+
+export const servicePractitionerAssignmentInputSchema =
+  servicePractitionerSelectionInputSchema.extend({
+    durationMinutesOverride: z.number().int().min(5).max(480).nullable().optional(),
+  });
+
+export const servicePractitionerRowSchema = z.object({
+  id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  clinic_service_id: z.string().uuid(),
+  practitioner_role_id: z.string().uuid(),
+  is_active: z.boolean(),
+  duration_minutes_override: z.number().int().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const servicePractitionerAssignmentResultSchema = z.array(
+  servicePractitionerRowSchema,
+);
+export const servicePractitionerUnassignmentResultSchema = z.number().int().min(0);
+
+export const servicePractitionerOptionSchema = z.object({
+  practitionerRoleId: z.string().uuid(),
+  displayName: z.string().min(1),
+  roleCode: z.enum(["doctor", "specialist"]),
+});
+
+export type ServicePractitionerSelectionInput = z.infer<
+  typeof servicePractitionerSelectionInputSchema
+>;
+export type ServicePractitionerAssignmentInput = z.infer<
+  typeof servicePractitionerAssignmentInputSchema
+>;
+export type ServicePractitionerOption = z.infer<
+  typeof servicePractitionerOptionSchema
+>;
 
 const patientSummaryColumns =
   "id, organization_id, active, name, birth_date, blood_type, gender, photo_url, telecom, address, contact, walk_in_id, created_at, updated_at";
@@ -629,7 +674,7 @@ export async function updateReferralStatus(
 ): Promise<SupabaseResult<void>> {
   const { error } = await client.rpc("update_referral_status", {
     p_service_request_id: requestId,
-    p_status: status,
+    p_status: status as never,
   });
   return error ? failure(error) : success(undefined);
 }
@@ -1064,7 +1109,7 @@ export async function assignStaffDepartment(
   const { error } = await client.rpc("assign_staff_department", {
     p_organization_id: input.organizationId,
     p_user_id: input.userId,
-    p_department_id: input.departmentId,
+    p_department_id: input.departmentId as never,
   });
   return error ? failure(error) : success(undefined);
 }
@@ -1124,37 +1169,41 @@ export async function getInventoryWorkspace(
     }
   })();
 
-  const [departments, items, stock, holds, usages, billingStatuses] = await Promise.all([
-    client
-      .from("departments")
-      .select(departmentSummaryColumns)
-      .eq("organization_id", organizationId)
-      .order("name"),
-    client
-      .from("inventory_items")
-      .select(inventoryItemSummaryColumns)
-      .eq("organization_id", organizationId)
-      .order("name"),
-    client
-      .from("department_stock")
-      .select(departmentStockSummaryColumns)
-      .eq("organization_id", organizationId),
-    client
-      .from("inventory_holds")
-      .select(inventoryHoldSummaryColumns)
-      .eq("organization_id", organizationId)
-      .eq("status", "held"),
-    client
-      .from("inventory_usages")
-      .select(inventoryUsageSummaryColumns)
-      .eq("organization_id", organizationId)
-      .order("used_at", { ascending: false })
-      .limit(100),
-    client.rpc("get_inventory_usage_billing_statuses" as never, {
-      p_organization_id: organizationId,
-    } as never),
-    staffNamesPromise,
-  ]);
+  const [departments, items, stock, holds, usages, billingStatuses] =
+    await Promise.all([
+      client
+        .from("departments")
+        .select(departmentSummaryColumns)
+        .eq("organization_id", organizationId)
+        .order("name"),
+      client
+        .from("inventory_items")
+        .select(inventoryItemSummaryColumns)
+        .eq("organization_id", organizationId)
+        .order("name"),
+      client
+        .from("department_stock")
+        .select(departmentStockSummaryColumns)
+        .eq("organization_id", organizationId),
+      client
+        .from("inventory_holds")
+        .select(inventoryHoldSummaryColumns)
+        .eq("organization_id", organizationId)
+        .eq("status", "held"),
+      client
+        .from("inventory_usages")
+        .select(inventoryUsageSummaryColumns)
+        .eq("organization_id", organizationId)
+        .order("used_at", { ascending: false })
+        .limit(100),
+      client.rpc(
+        "get_inventory_usage_billing_statuses" as never,
+        {
+          p_organization_id: organizationId,
+        } as never,
+      ),
+      staffNamesPromise,
+    ]);
   const baseError = [departments, items, stock, holds, usages].find(
     (result) => result.error,
   )?.error;
@@ -1179,10 +1228,21 @@ export async function getInventoryWorkspace(
     }));
   }
 
-  const billingStatusByUsageId = new Map<string, "unbilled" | "paid" | "no-balance-billing">();
+  const billingStatusByUsageId = new Map<
+    string,
+    "unbilled" | "paid" | "no-balance-billing"
+  >();
   if (!billingStatuses.error && Array.isArray(billingStatuses.data)) {
-    for (const row of billingStatuses.data as Array<{ usage_id?: string; billing_status?: string }>) {
-      if (row.usage_id && (row.billing_status === "unbilled" || row.billing_status === "paid" || row.billing_status === "no-balance-billing")) {
+    for (const row of billingStatuses.data as Array<{
+      usage_id?: string;
+      billing_status?: string;
+    }>) {
+      if (
+        row.usage_id &&
+        (row.billing_status === "unbilled" ||
+          row.billing_status === "paid" ||
+          row.billing_status === "no-balance-billing")
+      ) {
         billingStatusByUsageId.set(row.usage_id, row.billing_status);
       }
     }
@@ -1213,9 +1273,12 @@ export async function getMyInventoryViewMode(
   client: SupabaseClient<Database>,
   organizationId: string,
 ): Promise<SupabaseResult<InventoryViewMode>> {
-  const { data, error } = await client.rpc("get_my_inventory_view_mode" as never, {
-    p_organization_id: organizationId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "get_my_inventory_view_mode" as never,
+    {
+      p_organization_id: organizationId,
+    } as never,
+  );
   if (error) return failure(error);
   return success(data === "simple" ? "simple" : "visual");
 }
@@ -1225,10 +1288,13 @@ export async function saveMyInventoryViewMode(
   organizationId: string,
   mode: InventoryViewMode,
 ): Promise<SupabaseResult<void>> {
-  const { error } = await client.rpc("save_my_inventory_view_mode" as never, {
-    p_organization_id: organizationId,
-    p_mode: mode,
-  } as never);
+  const { error } = await client.rpc(
+    "save_my_inventory_view_mode" as never,
+    {
+      p_organization_id: organizationId,
+      p_mode: mode,
+    } as never,
+  );
   return error ? failure(error) : success(undefined);
 }
 
@@ -1592,6 +1658,160 @@ export async function getClinicServices(
     .order("name", { ascending: true });
   if (error) return failure(error);
   return success((data ?? []) as unknown as ClinicServiceSummary[]);
+}
+
+/** Active service memberships visible to staff at one organization. */
+export async function getServicePractitioners(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  clinicServiceId: string,
+): Promise<SupabaseResult<ServicePractitionerRow[]>> {
+  const input = servicePractitionerSelectionInputSchema
+    .pick({ organizationId: true, clinicServiceId: true })
+    .safeParse({ organizationId, clinicServiceId });
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data, error } = await client
+    .from("service_practitioners")
+    .select("*")
+    .eq("organization_id", input.data.organizationId)
+    .eq("clinic_service_id", input.data.clinicServiceId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+  if (error) return failure(error);
+  const parsed = servicePractitionerAssignmentResultSchema.safeParse(data ?? []);
+  return parsed.success
+    ? success(parsed.data as ServicePractitionerRow[])
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+/** Active services for one provider role, for provider availability controls. */
+export async function getAssignedClinicServices(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  practitionerRoleId: string,
+): Promise<SupabaseResult<ClinicServiceSummary[]>> {
+  const input = z
+    .object({ organizationId: z.string().uuid(), practitionerRoleId: z.string().uuid() })
+    .safeParse({ organizationId, practitionerRoleId });
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data: memberships, error: membershipError } = await client
+    .from("service_practitioners")
+    .select("clinic_service_id")
+    .eq("organization_id", input.data.organizationId)
+    .eq("practitioner_role_id", input.data.practitionerRoleId)
+    .eq("is_active", true);
+  if (membershipError) return failure(membershipError);
+
+  const serviceIds = (memberships ?? []).map((membership) => membership.clinic_service_id);
+  if (!serviceIds.length) return success([]);
+
+  const { data, error } = await client
+    .from("clinic_services")
+    .select(clinicServiceSummaryColumns)
+    .eq("organization_id", input.data.organizationId)
+    .eq("active", true)
+    .in("id", serviceIds)
+    .order("name", { ascending: true });
+  return error
+    ? failure(error)
+    : success((data ?? []) as unknown as ClinicServiceSummary[]);
+}
+
+/** Doctor and specialist choices for the admin service membership editor. */
+export async function getServicePractitionerOptions(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<ServicePractitionerOption[]>> {
+  const orgId = z.string().uuid().safeParse(organizationId);
+  if (!orgId.success)
+    return failure({ code: "VALIDATION_ERROR", message: orgId.error.message });
+
+  const [rolesResult, practitionersResult] = await Promise.all([
+    client
+      .from("practitioner_roles")
+      .select("id, practitioner_id, role_code")
+      .eq("organization_id", orgId.data)
+      .eq("active", true)
+      .in("role_code", ["doctor", "specialist"]),
+    client
+      .from("practitioners")
+      .select("id, name")
+      .eq("organization_id", orgId.data)
+      .eq("active", true),
+  ]);
+  if (rolesResult.error) return failure(rolesResult.error);
+  if (practitionersResult.error) return failure(practitionersResult.error);
+
+  const namesByPractitionerId = new Map(
+    (practitionersResult.data ?? []).map((practitioner) => [
+      practitioner.id,
+      getHumanNameDisplay(practitioner.name),
+    ]),
+  );
+  const parsed = z.array(servicePractitionerOptionSchema).safeParse(
+    (rolesResult.data ?? []).flatMap((role) => {
+      const displayName = namesByPractitionerId.get(role.practitioner_id);
+      return displayName
+        ? [
+            {
+              practitionerRoleId: role.id,
+              displayName,
+              roleCode: role.role_code,
+            },
+          ]
+        : [];
+    }),
+  );
+  return parsed.success
+    ? success(parsed.data)
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+/** Assigns doctors or specialists to a service through the permissioned B4 RPC. */
+export async function assignServicePractitioners(
+  client: SupabaseClient<Database>,
+  rawInput: ServicePractitionerAssignmentInput,
+): Promise<SupabaseResult<ServicePractitionerRow[]>> {
+  const input = servicePractitionerAssignmentInputSchema.safeParse(rawInput);
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data, error } = await client.rpc("assign_service_practitioners" as never, {
+    p_organization_id: input.data.organizationId,
+    p_clinic_service_id: input.data.clinicServiceId,
+    p_practitioner_role_ids: input.data.practitionerRoleIds,
+    p_duration_minutes_override: input.data.durationMinutesOverride ?? null,
+  } as never);
+  if (error) return failure(error);
+  const parsed = servicePractitionerAssignmentResultSchema.safeParse(data ?? []);
+  return parsed.success
+    ? success(parsed.data as ServicePractitionerRow[])
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
+}
+
+/** Deactivates service memberships through the permissioned B4 RPC. */
+export async function unassignServicePractitioners(
+  client: SupabaseClient<Database>,
+  rawInput: ServicePractitionerSelectionInput,
+): Promise<SupabaseResult<number>> {
+  const input = servicePractitionerSelectionInputSchema.safeParse(rawInput);
+  if (!input.success)
+    return failure({ code: "VALIDATION_ERROR", message: input.error.message });
+
+  const { data, error } = await client.rpc("unassign_service_practitioners" as never, {
+    p_organization_id: input.data.organizationId,
+    p_clinic_service_id: input.data.clinicServiceId,
+    p_practitioner_role_ids: input.data.practitionerRoleIds,
+  } as never);
+  if (error) return failure(error);
+  const parsed = servicePractitionerUnassignmentResultSchema.safeParse(data);
+  return parsed.success
+    ? success(parsed.data)
+    : failure({ code: "INVALID_RPC_OUTPUT", message: parsed.error.message });
 }
 
 /** Adds a bookable service to the current provider's clinic catalog. */
@@ -1974,6 +2194,7 @@ export async function bookAppointmentSlot(
   slotId: string,
   patientId?: string,
   deliveryMode: AppointmentDeliveryMode = "in_person",
+  organizationId?: string,
 ): Promise<SupabaseResult<string>> {
   const { data, error } = await client.rpc("book_appointment_slot", {
     p_slot_id: slotId,
@@ -1983,8 +2204,10 @@ export async function bookAppointmentSlot(
   if (error) return failure(error);
   broadcastAppointmentBooked({
     appointmentId: data,
+    organizationId,
     patientId,
     deliveryMode,
+    status: "booked",
   });
   return success(data);
 }
@@ -2104,7 +2327,13 @@ export async function getDailyAppointmentQueue(
   client: SupabaseClient<Database>,
   organizationId: string,
   range?: DayRange | null,
-  statuses: AppointmentStatus[] = ["booked", "arrived"],
+  statuses: AppointmentStatus[] = [
+    "booked",
+    "arrived",
+    "pending",
+    "proposed",
+    "fulfilled",
+  ],
 ): Promise<SupabaseResult<AppointmentQueueItem[]>> {
   let query = client
     .from("appointments")
@@ -2251,12 +2480,18 @@ export async function updateAppointmentStatus(
   client: SupabaseClient<Database>,
   appointmentId: string,
   status: "arrived" | "cancelled" | "noshow",
+  organizationId?: string,
 ): Promise<SupabaseResult<undefined>> {
   const { error } = await client.rpc("update_appointment_status", {
     p_appointment_id: appointmentId,
     p_status: status,
   });
   if (error) return failure(error);
+  broadcastAppointmentBooked({
+    appointmentId,
+    organizationId,
+    status,
+  });
   return success(undefined);
 }
 
@@ -2265,6 +2500,7 @@ export async function cancelAppointment(
   client: SupabaseClient<Database>,
   appointmentId: string,
   blockSlot: boolean = false,
+  organizationId?: string,
 ): Promise<SupabaseResult<undefined>> {
   const { error } = await client.rpc("cancel_appointment", {
     p_appointment_id: appointmentId,
@@ -2277,6 +2513,11 @@ export async function cancelAppointment(
     });
     if (fallback.error) return failure(fallback.error);
   }
+  broadcastAppointmentBooked({
+    appointmentId,
+    organizationId,
+    status: "cancelled",
+  });
   return success(undefined);
 }
 
@@ -2301,8 +2542,23 @@ export function subscribeToAppointmentQueue(
   onChange: () => void,
   onStatus?: (status: RealtimeConnectionStatus) => void,
 ): () => void {
-  const channel = client
-    .channel(`appointment-queue:${organizationId}`)
+  let isUnsubscribed = false;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const triggerChange = () => {
+    if (isUnsubscribed) return;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      if (!isUnsubscribed) {
+        onChange();
+      }
+    }, 200);
+  };
+
+  const channelName = `appointment-queue:${organizationId}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  const channel = client.channel(channelName);
+
+  channel
     .on(
       "postgres_changes",
       {
@@ -2311,12 +2567,116 @@ export function subscribeToAppointmentQueue(
         table: "appointments",
         filter: `organization_id=eq.${organizationId}`,
       },
-      onChange,
+      () => {
+        triggerChange();
+      },
     )
-    .subscribe((status) => onStatus?.(status));
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "appointment_slots",
+        filter: `organization_id=eq.${organizationId}`,
+      },
+      () => {
+        triggerChange();
+      },
+    )
+    .subscribe((status) => {
+      onStatus?.(status as RealtimeConnectionStatus);
+    });
+
+  let bc: BroadcastChannel | null = null;
+  if (
+    typeof window !== "undefined" &&
+    typeof BroadcastChannel !== "undefined"
+  ) {
+    try {
+      bc = new BroadcastChannel("odyssey_appointment_booking");
+      bc.onmessage = (msgEvent) => {
+        if (!msgEvent.data) return;
+        const orgId = (msgEvent.data as AppointmentBookingEvent).organizationId;
+        if (!orgId || orgId === organizationId) {
+          triggerChange();
+        }
+      };
+    } catch {
+      // BroadcastChannel unsupported
+    }
+  }
+
+  const handleStorage = (storageEvt: StorageEvent) => {
+    if (storageEvt.key === "odyssey_booking_alert" && storageEvt.newValue) {
+      try {
+        const parsed = JSON.parse(storageEvt.newValue);
+        if (
+          !parsed.organizationId ||
+          parsed.organizationId === organizationId
+        ) {
+          triggerChange();
+        }
+      } catch {
+        triggerChange();
+      }
+    }
+  };
+
+  const handleCustom = (customEvt: Event) => {
+    const detail = (customEvt as CustomEvent).detail;
+    if (
+      !detail ||
+      !detail.organizationId ||
+      detail.organizationId === organizationId
+    ) {
+      triggerChange();
+    }
+  };
+
+  const handleVisibility = () => {
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible"
+    ) {
+      triggerChange();
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("odyssey_booking_alert", handleCustom);
+    window.addEventListener("focus", handleVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
+  }
+
+  // Periodic heartbeat / polling fallback (every 10s while tab is visible)
+  const pollInterval = setInterval(() => {
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible"
+    ) {
+      triggerChange();
+    }
+  }, 10_000);
 
   return () => {
+    isUnsubscribed = true;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    clearInterval(pollInterval);
     void client.removeChannel(channel);
+    if (bc) {
+      try {
+        bc.close();
+      } catch {
+        // ignore
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("odyssey_booking_alert", handleCustom);
+      window.removeEventListener("focus", handleVisibility);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    }
   };
 }
 
@@ -2616,9 +2976,13 @@ export async function getBillingLineItems(
       unit_price: Number(row.unit_price),
       currency: row.currency as string,
       line_total: Number(row.line_total),
-      payment_status: (row.payment_status as BillingLineItemSummary["payment_status"]) ?? "unpaid",
-      billing_mode: (row.billing_mode as BillingLineItemSummary["billing_mode"]) ?? null,
-      payor_type: (row.payor_type as BillingLineItemSummary["payor_type"]) ?? null,
+      payment_status:
+        (row.payment_status as BillingLineItemSummary["payment_status"]) ??
+        "unpaid",
+      billing_mode:
+        (row.billing_mode as BillingLineItemSummary["billing_mode"]) ?? null,
+      payor_type:
+        (row.payor_type as BillingLineItemSummary["payor_type"]) ?? null,
       tagged_at: (row.tagged_at as string) ?? null,
       void_reason: (row.void_reason as string) ?? null,
     })),
@@ -2634,7 +2998,7 @@ export async function generateBillingEvent(
   const { data, error } = await client.rpc("generate_billing_event", {
     p_organization_id: organizationId,
     p_encounter_id: encounterId,
-    p_payor_type_override: payorTypeOverride ?? null,
+    p_payor_type_override: payorTypeOverride,
   });
   if (error) return failure(error);
   return success(data as string);
@@ -2670,7 +3034,7 @@ export async function recordPayment(
     p_invoice_id: invoiceId,
     p_amount: amount,
     p_method: method,
-    p_reference: reference ?? null,
+    p_reference: reference,
   });
   if (error) return failure(error);
   return success(data as string);
@@ -2682,11 +3046,14 @@ export async function createPaymentAttempt(
   method: PaymentMethod,
   reference?: string,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("create_payment_attempt" as never, {
-    p_invoice_id: invoiceId,
-    p_method: method,
-    p_reference: reference ?? null,
-  } as never);
+  const { data, error } = await client.rpc(
+    "create_payment_attempt" as never,
+    {
+      p_invoice_id: invoiceId,
+      p_method: method,
+      p_reference: reference ?? null,
+    } as never,
+  );
   return error ? failure(error) : success(data as string);
 }
 
@@ -2694,9 +3061,12 @@ export async function confirmPaymentAttempt(
   client: SupabaseClient<Database>,
   paymentId: string,
 ): Promise<SupabaseResult<string>> {
-  const { data, error } = await client.rpc("confirm_payment_attempt" as never, {
-    p_payment_id: paymentId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "confirm_payment_attempt" as never,
+    {
+      p_payment_id: paymentId,
+    } as never,
+  );
   return error ? failure(error) : success(data as string);
 }
 
@@ -2704,32 +3074,51 @@ export async function resolveInvoiceQr(
   client: SupabaseClient<Database>,
   payload: string,
 ): Promise<SupabaseResult<InvoiceQrResolution>> {
-  const { data, error } = await client.rpc("resolve_invoice_qr" as never, {
-    p_qr_payload: payload,
-  } as never);
-  return error ? failure(error) : success(data as unknown as InvoiceQrResolution);
+  const { data, error } = await client.rpc(
+    "resolve_invoice_qr" as never,
+    {
+      p_qr_payload: payload,
+    } as never,
+  );
+  return error
+    ? failure(error)
+    : success(data as unknown as InvoiceQrResolution);
 }
 
 export async function getInvoiceDetail(
   client: SupabaseClient<Database>,
   invoiceId: string,
 ): Promise<SupabaseResult<InvoiceDetail>> {
-  const { data, error } = await client.rpc("get_invoice_detail" as never, {
-    p_invoice_id: invoiceId,
-  } as never);
+  const { data, error } = await client.rpc(
+    "get_invoice_detail" as never,
+    {
+      p_invoice_id: invoiceId,
+    } as never,
+  );
   return error ? failure(error) : success(data as unknown as InvoiceDetail);
 }
 
 export async function getVisitInvoiceQr(
   client: SupabaseClient<Database>,
   invoiceId: string,
-): Promise<SupabaseResult<{ payload: string; expires_at: string; invoice_id: string }>> {
-  const { data, error } = await client.rpc("get_visit_invoice_qr" as never, {
-    p_invoice_id: invoiceId,
-  } as never);
+): Promise<
+  SupabaseResult<{ payload: string; expires_at: string; invoice_id: string }>
+> {
+  const { data, error } = await client.rpc(
+    "get_visit_invoice_qr" as never,
+    {
+      p_invoice_id: invoiceId,
+    } as never,
+  );
   return error
     ? failure(error)
-    : success(data as unknown as { payload: string; expires_at: string; invoice_id: string });
+    : success(
+        data as unknown as {
+          payload: string;
+          expires_at: string;
+          invoice_id: string;
+        },
+      );
 }
 
 export async function voidBillingLineItem(
@@ -2737,10 +3126,13 @@ export async function voidBillingLineItem(
   lineItemId: string,
   reason: string,
 ): Promise<SupabaseResult<undefined>> {
-  const { error } = await client.rpc("void_billing_line_item" as never, {
-    p_line_item_id: lineItemId,
-    p_reason: reason,
-  } as never);
+  const { error } = await client.rpc(
+    "void_billing_line_item" as never,
+    {
+      p_line_item_id: lineItemId,
+      p_reason: reason,
+    } as never,
+  );
   return error ? failure(error) : success(undefined);
 }
 
@@ -2754,7 +3146,7 @@ export async function createPosSale(
   const { data, error } = await client.rpc("create_pos_sale", {
     p_organization_id: organizationId,
     p_items: items as unknown as Json,
-    p_customer_name: customerName ?? null,
+    p_customer_name: customerName,
     p_payment_method: paymentMethod ?? "cash",
   });
   if (error) return failure(error);
@@ -2804,8 +3196,8 @@ export async function adjudicateClaim(
   const { error } = await client.rpc("adjudicate_claim", {
     p_claim_id: claimId,
     p_result: result,
-    p_approved_amount: approvedAmount ?? null,
-    p_denied_reason: deniedReason ?? null,
+    p_approved_amount: approvedAmount,
+    p_denied_reason: deniedReason,
   });
   if (error) return failure(error);
   return success(undefined);
@@ -3406,34 +3798,34 @@ function toClinicalDocumentTemplates(
   rows: unknown[],
 ): ClinicalDocumentTemplate[] {
   return rows.flatMap((value) => {
-      const row =
-        value && typeof value === "object" && !Array.isArray(value)
-          ? (value as Record<string, unknown>)
-          : {};
-      const templateType = row.category;
-      if (
-        templateType !== "medical_certificate" &&
-        templateType !== "prescription"
-      )
-        return [];
-      return [
-        {
-          id: row.id as string,
-          organizationId: row.organization_id as string,
-          ownerDoctorId: row.owner_doctor_id as string | null,
-          type: templateType,
-          title: row.name as string,
-          conditionSystem: row.condition_system as string | null,
-          conditionCode: row.condition_code as string | null,
-          conditionDisplay: row.condition_display as string | null,
-          content: asTemplateContent(row.structured_body),
-          isDefault: Boolean(row.is_default),
-          status: row.status as ClinicalDocumentTemplate["status"],
-          version: Number(row.version),
-          updatedAt: row.updated_at as string,
-        },
-      ];
-    });
+    const row =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const templateType = row.category;
+    if (
+      templateType !== "medical_certificate" &&
+      templateType !== "prescription"
+    )
+      return [];
+    return [
+      {
+        id: row.id as string,
+        organizationId: row.organization_id as string,
+        ownerDoctorId: row.owner_doctor_id as string | null,
+        type: templateType,
+        title: row.name as string,
+        conditionSystem: row.condition_system as string | null,
+        conditionCode: row.condition_code as string | null,
+        conditionDisplay: row.condition_display as string | null,
+        content: asTemplateContent(row.structured_body),
+        isDefault: Boolean(row.is_default),
+        status: row.status as ClinicalDocumentTemplate["status"],
+        version: Number(row.version),
+        updatedAt: row.updated_at as string,
+      },
+    ];
+  });
 }
 
 export async function saveClinicalDocumentTemplate(
@@ -3694,4 +4086,6 @@ export async function saveCompanyCoverage(
   );
   return error ? failure(error) : success(data as unknown as string);
 }
-export * from "./professional-fees";
+
+export * from "./pmr-builder.ts";
+export * from "./professional-fees.ts";

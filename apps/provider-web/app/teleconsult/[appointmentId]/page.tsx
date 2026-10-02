@@ -25,7 +25,7 @@ import {
   startAppointmentEncounter,
 } from "@odyssey/supabase-client";
 import { getEncounterRegionDiagnoses, type AnatomyView, type EncounterRegionDiagnosis, type EncounterViewMode, type OrganizationClinicalRecords, type PatientSummary, type SpecialistOption, type TeleconsultAppointment, type TeleconsultWorkspacePreference } from "@odyssey/types";
-import { Badge, buildClinicalVitalReadings, Button, ClinicalPatientCard, ClinicalVitalsPanel, Field, Input, MUSCULOSKELETAL_REGIONS, MusculoskeletalFigure, MusculoskeletalRegionPanel, TeleconsultWebRtcRoom, type BodyRegionDefinition } from "@odyssey/ui";
+import { Badge, buildClinicalVitalReadings, Button, ClinicalPatientCard, ClinicalVitalsPanel, EncounterSaveConfirmedModal, Field, Input, MUSCULOSKELETAL_REGIONS, MusculoskeletalFigure, MusculoskeletalRegionPanel, TeleconsultWebRtcRoom, type BodyRegionDefinition } from "@odyssey/ui";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClinicalDocumentationWorkspace } from "../../components/ClinicalDocumentationWorkspace";
@@ -79,6 +79,12 @@ export default function ProviderTeleconsultRoomPage() {
   const latestSoapNoteIdRef = useRef<string | null>(null);
   const lastSavedSoapTextRef = useRef("");
   const soapSaveInFlightRef = useRef(false);
+  const soapSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const [soapSaveConfirmation, setSoapSaveConfirmation] = useState<{
+    noteSnippet: string;
+    revisionNumber?: number;
+    timestamp: Date;
+  } | null>(null);
   const [preferredMode, setPreferredMode] = useState<EncounterViewMode>("visual");
   const [teleconsultWorkspacePreference, setTeleconsultWorkspacePreference] = useState<TeleconsultWorkspacePreference>({ chartCollapsed: false, splitRatio: 55 });
   const [forceSimpleMode, setForceSimpleMode] = useState(false);
@@ -182,19 +188,85 @@ export default function ProviderTeleconsultRoomPage() {
   const persistSoapNote = useCallback(async (source: "auto" | "manual") => {
     const text = soapInputRef.current.trim();
     const encounterId = appointment?.encounter_id;
-    if (!text || !encounterId || soapSaveInFlightRef.current) return false;
-    soapSaveInFlightRef.current = true; setSoapAutosaveState("saving");
-    const result = await saveSoapNote(createBrowserSupabaseClient(), { encounterId, text, supersedesId: latestSoapNoteIdRef.current ?? undefined });
-    soapSaveInFlightRef.current = false;
-    if (result.error) { setSoapAutosaveState("error"); setStatus(`Unable to save consultation note: ${result.error.message}`); return false; }
-    latestSoapNoteIdRef.current = result.data; lastSavedSoapTextRef.current = text;
-    setLatestSoapNoteId(result.data); setSoapLastSavedAt(new Date());
-    const hasNewerChanges = soapInputRef.current.trim() !== text;
-    setSoapDirty(hasNewerChanges); setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
-    if (hasNewerChanges) setSoapAutosaveRevision((revision) => revision + 1);
-    if (source === "manual") setStatus("Consultation note saved.");
-    return true;
-  }, [appointment?.encounter_id]);
+    if (!text || !encounterId) return false;
+
+    // If a save operation is already in-flight, wait for it to complete
+    if (soapSaveInFlightRef.current && soapSavePromiseRef.current) {
+      const inFlightSuccess = await soapSavePromiseRef.current;
+      if (source === "manual" && inFlightSuccess) {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: soapAutosaveRevision > 0 ? soapAutosaveRevision : 1,
+          timestamp: soapLastSavedAt ?? new Date(),
+        });
+      }
+      return inFlightSuccess;
+    }
+
+    // If identical text is already saved in the database, don't spam duplicate records
+    if (text === lastSavedSoapTextRef.current) {
+      setSoapDirty(false);
+      setSoapAutosaveState("saved");
+      if (source === "manual") {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: soapAutosaveRevision > 0 ? soapAutosaveRevision : 1,
+          timestamp: soapLastSavedAt ?? new Date(),
+        });
+      }
+      return true;
+    }
+
+    const saveExecution = (async () => {
+      soapSaveInFlightRef.current = true;
+      setSoapAutosaveState("saving");
+      const result = await saveSoapNote(createBrowserSupabaseClient(), {
+        encounterId,
+        text,
+        supersedesId: latestSoapNoteIdRef.current ?? undefined,
+      });
+      soapSaveInFlightRef.current = false;
+
+      if (result.error) {
+        setSoapAutosaveState("error");
+        setStatus(`Unable to save consultation note: ${result.error.message}`);
+        return false;
+      }
+
+      latestSoapNoteIdRef.current = result.data;
+      lastSavedSoapTextRef.current = text;
+      setLatestSoapNoteId(result.data);
+      const savedDate = new Date();
+      setSoapLastSavedAt(savedDate);
+
+      const hasNewerChanges = soapInputRef.current.trim() !== text;
+      setSoapDirty(hasNewerChanges);
+      setSoapAutosaveState(hasNewerChanges ? "pending" : "saved");
+      const nextRev = soapAutosaveRevision + 1;
+      setSoapAutosaveRevision(nextRev);
+
+      if (source === "manual") {
+        setStatus("Consultation note saved.");
+        setSoapSaveConfirmation({
+          noteSnippet: text,
+          revisionNumber: nextRev,
+          timestamp: savedDate,
+        });
+      }
+      return true;
+    })();
+
+    soapSavePromiseRef.current = saveExecution;
+    try {
+      return await saveExecution;
+    } finally {
+      if (soapSavePromiseRef.current === saveExecution) {
+        soapSavePromiseRef.current = null;
+      }
+    }
+  }, [appointment?.encounter_id, soapAutosaveRevision, soapLastSavedAt]);
 
   useEffect(() => {
     if (!soapDirty || !soapInput.trim() || encounter?.status !== "in_progress") return;
@@ -325,7 +397,7 @@ export default function ProviderTeleconsultRoomPage() {
       {appointment ? <>
         <TeleconsultSplitWorkspace
           documentation={appointment.encounter_id && clinicalRecords && patient && encounter ? <section className="encounter-recording" aria-labelledby="teleconsult-documentation-heading">
-            <ClinicalDocumentationWorkspace headingId="teleconsult-documentation-heading" forceSimpleMode={forceSimpleMode} mode={effectiveMode} onModeChange={(mode) => void selectMode(mode)} simpleContent={<EncounterSoapEditor autosaveState={soapAutosaveState} busy={busy} canEdit={encounter.status === "in_progress"} currentNoteId={latestSoapNoteId} debugMode={debugMode} encounterId={appointment.encounter_id} lastSavedAt={soapLastSavedAt ? soapLastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null} onChange={handleSoapChange} onRetryAutosave={() => void persistSoapNote("manual")} onSubmit={saveNote} onTestFillAll={fillSoap} onTestFillSoap={fillSoap} value={soapInput} />} visualContent={<section className="encounter-assessment-workspace" aria-label="Visual assessment workspace"><MusculoskeletalFigure activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]} anatomyView={anatomyView} onRegionSelect={setSelectedRegion} onViewChange={setAnatomyView} selectedRegionCode={selectedRegion.code} /><MusculoskeletalRegionPanel busy={diagnosisBusy} diagnoses={regionDiagnoses} encounterOpen={encounter.status === "in_progress"} onDiagnosisSubmit={addRegionDiagnosis} onRegionChange={setSelectedRegion} selectedRegion={selectedRegion} /></section>} />
+            <ClinicalDocumentationWorkspace headingId="teleconsult-documentation-heading" forceSimpleMode={forceSimpleMode} mode={effectiveMode} onModeChange={(mode) => void selectMode(mode)} simpleContent={<EncounterSoapEditor autosaveState={soapAutosaveState} busy={busy} canEdit={encounter.status === "in_progress"} currentNoteId={latestSoapNoteId} debugMode={debugMode} encounterId={appointment.encounter_id} isDirty={soapDirty} lastSavedAt={soapLastSavedAt ? soapLastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null} onChange={handleSoapChange} onRetryAutosave={() => void persistSoapNote("manual")} onSubmit={saveNote} onTestFillAll={fillSoap} onTestFillSoap={fillSoap} value={soapInput} />} visualContent={<section className="encounter-assessment-workspace" aria-label="Visual assessment workspace"><MusculoskeletalFigure activeRegionCodes={[...new Set(regionDiagnoses.map((diagnosis) => diagnosis.regionCode))]} anatomyView={anatomyView} onRegionSelect={setSelectedRegion} onViewChange={setAnatomyView} selectedRegionCode={selectedRegion.code} /><MusculoskeletalRegionPanel busy={diagnosisBusy} diagnoses={regionDiagnoses} encounterOpen={encounter.status === "in_progress"} onDiagnosisSubmit={addRegionDiagnosis} onRegionChange={setSelectedRegion} selectedRegion={selectedRegion} /></section>} />
             {encounter.status === "in_progress" ? <ClinicalOrdersAndCharges actions={teleconsultActions} activeAction={activeAction} onActionChange={setActiveAction}>
               <div className="encounter-actions-grid">
                 {canPrescribe && activeAction === "prescription" ? <section className="encounter-action-card"><h3>Prescription</h3><form className="encounter-action-form" onSubmit={issueTeleconsultPrescription}>{appointment.encounter_id ? <ClinicalTemplatePicker encounterId={appointment.encounter_id} type="prescription" onApply={(template) => { setPrescriptionTemplate(template); if (template) { const first = template.medications[0]; setRxMedication(first?.name ?? ""); setRxDosage([first?.dosage, first?.frequency, first?.duration].filter(Boolean).join(" · ")); setRxNote([template.body, first?.notes].filter(Boolean).join("\n\n")); } }} /> : null}<Field label="Medication"><Input maxLength={240} onChange={(event) => setRxMedication(event.target.value)} required value={rxMedication} /></Field><Field label="Dosage and directions"><textarea className="odyssey-input" maxLength={1000} onChange={(event) => setRxDosage(event.target.value)} required rows={3} value={rxDosage} /></Field><Field className="encounter-field-full" label="Note"><Input maxLength={1000} onChange={(event) => setRxNote(event.target.value)} value={rxNote} /></Field><Button className="encounter-form-submit" disabled={busy} type="submit">Issue prescription</Button></form></section> : null}
@@ -346,6 +418,20 @@ export default function ProviderTeleconsultRoomPage() {
         />
         {!appointment.encounter_id ? <section className="teleconsult-start-state"><h2>Start the encounter to document</h2><p>The video room remains available while you document in the shared clinical workspace.</p><Button disabled={busy} onClick={() => void startVisit()}>Start encounter</Button></section> : null}
       </> : null}
+
+      {/* Confirmed Save Modal for SOAP Consultation Notes */}
+      {soapSaveConfirmation && (
+        <EncounterSaveConfirmedModal
+          isOpen={Boolean(soapSaveConfirmation)}
+          onClose={() => setSoapSaveConfirmation(null)}
+          patientName={patient?.displayName ?? appointment?.patient_name ?? "Patient"}
+          encounterId={appointment?.encounter_id ?? ""}
+          noteSnippet={soapSaveConfirmation.noteSnippet}
+          revisionNumber={soapSaveConfirmation.revisionNumber}
+          timestamp={soapSaveConfirmation.timestamp}
+          onContinueEncounter={() => setSoapSaveConfirmation(null)}
+        />
+      )}
     </main>
   );
 }

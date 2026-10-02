@@ -27,7 +27,8 @@ class SoundCueEngine {
 
   constructor() {
     if (typeof window !== "undefined") {
-      this.muted = window.localStorage.getItem("odyssey_sound_muted") === "true";
+      this.muted =
+        window.localStorage.getItem("odyssey_sound_muted") === "true";
       const unlock = () => {
         this.unlockContext();
         window.removeEventListener("pointerdown", unlock);
@@ -90,7 +91,7 @@ class SoundCueEngine {
       // Tone 1: D5 (587.33 Hz)
       this.scheduleTone(ctx, 587.33, now, 0.45, 0.3);
       // Tone 2: A5 (880.00 Hz) - staggered by 120ms
-      this.scheduleTone(ctx, 880.00, now + 0.12, 0.55, 0.32);
+      this.scheduleTone(ctx, 880.0, now + 0.12, 0.55, 0.32);
       // Tone 3: D6 (1174.66 Hz) - chime sparkle, staggered by 240ms
       this.scheduleTone(ctx, 1174.66, now + 0.24, 0.75, 0.26);
       return true;
@@ -199,12 +200,16 @@ class BrowserTabBadgeManager {
   }
 
   private cleanTitle(title: string): string {
-    return title.replace(/^\(\d+\)\s*(🔔|🔴|🚨)?\s*/i, "").replace(/^🔔\s*\(\d+\)\s*NEW APPOINTMENT BOOKED!\s*\|\s*/i, "");
+    return title
+      .replace(/^\(\d+\)\s*(🔔|🔴|🚨)?\s*/i, "")
+      .replace(/^🔔\s*\(\d+\)\s*NEW APPOINTMENT BOOKED!\s*\|\s*/i, "");
   }
 
   private applySteadyTitle() {
     if (typeof document === "undefined") return;
-    const base = this.cleanTitle(document.title || this.originalTitle || this.appName);
+    const base = this.cleanTitle(
+      document.title || this.originalTitle || this.appName,
+    );
     document.title = `(${this.badgeCount}) 🔔 New Appointment! | ${base}`;
   }
 
@@ -213,7 +218,9 @@ class BrowserTabBadgeManager {
     this.stopFlashingTitle();
 
     let toggle = false;
-    const base = this.cleanTitle(this.originalTitle || document.title || this.appName);
+    const base = this.cleanTitle(
+      this.originalTitle || document.title || this.appName,
+    );
 
     this.flashInterval = window.setInterval(() => {
       toggle = !toggle;
@@ -386,7 +393,9 @@ export function AppointmentNotificationProvider({
 
     const newItem: AppointmentNotificationItem = {
       ...event,
-      id: event.appointmentId || `booking-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id:
+        event.appointmentId ||
+        `booking-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       isRead: false,
       receivedAt: new Date(event.timestamp || Date.now()),
     };
@@ -451,8 +460,7 @@ export function AppointmentNotificationProvider({
     });
   }, []);
 
-  const latestNotification =
-    notifications.find((n) => !n.isRead) ?? null;
+  const latestNotification = notifications.find((n) => !n.isRead) ?? null;
 
   return (
     <AppointmentNotificationContext.Provider
@@ -484,6 +492,10 @@ export function useAppointmentNotifications() {
   return ctx;
 }
 
+export function useOptionalAppointmentNotifications() {
+  return useContext(AppointmentNotificationContext);
+}
+
 // ============================================================================
 // UI Component: Eye-Catching Floating Toast Alert
 // ============================================================================
@@ -510,7 +522,10 @@ export function AppointmentNotificationToast({
 
   if (!latestNotification || !visible) return null;
 
-  const mode = latestNotification.deliveryMode === "virtual" ? "Virtual Teleconsult" : "In-Person Clinic Visit";
+  const mode =
+    latestNotification.deliveryMode === "virtual"
+      ? "Virtual Teleconsult"
+      : "In-Person Clinic Visit";
 
   return (
     <div
@@ -542,12 +557,11 @@ export function AppointmentNotificationToast({
           <strong className="odyssey-notification-toast__title">
             New Appointment Booked!
           </strong>
-          <span className="odyssey-notification-toast__badge">
-            {mode}
-          </span>
+          <span className="odyssey-notification-toast__badge">{mode}</span>
         </div>
         <p className="odyssey-notification-toast__message">
-          A patient just booked a {mode.toLowerCase()} appointment. It has been added to the live clinical queue.
+          A patient just booked a {mode.toLowerCase()} appointment. It has been
+          added to the live clinical queue.
         </p>
       </div>
 
@@ -574,7 +588,14 @@ export function AppointmentNotificationToast({
             dismissToast(latestNotification.id);
           }}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
@@ -624,7 +645,10 @@ export function AppointmentNotificationControl({
   }, [open]);
 
   return (
-    <div className={`odyssey-notification-ctrl-wrapper ${className}`} ref={popoverRef}>
+    <div
+      className={`odyssey-notification-ctrl-wrapper ${className}`}
+      ref={popoverRef}
+    >
       <button
         type="button"
         className={`odyssey-notification-bell-btn ${unreadCount > 0 ? "odyssey-notification-bell-btn--active" : ""}`}
@@ -657,7 +681,11 @@ export function AppointmentNotificationControl({
       </button>
 
       {open && (
-        <div className="odyssey-notification-dropdown" role="dialog" aria-label="Appointment Alerts">
+        <div
+          className="odyssey-notification-dropdown"
+          role="dialog"
+          aria-label="Appointment Alerts"
+        >
           <div className="odyssey-notification-dropdown__header">
             <div>
               <div className="odyssey-notification-dropdown__title">
@@ -687,7 +715,14 @@ export function AppointmentNotificationControl({
               onClick={() => playTestChime()}
               title="Test audio chime playback"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
@@ -701,7 +736,14 @@ export function AppointmentNotificationControl({
               onClick={() => triggerTestBooking()}
               title="Simulate booking: tests browser tab badge, flashing title, and sound cue"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
               <span>Test Booking</span>
@@ -711,11 +753,20 @@ export function AppointmentNotificationControl({
               type="button"
               className={`odyssey-notification-tool-btn ${isMuted ? "odyssey-notification-tool-btn--muted" : ""}`}
               onClick={() => toggleMute()}
-              title={isMuted ? "Unmute appointment chime" : "Mute appointment chime"}
+              title={
+                isMuted ? "Unmute appointment chime" : "Mute appointment chime"
+              }
             >
               {isMuted ? (
                 <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <line x1="1" y1="1" x2="23" y2="23" />
                     <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
                   </svg>
@@ -723,7 +774,14 @@ export function AppointmentNotificationControl({
                 </>
               ) : (
                 <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                     <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                   </svg>
@@ -737,7 +795,8 @@ export function AppointmentNotificationControl({
           <div className="odyssey-notification-dropdown__list">
             {notifications.length === 0 ? (
               <div className="odyssey-notification-dropdown__empty">
-                No recent appointment bookings. Realtime listener is armed and waiting.
+                No recent appointment bookings. Realtime listener is armed and
+                waiting.
               </div>
             ) : (
               notifications.map((item) => (

@@ -43,6 +43,7 @@ export function VesperDashboard() {
     recentModules,
     tasks,
     notifications,
+    appointments,
     toggleTask,
     markNotificationRead,
     createPatient,
@@ -204,6 +205,7 @@ export function VesperDashboard() {
         <section className="vesper-widget-row">
           <VesperPatientRecords
             patients={patientRecords}
+            appointments={appointments}
             onSelectPatient={(p) => setSelectedPatient(p)}
             onRefresh={() => void refetch()}
           />

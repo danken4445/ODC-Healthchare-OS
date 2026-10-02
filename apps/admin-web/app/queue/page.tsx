@@ -3,7 +3,11 @@
 import { CheckCircle2, RefreshCw, Users } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useAdminData } from "../../components/admin-data-context";
-import { getWaitingRoomQueue } from "@odyssey/supabase-client";
+import {
+  getWaitingRoomQueue,
+  subscribeToAppointmentQueue,
+  subscribeToWaitingRoomQueue,
+} from "@odyssey/supabase-client";
 import type { WaitingRoomQueueItem } from "@odyssey/types";
 
 export default function QueuePage() {
@@ -22,8 +26,23 @@ export default function QueuePage() {
   };
 
   useEffect(() => {
+    if (!organization) return;
     void loadQueue();
-  }, [organization]);
+    const unsubQueue = subscribeToWaitingRoomQueue(
+      client,
+      organization.id,
+      () => void loadQueue(),
+    );
+    const unsubAppts = subscribeToAppointmentQueue(
+      client,
+      organization.id,
+      () => void loadQueue(),
+    );
+    return () => {
+      unsubQueue();
+      unsubAppts();
+    };
+  }, [client, organization]);
 
   return (
     <div className="vesper-page-container">
@@ -48,7 +67,8 @@ export default function QueuePage() {
           <div>
             <h2 className="vesper-card__title">Current Waiting Room</h2>
             <p className="vesper-card__subtitle">
-              {queue.length} patient{queue.length === 1 ? "" : "s"} waiting for triage or consultation
+              {queue.length} patient{queue.length === 1 ? "" : "s"} waiting for
+              triage or consultation
             </p>
           </div>
         </div>
@@ -74,21 +94,29 @@ export default function QueuePage() {
                       </strong>
                     </td>
                     <td>{item.service_name}</td>
-                    <td>{new Date(item.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td>
+                      {new Date(item.scheduled_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
                     <td>
                       <span className="vesper-alert-pill vesper-alert-pill--amber">
                         {item.stage}
                       </span>
                     </td>
                     <td>
-                      <span className="vesper-status-dot vesper-status-dot--active" /> Waiting
+                      <span className="vesper-status-dot vesper-status-dot--active" />{" "}
+                      Waiting
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={5} className="table-empty">
-                    {loading ? "Loading live clinic queue..." : "No patients are currently in the waiting room."}
+                    {loading
+                      ? "Loading live clinic queue..."
+                      : "No patients are currently in the waiting room."}
                   </td>
                 </tr>
               )}

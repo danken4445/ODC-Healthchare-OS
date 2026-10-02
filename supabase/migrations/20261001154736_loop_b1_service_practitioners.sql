@@ -10,6 +10,7 @@ alter table public.clinic_role_permission_overrides
     'can_record_triage', 'can_start_consultation', 'can_manage_provider_schedule',
     'can_manage_staff_roles', 'can_view_inventory', 'can_manage_inventory',
     'can_tag_inventory_usage', 'can_order_diagnostics', 'can_view_diagnostics',
+    'can_view_lab_worklist', 'can_record_lab_results', 'can_view_referrals',
     'can_update_referrals', 'can_manage_laboratory_services', 'role_permissions_configured',
     'can_manage_billing', 'can_view_billing', 'can_manage_pos',
     'can_manage_claims', 'can_view_claims', 'can_view_payouts', 'can_manage_payouts',

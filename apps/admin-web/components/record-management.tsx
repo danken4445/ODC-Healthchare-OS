@@ -227,7 +227,7 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
     } else if (dataset === "staff" && editing) {
       result = await assignStaffDepartment(client, { organizationId: organization.id, userId: value(row, "id"), departmentId: String(form.get("departmentId") || "") || null });
     } else if (dataset === "appointments") {
-      result = await bookAppointmentSlot(client, String(form.get("slotId")), String(form.get("patientId")), String(form.get("deliveryMode")) as AppointmentDeliveryMode);
+      result = await bookAppointmentSlot(client, String(form.get("slotId")), String(form.get("patientId")), String(form.get("deliveryMode")) as AppointmentDeliveryMode, organization.id);
     } else if (dataset === "billing") {
       const generated = await generateBillingEvent(client, organization.id, String(form.get("encounterId")), (String(form.get("payorType")) || undefined) as "self_pay" | "hmo" | "philhealth_nbb" | "government_subsidized" | undefined);
       result = generated;
@@ -396,12 +396,12 @@ function ClaimActions({ onChanged, row }: Pick<ManagementProps, "onChanged" | "r
 }
 
 function AppointmentActions({ onChanged, row }: Pick<ManagementProps, "onChanged" | "row">) {
-  const { client } = useAdminData();
+  const { client, organization } = useAdminData();
   const [saving, setSaving] = useState(false);
   const status = value(row, "statusCode");
   async function change(next: "arrived" | "cancelled" | "noshow") {
     setSaving(true);
-    await updateAppointmentStatus(client, value(row, "id"), next);
+    await updateAppointmentStatus(client, value(row, "id"), next, organization?.id);
     setSaving(false);
     onChanged();
   }

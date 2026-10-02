@@ -12,6 +12,7 @@ export type PatientClinicContextRow = DatabaseRow<"patient_clinic_contexts">;
 export type AppointmentRow = DatabaseRow<"appointments">;
 export type AppointmentSlotRow = DatabaseRow<"appointment_slots">;
 export type ClinicServiceRow = DatabaseRow<"clinic_services">;
+export type ServicePractitionerRow = DatabaseRow<"service_practitioners">;
 export type EncounterRow = DatabaseRow<"encounters">;
 export type ObservationRow = DatabaseRow<"observations">;
 export type MedicationRequestRow = DatabaseRow<"medication_requests">;
@@ -1349,3 +1350,5 @@ export interface FacilityClassification {
   isGovernmentNoBilling: boolean;
   canManage: boolean;
 }
+
+export * from "./pmr.ts";

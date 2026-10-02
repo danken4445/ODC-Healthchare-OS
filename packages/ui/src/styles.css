@@ -1,3 +1,4 @@
+@import "./pmr/pmr-print.css";
 :root,
 [data-odyssey-theme="default"] {
   --odyssey-background: #f6f8fc;
@@ -3094,4 +3095,5 @@ textarea.odyssey-input {
   background: #e0f2fe;
   color: #075985;
 }
+
 

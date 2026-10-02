@@ -62,7 +62,6 @@ function sanitizeTemplateHtml(html: string) {
     return parsed.body.innerHTML;
   })();
 }
-
 function renderTokens(html: string) {
   const source = sanitizeTemplateHtml(html);
   return source.replace(/\{\{([a-z_.]+)\}\}/g, (_match, key: string) => previewValues[key] ?? `{{${key}}}`);
@@ -191,7 +190,6 @@ export function TemplateStudio() {
     const html = bodyRef.current?.innerHTML ?? editor?.content.html ?? "";
     if (!editor?.title.trim()) next.title = "A template title is required.";
     if (!html.trim()) next.body = "A document body is required.";
-    if (nextStatus === "published" && !editor?.conditionCode && !editor?.conditionDisplay?.trim()) next.condition = "Select an ICD-10 condition or enter an unclassified condition label before publishing.";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -209,13 +207,40 @@ export function TemplateStudio() {
     setDirty(false);
     setAutosaveState("Saved");
     if (closeAfterSave) setEditor(null);
-    else setEditor((current) => current ? { ...current, id: result.data, content } : current);
+    else setEditor((current) => current ? { ...current, id: result.data, content, status: nextStatus } : current);
+    await load();
+  }
+
+  async function publishTemplate(template: ClinicalDocumentTemplate) {
+    if (!organizationId) return;
+    setSaving(true);
+    setStatus(`Publishing “${template.title}”…`);
+    const result = await saveClinicalDocumentTemplate(createBrowserSupabaseClient(), organizationId, {
+      id: template.id,
+      type: template.type,
+      title: template.title,
+      scope: template.ownerDoctorId ? "personal" : "clinic_shared",
+      conditionSystem: template.conditionSystem,
+      conditionCode: template.conditionCode,
+      conditionDisplay: template.conditionDisplay,
+      content: template.content,
+      isDefault: template.isDefault,
+      status: "published",
+    });
+    setSaving(false);
+    if (result.error) {
+      setStatus(`Template could not be published: ${result.error.message}`);
+      return;
+    }
+    setStatus(`“${template.title}” is published and ready for encounters.`);
     await load();
   }
 
   useEffect(() => {
     if (!editor || !dirty || editor.title.trim().length < 2 || saving) return;
-    const timer = window.setTimeout(() => { void save("draft", false); }, 800);
+    // Only autosave as draft if currently in draft status; never downgrade a published template to draft!
+    if (editor.status !== "draft") return;
+    const timer = window.setTimeout(() => { void save("draft", false); }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, editor, saving]);
 
@@ -343,7 +368,7 @@ export function TemplateStudio() {
     {editor ? <section className="template-workbench" aria-label="Template customizer">
       <header><div><p className="eyebrow">{editor.id ? "Edit template" : "New template"}</p><h2>{editor.title || "Untitled template"}</h2><p className={`template-autosave template-autosave--${autosaveState.toLocaleLowerCase().replace("…", "")}`} aria-live="polite">{autosaveState === "Saved" ? <Check aria-hidden="true" size={14} /> : null}{autosaveState}</p></div><Button variant="outline" onClick={() => setEditor(null)}>Close editor</Button></header>
       <div className="template-workbench-grid">
-        <form className="template-form" onSubmit={(event) => { event.preventDefault(); void save(editor.status); }}>
+        <form className="template-form" onSubmit={(event) => { event.preventDefault(); void save("published"); }}>
           <Field label="Template title"><Input value={editor.title} onChange={(event) => updateEditor({ title: event.target.value })} maxLength={120} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? "template-title-error" : undefined} required />{errors.title ? <small className="template-field-error" id="template-title-error">{errors.title}</small> : null}</Field>
           <div className="template-form-row"><Field label="Document type"><select className="odyssey-input" value={editor.type} onChange={(event) => { const type = event.target.value as ClinicalDocumentTemplateType; updateEditor({ type, content: emptyContent(type) }); }}><option value="medical_certificate">Medical Certificate</option><option value="prescription">Prescription</option></select></Field><Field label="Owner"><select className="odyssey-input" value={editor.scope} onChange={(event) => updateEditor({ scope: event.target.value as EditorState["scope"] })}><option value="personal">My personal template</option><option value="clinic_shared">Clinic shared template</option></select></Field></div>
           <fieldset className="template-condition"><legend>Condition match</legend><p>Search the PhilHealth ICD-10 case-rate reference. It is a shared lookup only; condition choices do not expose another clinic’s data.</p>
@@ -358,13 +383,13 @@ export function TemplateStudio() {
           <section><h3>Document body</h3><p className="hint">Use formatting and placeholders to compose the issued document. The preview uses sample clinical data.</p><EditorToolbar onInsert={insertToken} /><div ref={bodyRef} className="template-rich-editor" contentEditable role="textbox" aria-multiline="true" aria-label="Template body" aria-invalid={Boolean(errors.body)} suppressContentEditableWarning onFocus={rememberSelection} onKeyUp={rememberSelection} onMouseUp={rememberSelection} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") { event.preventDefault(); document.execCommand("bold"); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") { event.preventDefault(); document.execCommand("italic"); } }} onInput={(event) => { rememberSelection(); updateContent({ html: event.currentTarget.innerHTML }); }} />{errors.body ? <small className="template-field-error">{errors.body}</small> : null}</section>
           {editor.type === "medical_certificate" ? <fieldset className="template-condition"><legend>Certificate defaults</legend><div className="template-form-row"><Field label="Variant"><select className="odyssey-input" value={editor.content.certificate?.variant ?? "general"} onChange={(event) => updateContent({ certificate: { variant: event.target.value as "general" | "fitness_to_work" | "fitness_to_travel", remarks: editor.content.certificate?.remarks ?? "", restDays: editor.content.certificate?.restDays ?? "" } })}><option value="general">General certificate</option><option value="fitness_to_work">Fitness to work</option><option value="fitness_to_travel">Fitness to travel</option></select></Field><Field label="Default rest days"><Input value={editor.content.certificate?.restDays ?? ""} onChange={(event) => updateContent({ certificate: { variant: editor.content.certificate?.variant ?? "general", remarks: editor.content.certificate?.remarks ?? "", restDays: event.target.value } })} placeholder="e.g. 3" /></Field></div><Field label="Remarks"><textarea className="odyssey-input" rows={3} value={editor.content.certificate?.remarks ?? ""} onChange={(event) => updateContent({ certificate: { variant: editor.content.certificate?.variant ?? "general", restDays: editor.content.certificate?.restDays ?? "", remarks: event.target.value } })} /></Field></fieldset> : <MedicationLines lines={editor.content.medications} onChange={(medications) => updateContent({ medications })} />}
           <fieldset className="template-condition"><legend>Branding for print</legend><p>Images are private to this clinic or practitioner. Uploads are checked before use; use the preview to approve the crop and placement.</p><Field label="Header source"><select className="odyssey-input" value={editor.content.branding?.source ?? "none"} onChange={(event) => updateContent({ branding: { ...(editor.content.branding ?? {}), source: event.target.value as "none" | "personal" | "clinic" } })}><option value="none">None</option><option value="personal">Use my personal logo</option><option value="clinic">Use clinic logo</option></select></Field>{editor.content.branding?.source === "clinic" && assetContext?.clinicLogoUrl ? <button className="template-reuse-asset" type="button" onClick={() => setStatus("The configured clinic logo is shown in the preview and will be used for this template.")}>Reuse configured clinic logo</button> : null}<div className="template-upload-grid"><label className="template-upload"><ImagePlus aria-hidden="true" size={18} /><span>Header logo</span><small>PNG, JPG, or SVG · max 5 MB</small><input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(event) => void uploadAsset("headerLogoPath", event.target.files?.[0])} /></label><label className="template-upload"><ImagePlus aria-hidden="true" size={18} /><span>Watermark</span><small>PNG, JPG, or SVG · max 5 MB</small><input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(event) => void uploadAsset("watermarkPath", event.target.files?.[0])} /></label></div>{(headerPreview || watermarkPreview) ? <div className="template-asset-crop-preview" aria-label="Brand image preview">{headerPreview ? <img src={headerPreview} alt="Header logo preview" /> : null}{watermarkPreview ? <img src={watermarkPreview} alt="Watermark preview" /> : null}</div> : null}</fieldset>
-          <div className="template-editor-actions"><Button type="button" variant="outline" disabled={saving} onClick={() => void save("draft")}><Save aria-hidden="true" size={16} /> Save draft</Button><Button type="submit" disabled={saving}><Send aria-hidden="true" size={16} /> {saving ? "Saving…" : "Publish template"}</Button></div>
+          <div className="template-editor-actions"><Button type="button" variant="outline" disabled={saving} onClick={() => void save("draft")}><Save aria-hidden="true" size={16} /> Save draft</Button><Button type="button" disabled={saving} onClick={() => void save("published")}><Send aria-hidden="true" size={16} /> {saving ? "Saving…" : "Publish template"}</Button></div>
         </form>
         <aside className="template-preview"><p className="eyebrow">Live print preview</p><article className="template-paper"><header><strong>{previewValues["clinic.name"]}</strong><span>{previewValues["clinic.address"]}</span></header><h2>{editor.type === "medical_certificate" ? "Medical Certificate" : "Prescription"}</h2><div className="template-preview-body" dangerouslySetInnerHTML={{ __html: renderTokens(editor.content.html) }} />{editor.type === "prescription" && editor.content.medications.length ? <ol className="template-preview-meds">{editor.content.medications.filter((line) => line.name).map((line, index) => <li key={`${line.name}-${index}`}><strong>{line.name}</strong><span>{[line.dosage, line.frequency, line.duration, line.notes].filter(Boolean).join(" · ")}</span></li>)}</ol> : null}<footer><span>{previewValues["doctor.name"]}</span><small>License / PRC details appear when recorded.</small></footer></article></aside>
       </div>
     </section> : <>
       <div className="template-filters"><label>Search templates<Input value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="Title, condition, or ICD-10 code" /></label><label>Type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}><option value="all">All documents</option><option value="medical_certificate">Medical certificates</option><option value="prescription">Prescriptions</option></select></label><label>Status<select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="all">All statuses</option><option value="draft">Drafts</option><option value="published">Published</option><option value="archived">Archived</option></select></label></div>
-      <section className="template-library" aria-label="Template library">{filtered.length ? filtered.map((template) => <article key={template.id} className="template-list-card"><div><div className="template-card-meta"><span>{template.type === "medical_certificate" ? "Medical Certificate" : "Prescription"}</span><span className={`template-state template-state--${template.status}`}>{template.status}</span>{template.isDefault ? <span className="template-default">Default</span> : null}</div><h2>{template.title}</h2><p>{template.conditionDisplay ?? "Unclassified condition"}{template.ownerDoctorId ? " · Personal" : " · Clinic shared"}</p><small>v{template.version} · Updated {dateTime(template.updatedAt)}</small></div><div className="template-card-actions"><Button size="sm" variant="outline" onClick={() => setEditor(toEditor(template))}>Edit</Button><Button size="sm" variant="outline" onClick={() => setEditor({ ...toEditor(template), id: undefined, title: `${template.title} copy`, status: "draft", isDefault: false })}><Copy aria-hidden="true" size={14} /> Duplicate</Button>{template.status !== "archived" ? <Button size="sm" variant="outline" onClick={() => void archive(template)}><FolderArchive aria-hidden="true" size={14} /> Archive</Button> : null}</div></article>) : <section className="template-empty"><h2>No matching templates</h2><p>Create a condition-aware certificate or prescription starting point for this clinic.</p></section>}</section>
+      <section className="template-library" aria-label="Template library">{filtered.length ? filtered.map((template) => <article key={template.id} className="template-list-card"><div><div className="template-card-meta"><span>{template.type === "medical_certificate" ? "Medical Certificate" : "Prescription"}</span><span className={`template-state template-state--${template.status}`}>{template.status}</span>{template.isDefault ? <span className="template-default">Default</span> : null}</div><h2>{template.title}</h2><p>{template.conditionDisplay ?? "Unclassified condition"}{template.ownerDoctorId ? " · Personal" : " · Clinic shared"}</p><small>v{template.version} · Updated {dateTime(template.updatedAt)}</small></div><div className="template-card-actions">{template.status === "draft" ? <Button size="sm" disabled={saving} onClick={() => void publishTemplate(template)}><Send aria-hidden="true" size={14} /> Publish</Button> : null}<Button size="sm" variant="outline" onClick={() => setEditor(toEditor(template))}>Edit</Button><Button size="sm" variant="outline" onClick={() => setEditor({ ...toEditor(template), id: undefined, title: `${template.title} copy`, status: "draft", isDefault: false })}><Copy aria-hidden="true" size={14} /> Duplicate</Button>{template.status !== "archived" ? <Button size="sm" variant="outline" onClick={() => void archive(template)}><FolderArchive aria-hidden="true" size={14} /> Archive</Button> : null}</div></article>) : <section className="template-empty"><h2>No matching templates</h2><p>Create a condition-aware certificate or prescription starting point for this clinic.</p></section>}</section>
     </>}
   </main>;
 }
@@ -406,6 +431,30 @@ export function ClinicalTemplatePicker({
   const [message, setMessage] = useState("Loading published templates…");
   const contextRef = useRef<Record<string, string>>({});
 
+  const applyTemplateById = useCallback((id: string, templateList: ClinicalDocumentTemplate[], contextValues: Record<string, string>) => {
+    const template = templateList.find((item) => item.id === id);
+    if (!template) {
+      onApply(null);
+      setMessage("No template applied; continue with a free-text document.");
+      return;
+    }
+    const medications = template.content.medications.map((line) => ({
+      name: fillTemplate(line.name, contextValues),
+      dosage: fillTemplate(line.dosage, contextValues),
+      frequency: fillTemplate(line.frequency, contextValues),
+      duration: fillTemplate(line.duration, contextValues),
+      notes: fillTemplate(line.notes, contextValues),
+    }));
+    onApply({
+      templateId: template.id,
+      templateVersion: template.version,
+      title: template.title,
+      body: templateText(fillTemplate(template.content.html, contextValues)),
+      medications,
+    });
+    setMessage(`${template.title} applied. You can edit every value before issuing.`);
+  }, [onApply]);
+
   useEffect(() => {
     let current = true;
     async function load() {
@@ -416,37 +465,71 @@ export function ClinicalTemplatePicker({
         getEncounterTemplateContext(client, encounterId),
       ]);
       if (!current) return;
-      if (library.error || context.error) { setMessage("Published templates are unavailable for this encounter."); return; }
-      const published = library.data.filter((template) => template.status === "published");
-      contextRef.current = context.data.values;
+      if (library.error) {
+        setMessage("Published templates are unavailable for this encounter.");
+        return;
+      }
+      const published = (library.data ?? []).filter((template) => template.status === "published");
+      const values = context.data?.values ?? {};
+      contextRef.current = values;
       setTemplates(published);
+
       const defaultTemplate = published.find((template) => template.isDefault
+        && context.data?.diagnosisCode
         && template.conditionSystem === context.data.diagnosisSystem
         && template.conditionCode === context.data.diagnosisCode)
-        ?? published.find((template) => template.isDefault && template.conditionDisplay === context.data.diagnosisDisplay)
-        ?? null;
-      setSelectedId(defaultTemplate?.id ?? "");
-      setMessage(defaultTemplate ? `Suggested default: ${defaultTemplate.title}` : published.length ? "Choose a published starting template, or continue without one." : "No published templates match this document type.");
+        ?? published.find((template) => template.isDefault && context.data?.diagnosisDisplay && template.conditionDisplay === context.data.diagnosisDisplay)
+        ?? published.find((template) => template.isDefault && !template.conditionCode)
+        ?? published.find((template) => template.isDefault)
+        ?? (published.length === 1 ? published[0] : null);
+
+      const initialId = defaultTemplate?.id ?? "";
+      setSelectedId(initialId);
+      setMessage(
+        defaultTemplate
+          ? `Suggested default: ${defaultTemplate.title}`
+          : published.length
+            ? "Choose a published starting template, or continue without one."
+            : "No published templates match this document type."
+      );
     }
     void load();
     return () => { current = false; };
   }, [encounterId, type]);
 
-  function apply() {
-    const template = templates.find((item) => item.id === selectedId);
-    if (!template) { onApply(null); setMessage("No template applied; continue with a free-text document."); return; }
-    const values = contextRef.current;
-    const medications = template.content.medications.map((line) => ({
-      name: fillTemplate(line.name, values), dosage: fillTemplate(line.dosage, values),
-      frequency: fillTemplate(line.frequency, values), duration: fillTemplate(line.duration, values), notes: fillTemplate(line.notes, values),
-    }));
-    onApply({ templateId: template.id, templateVersion: template.version, title: template.title, body: templateText(fillTemplate(template.content.html, values)), medications });
-    setMessage(`${template.title} applied. You can edit every value before issuing.`);
+  function handleSelect(id: string) {
+    setSelectedId(id);
+    if (id) {
+      applyTemplateById(id, templates, contextRef.current);
+    } else {
+      onApply(null);
+      setMessage("No template applied; continue with a free-text document.");
+    }
   }
 
-  return <section className="clinical-template-picker" aria-label={`${type === "prescription" ? "Prescription" : "Certificate"} template selection`}>
-    <label>Starting template<select className="odyssey-input" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}><option value="">No template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.title}{template.isDefault ? " — default" : ""}</option>)}</select></label>
-    <Button type="button" size="sm" variant="outline" onClick={apply}>Apply template</Button>
-    <p className="hint" aria-live="polite">{message}</p>
-  </section>;
+  function apply() {
+    applyTemplateById(selectedId, templates, contextRef.current);
+  }
+
+  return (
+    <section className="clinical-template-picker" aria-label={`${type === "prescription" ? "Prescription" : "Certificate"} template selection`}>
+      <label>
+        Starting template
+        <select
+          className="odyssey-input"
+          value={selectedId}
+          onChange={(event) => handleSelect(event.target.value)}
+        >
+          <option value="">No template</option>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.title}{template.isDefault ? " — default" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button type="button" size="sm" variant="outline" onClick={apply}>Apply template</Button>
+      <p className="hint" aria-live="polite">{message}</p>
+    </section>
+  );
 }
