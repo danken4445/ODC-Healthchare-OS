@@ -25,6 +25,8 @@ export type PlatformAdminRow = DatabaseRow<"platform_admins">;
 export type ProviderWeeklyAvailabilityRow =
   DatabaseRow<"provider_weekly_availability">;
 export type WaitingRoomQueueRow = DatabaseRow<"waiting_room_queue">;
+export type ClinicRoomRow = DatabaseRow<"clinic_rooms">;
+export type RoomAssignmentRow = DatabaseRow<"room_assignments">;
 export type DepartmentRow = DatabaseRow<"departments">;
 export type InventoryItemRow = DatabaseRow<"inventory_items">;
 export type DepartmentStockRow = DatabaseRow<"department_stock">;
@@ -236,6 +238,8 @@ export type WaitingRoomQueueItem = Pick<
   | "queue_date"
   | "queue_label"
   | "queue_number"
+  | "room_label"
+  | "practitioner_display_name"
   | "service_name"
   | "scheduled_at"
   | "stage"

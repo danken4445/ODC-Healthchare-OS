@@ -70,6 +70,8 @@ import {
   type DiagnosticReportSummary,
   type ServiceRequestSummary,
   type ClinicalNotificationSummary,
+  type ClinicRoomRow,
+  type RoomAssignmentRow,
   type SpecialistOption,
   type LaboratoryServiceSummary,
   type DiagnosticEncounterOption,
@@ -220,7 +222,7 @@ const appointmentSlotSummaryColumns =
 const clinicServiceSummaryColumns =
   "id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, active, booking_enabled, delivery_modes";
 const waitingRoomQueueColumns =
-  "appointment_id, organization_id, queue_date, queue_number, queue_label, service_name, scheduled_at, stage";
+  "appointment_id, organization_id, queue_date, queue_number, queue_label, practitioner_display_name, room_label, service_name, scheduled_at, stage";
 const publicClinicSummaryColumns = "id, name, telecom, address";
 const encounterSummaryColumns =
   "id, organization_id, patient_id, appointment_id, practitioner_role_id, status, class_code, service_type, period_start, period_end, diagnosis";
@@ -2797,6 +2799,118 @@ export function subscribeToAppointmentQueue(
       document.removeEventListener("visibilitychange", handleVisibility);
     }
   };
+}
+
+export const roomAssignmentInputSchema = z.object({
+  organizationId: z.string().uuid(),
+  practitionerRoleId: z.string().uuid(),
+  roomId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD."),
+  shiftStart: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM."),
+  shiftEnd: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM."),
+});
+
+export type RoomAssignmentInput = z.infer<typeof roomAssignmentInputSchema>;
+
+export interface RoomAssignmentDoctorOption {
+  practitionerRoleId: string;
+  displayName: string;
+}
+
+export interface RoomAssignmentGrid {
+  rooms: ClinicRoomRow[];
+  assignments: RoomAssignmentRow[];
+  doctors: RoomAssignmentDoctorOption[];
+}
+
+/** Loads the small, organization-scoped data set used by the admin room grid. */
+export async function getRoomAssignmentGrid(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  date: string,
+): Promise<SupabaseResult<RoomAssignmentGrid>> {
+  const parsedDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).safeParse(date);
+  if (!parsedDate.success) {
+    return failure({ message: "Room assignment date must use YYYY-MM-DD." });
+  }
+
+  const [roomsResult, assignmentsResult, rolesResult] = await Promise.all([
+    client
+      .from("clinic_rooms")
+      .select("id, organization_id, label, is_active, created_at, updated_at")
+      .eq("organization_id", organizationId)
+      .order("label"),
+    client
+      .from("room_assignments")
+      .select("id, organization_id, practitioner_role_id, room_id, date, shift_start, shift_end, created_at, updated_at")
+      .eq("organization_id", organizationId)
+      .eq("date", date)
+      .order("shift_start"),
+    client
+      .from("practitioner_roles")
+      .select("id, practitioner_id, active")
+      .eq("organization_id", organizationId)
+      .eq("active", true)
+      .in("role_code", ["doctor", "specialist"]),
+  ]);
+
+  if (roomsResult.error) return failure(roomsResult.error);
+  if (assignmentsResult.error) return failure(assignmentsResult.error);
+  if (rolesResult.error) return failure(rolesResult.error);
+
+  const practitionerIds = (rolesResult.data ?? []).map((role) => role.practitioner_id);
+  const practitionersResult = practitionerIds.length
+    ? await client.from("practitioners").select("id, name").in("id", practitionerIds)
+    : { data: [], error: null };
+  if (practitionersResult.error) return failure(practitionersResult.error);
+
+  const practitioners = new Map(
+    (practitionersResult.data ?? []).map((practitioner) => [practitioner.id, practitioner.name]),
+  );
+
+  return success({
+    rooms: (roomsResult.data ?? []) as ClinicRoomRow[],
+    assignments: (assignmentsResult.data ?? []) as RoomAssignmentRow[],
+    doctors: (rolesResult.data ?? []).map((role) => ({
+      practitionerRoleId: role.id,
+      displayName: practitioners.has(role.practitioner_id)
+        ? getHumanNameDisplay(practitioners.get(role.practitioner_id)!)
+        : "Practitioner",
+    })),
+  });
+}
+
+/** Creates or replaces one doctor's assignment for the selected day. */
+export async function saveRoomAssignment(
+  client: SupabaseClient<Database>,
+  input: RoomAssignmentInput,
+): Promise<SupabaseResult<RoomAssignmentRow>> {
+  const parsed = roomAssignmentInputSchema.safeParse(input);
+  if (!parsed.success) return failure({ message: parsed.error.issues[0]?.message ?? "Invalid room assignment." });
+
+  const { organizationId, practitionerRoleId, roomId, date, shiftStart, shiftEnd } = parsed.data;
+  const { error: deleteError } = await client
+    .from("room_assignments")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("practitioner_role_id", practitionerRoleId)
+    .eq("date", date);
+  if (deleteError) return failure(deleteError);
+
+  const { data, error } = await client
+    .from("room_assignments")
+    .insert({
+      organization_id: organizationId,
+      practitioner_role_id: practitionerRoleId,
+      room_id: roomId,
+      date,
+      shift_start: shiftStart,
+      shift_end: shiftEnd,
+    })
+    .select("id, organization_id, practitioner_role_id, room_id, date, shift_start, shift_end, created_at, updated_at")
+    .single();
+  if (error) return failure(error);
+  return success(data as RoomAssignmentRow);
 }
 
 export interface AppointmentBookingEvent {
