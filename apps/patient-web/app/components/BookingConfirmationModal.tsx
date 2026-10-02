@@ -1,13 +1,15 @@
 "use client";
 
-import type { AppointmentDeliveryMode, AppointmentSlotSummary, ClinicServiceSummary, OrganizationBranding } from "@odyssey/types";
+import type { AvailableBookingSlot, BookablePractitioner } from "@odyssey/supabase-client";
+import type { AppointmentDeliveryMode, ClinicServiceSummary, OrganizationBranding } from "@odyssey/types";
 import { Button } from "@odyssey/ui";
 import { useEffect } from "react";
 
 interface BookingConfirmationModalProps {
   busy: boolean;
   isOpen: boolean;
-  slot: AppointmentSlotSummary | null;
+  slot: AvailableBookingSlot | null;
+  practitioner: BookablePractitioner;
   mode: AppointmentDeliveryMode | null;
   service?: ClinicServiceSummary;
   clinicName?: string;
@@ -37,6 +39,7 @@ export function BookingConfirmationModal({
   busy,
   isOpen,
   slot,
+  practitioner,
   mode,
   service,
   clinicName,
@@ -163,8 +166,19 @@ export function BookingConfirmationModal({
                 <circle cx="12" cy="10" r="3" />
               </svg>
               <div>
-                <span className="booking-summary-label">Location / Provider</span>
+                <span className="booking-summary-label">Clinic</span>
                 <strong>{clinicDisplayName}</strong>
+              </div>
+            </div>
+
+            <div className="booking-summary-row">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="booking-summary-icon" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21a8 8 0 0 1 16 0" />
+              </svg>
+              <div>
+                <span className="booking-summary-label">Doctor</span>
+                <strong>{practitioner.display_name}{practitioner.specialty ? ` · ${practitioner.specialty}` : ""}</strong>
               </div>
             </div>
           </div>

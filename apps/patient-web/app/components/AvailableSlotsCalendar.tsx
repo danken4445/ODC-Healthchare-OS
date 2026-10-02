@@ -1,6 +1,7 @@
 "use client";
 
-import type { AppointmentDeliveryMode, AppointmentSlotSummary, ClinicServiceSummary, OrganizationBranding } from "@odyssey/types";
+import type { AvailableBookingSlot, BookablePractitioner } from "@odyssey/supabase-client";
+import type { AppointmentDeliveryMode, ClinicServiceSummary, OrganizationBranding } from "@odyssey/types";
 import { Button } from "@odyssey/ui";
 import { useMemo, useState } from "react";
 import { BookingConfirmationModal } from "./BookingConfirmationModal";
@@ -9,7 +10,8 @@ interface AvailableSlotsCalendarProps {
   busySlotId: string | null;
   onBook: (slotId: string, mode: AppointmentDeliveryMode) => void;
   services: ClinicServiceSummary[];
-  slots: AppointmentSlotSummary[];
+  slots: AvailableBookingSlot[];
+  selectedPractitioner: BookablePractitioner;
   clinicName?: string;
   branding?: OrganizationBranding | null;
 }
@@ -28,6 +30,7 @@ export function AvailableSlotsCalendar({
   onBook,
   services,
   slots,
+  selectedPractitioner,
   clinicName,
   branding,
 }: AvailableSlotsCalendarProps) {
@@ -37,13 +40,13 @@ export function AvailableSlotsCalendar({
   const [calendarExpanded, setCalendarExpanded] = useState(true);
   const [showAllTimes, setShowAllTimes] = useState(false);
   const [pendingBooking, setPendingBooking] = useState<{
-    slot: AppointmentSlotSummary;
+    slot: AvailableBookingSlot;
     mode: AppointmentDeliveryMode;
     service?: ClinicServiceSummary;
   } | null>(null);
 
   const slotsByDate = useMemo(() => {
-    const grouped = new Map<string, AppointmentSlotSummary[]>();
+    const grouped = new Map<string, AvailableBookingSlot[]>();
     [...slots].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()).forEach((slot) => {
       const key = dateKey(slot.start_at);
       grouped.set(key, [...(grouped.get(key) ?? []), slot]);
@@ -68,7 +71,7 @@ export function AvailableSlotsCalendar({
     setShowAllTimes(false);
   }
 
-  function handleOpenConfirmation(slot: AppointmentSlotSummary, mode: AppointmentDeliveryMode, service?: ClinicServiceSummary) {
+  function handleOpenConfirmation(slot: AvailableBookingSlot, mode: AppointmentDeliveryMode, service?: ClinicServiceSummary) {
     setPendingBooking({ slot, mode, service });
   }
 
@@ -115,7 +118,11 @@ export function AvailableSlotsCalendar({
               const service = services.find((s) => s.id === slot.clinic_service_id);
               const modes = service?.delivery_modes ?? ["in_person"];
               return <article className="time-slot-card" key={slot.id}>
-                <div><strong>{formatTime(slot.start_at)}</strong><span>{slot.service_type ?? "General consultation"}</span></div>
+                <div>
+                  <strong>{formatTime(slot.start_at)}</strong>
+                  <span>{slot.service_type ?? "General consultation"}</span>
+                  <span className="time-slot-card__doctor">{selectedPractitioner.display_name}{selectedPractitioner.specialty ? ` · ${selectedPractitioner.specialty}` : ""}</span>
+                </div>
                 <div className="time-slot-card__actions">
                   {modes.includes("in_person") ? (
                     <Button
@@ -149,6 +156,7 @@ export function AvailableSlotsCalendar({
         slot={pendingBooking?.slot ?? null}
         mode={pendingBooking?.mode ?? null}
         service={pendingBooking?.service}
+        practitioner={selectedPractitioner}
         clinicName={clinicName}
         branding={branding}
         onCancel={() => setPendingBooking(null)}

@@ -137,6 +137,23 @@ section > .stack, section > .inline-form { display: grid; gap: 1rem; }
 .time-slot-card span { color:var(--muted-foreground); font-size:.8rem; }
 .time-slot-card__actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.45rem; }
 .time-slot-card__actions .odyssey-button { min-width:0; padding-inline:.5rem; font-size:.82rem; }
+.booking-stage { margin-top: 1.25rem; }
+.booking-stage-title { margin: 1.25rem 0 .75rem; font-size: 1.05rem; }
+.booking-service-grid { margin-bottom: .5rem; }
+.booking-service-option,.doctor-card { width: 100%; min-width: 0; min-height: 2.75rem; padding: 0; border: 1px solid var(--border); border-radius: 1rem; color: var(--foreground); background: white; text-align: left; cursor: pointer; }
+.booking-service-option .service-card { border: 0; border-radius: inherit; }
+.booking-service-option.is-selected,.doctor-card.is-selected { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent); }
+.booking-service-option:focus-visible,.doctor-card:focus-visible { outline: 3px solid var(--odyssey-ring, var(--primary)); outline-offset: 2px; }
+.doctor-card-grid { display: grid; grid-template-columns: 1fr; gap: .75rem; }
+.doctor-card { display: flex; align-items: center; gap: .85rem; min-height: 5.5rem; padding: .85rem; }
+.doctor-card__avatar { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; place-items: center; border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, white); font-weight: 800; }
+.doctor-card__content { display: grid; min-width: 0; gap: .18rem; }
+.doctor-card__content strong,.doctor-card__content b { overflow-wrap: anywhere; }
+.doctor-card__content > span { color: var(--muted-foreground); font-size: .85rem; }
+.doctor-card__content b { color: var(--primary); font-size: .9rem; }
+.booking-error { margin: .75rem 0; padding: .8rem; border: 1px solid #d99; border-radius: .75rem; color: #8c2020; background: #fff6f6; }
+.time-slot-card__doctor { display: block; margin-top: .25rem; color: var(--foreground) !important; font-weight: 650; }
+@media (min-width: 640px) { .doctor-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .show-more-times { width:100%; margin-top:.65rem; color:var(--primary); }
 
 .section-heading { display:flex; min-width:0; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:.65rem; }

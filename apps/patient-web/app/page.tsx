@@ -1,11 +1,12 @@
 "use client";
 
 import {
-  bookAppointmentSlot,
+  bookAppointment,
   createBrowserSupabaseClient,
   createPublicSupabaseClient,
   enrollPatientAtClinic,
-  getAvailableAppointmentSlots,
+  getAvailableBookingSlots,
+  getBookablePractitioners,
   getClinicServices,
   getCurrentUserEmail,
   getPortalAccess,
@@ -30,8 +31,11 @@ import {
   createPmrShareLink,
 } from "@odyssey/supabase-client";
 import type {
+  AvailableBookingSlot,
+  BookablePractitioner,
+} from "@odyssey/supabase-client";
+import type {
   AppointmentDeliveryMode,
-  AppointmentSlotSummary,
   ClinicServiceSummary,
   PatientAccessRecords,
   PublicClinicSummary,
@@ -124,7 +128,17 @@ export default function Home() {
   const [clinics, setClinics] = useState<PublicClinicSummary[]>([]);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<PatientTab>("all");
-  const [slots, setSlots] = useState<AppointmentSlotSummary[]>([]);
+  const [bookingSlots, setBookingSlots] = useState<AvailableBookingSlot[]>([]);
+  const [bookablePractitioners, setBookablePractitioners] = useState<
+    BookablePractitioner[]
+  >([]);
+  const [selectedBookingServiceId, setSelectedBookingServiceId] = useState<
+    string | null
+  >(null);
+  const [selectedPractitioner, setSelectedPractitioner] =
+    useState<BookablePractitioner | null>(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
   const [services, setServices] = useState<ClinicServiceSummary[]>([]);
   const [records, setRecords] = useState<PatientAccessRecords | null>(null);
   const [walkInRecords, setWalkInRecords] =
@@ -198,26 +212,25 @@ export default function Home() {
 
   async function loadPublicPortal(clinicId: string) {
     const client = createPublicSupabaseClient();
-    const [serviceResult, slotResult, brandingResult, moduleResult] =
+    const [serviceResult, brandingResult, moduleResult] =
       await Promise.all([
         getClinicServices(client, clinicId),
-        getAvailableAppointmentSlots(client, clinicId),
         getOrganizationBranding(client, clinicId),
         isOrganizationModuleEnabled(client, clinicId, "core_visit"),
       ]);
-    if (serviceResult.error || slotResult.error) {
+    if (serviceResult.error) {
       setStatus(
-        `Unable to load this clinic: ${serviceResult.error?.message ?? slotResult.error?.message}`,
+        `Unable to load this clinic: ${serviceResult.error.message}`,
       );
       return;
     }
     if (!moduleResult.error && !moduleResult.data) {
       setServices([]);
-      setSlots([]);
+      setBookingSlots([]);
       setStatus("Online booking is not currently enabled for this clinic.");
     } else {
       setServices(serviceResult.data);
-      setSlots(slotResult.data);
+      setBookingSlots([]);
     }
     if (!brandingResult.error) setBranding(brandingResult.data);
   }
@@ -239,13 +252,7 @@ export default function Home() {
       });
       return;
     }
-    const [slotResult, recordResult] = await Promise.all([
-      getAvailableAppointmentSlots(client, clinicId),
-      getPatientAccessRecords(client, clinicId),
-    ]);
-    if (!slotResult.error && slotResult.data) {
-      setSlots(slotResult.data);
-    }
+    const recordResult = await getPatientAccessRecords(client, clinicId);
     if (!recordResult.error && recordResult.data) {
       setRecords(recordResult.data);
       const patient = recordResult.data.patients[0];
@@ -260,9 +267,9 @@ export default function Home() {
         setCoverages([]);
       }
     }
-    if (slotResult.error || recordResult.error) {
+    if (recordResult.error) {
       setStatus(
-        `Notice: ${slotResult.error?.message ?? recordResult.error?.message}`,
+        `Notice: ${recordResult.error.message}`,
       );
       return;
     }
@@ -280,6 +287,11 @@ export default function Home() {
   function selectClinic(clinicId: string) {
     setOrganizationId(clinicId);
     setRecords(null);
+    setSelectedBookingServiceId(null);
+    setSelectedPractitioner(null);
+    setBookablePractitioners([]);
+    setBookingSlots([]);
+    setBookingError(null);
     setWalkInRecords(null);
     setWalkInCredentials(null);
     if (typeof window !== "undefined") {
@@ -472,24 +484,76 @@ export default function Home() {
   ) {
     if (!organizationId || !patientAtSelectedClinic) return;
     setBusySlotId(slotId);
-    const result = await bookAppointmentSlot(
+    const result = await bookAppointment(
       createBrowserSupabaseClient(),
       slotId,
-      undefined,
       deliveryMode,
       organizationId,
     );
     setBusySlotId(null);
-    if (result.error)
+    if (result.error) {
+      if (result.error.code === "SLOT_TAKEN") {
+        setBookingSlots((current) => current.filter((slot) => slot.id !== slotId));
+        setStatus("That time was just booked by another patient. Available times have been refreshed.");
+        await refreshSelectedBookingSlots();
+        return;
+      }
       return setStatus(`Booking failed: ${result.error.message}`);
-    // Optimistically remove the booked slot immediately so it disappears with zero refresh needed
-    setSlots((current) => current.filter((slot) => slot.id !== slotId));
+    }
+    setBookingSlots((current) => current.filter((slot) => slot.id !== slotId));
     setStatus(
       deliveryMode === "virtual"
-        ? "Virtual appointment booked. Your teleconsult room opens 30 minutes before the scheduled time."
-        : "Appointment booked. It is now in the doctor's live queue.",
+        ? "Virtual appointment reserved. Your bill is ready; confirmation follows payment. The teleconsult room opens 30 minutes before the scheduled time."
+        : "Appointment reserved. Your bill is ready; confirmation follows payment.",
     );
     await loadPatientDashboard(organizationId);
+  }
+
+  async function selectBookingService(serviceId: string) {
+    setSelectedBookingServiceId(serviceId);
+    setSelectedPractitioner(null);
+    setBookablePractitioners([]);
+    setBookingSlots([]);
+    setBookingError(null);
+    setBookingLoading(true);
+    const result = await getBookablePractitioners(
+      createBrowserSupabaseClient(),
+      serviceId,
+    );
+    setBookingLoading(false);
+    if (result.error) {
+      setBookingError(`We could not load doctors for this service: ${result.error.message}`);
+      return;
+    }
+    setBookablePractitioners(result.data ?? []);
+  }
+
+  async function refreshSelectedBookingSlots(practitioner = selectedPractitioner) {
+    if (!selectedBookingServiceId || !practitioner) return;
+    setBookingError(null);
+    setBookingLoading(true);
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt);
+    endsAt.setDate(endsAt.getDate() + 90);
+    const result = await getAvailableBookingSlots(createBrowserSupabaseClient(), {
+      serviceId: selectedBookingServiceId,
+      practitionerRoleId: practitioner.practitioner_role_id,
+      startsAt,
+      endsAt,
+    });
+    setBookingLoading(false);
+    if (result.error) {
+      setBookingSlots([]);
+      setBookingError(`We could not load available times: ${result.error.message}`);
+      return;
+    }
+    setBookingSlots(result.data ?? []);
+  }
+
+  async function selectBookingPractitioner(practitioner: BookablePractitioner) {
+    setSelectedPractitioner(practitioner);
+    setBookingSlots([]);
+    await refreshSelectedBookingSlots(practitioner);
   }
 
   async function loadWalkInDashboard(
@@ -777,24 +841,83 @@ export default function Home() {
             </section>
           ) : (
             (activeTab === "all" || activeTab === "book") && (
-              <section aria-labelledby="available-slots-heading">
+              <section aria-labelledby="booking-heading">
                 <BookingStepHeader
-                  current={2}
-                  description="Choose the time and visit type that feel right for you."
-                  title="Pick a date and time"
+                  current={selectedPractitioner ? 3 : selectedBookingServiceId ? 2 : 1}
+                  description="Choose a service, doctor, then a date and visit type."
+                  title="Book an appointment"
                 />
-                <span className="sr-only" id="available-slots-heading">
-                  Available slots
-                </span>
+                <h2 id="booking-heading" className="booking-stage-title">
+                  1. Choose a service
+                </h2>
+                <div className="service-grid booking-service-grid">
+                  {services.filter((service) => service.booking_enabled).map((service) => (
+                    <button
+                      aria-pressed={selectedBookingServiceId === service.id}
+                      className={`booking-service-option${selectedBookingServiceId === service.id ? " is-selected" : ""}`}
+                      key={service.id}
+                      onClick={() => void selectBookingService(service.id)}
+                      type="button"
+                    >
+                      <ServiceCard
+                        description={service.description ?? "Friendly, professional care from your clinic team."}
+                        duration={service.duration_minutes}
+                        name={service.name}
+                      />
+                    </button>
+                  ))}
+                </div>
+                {!services.some((service) => service.booking_enabled) ? (
+                  <p className="slots-empty">Online booking is not available for any services at this clinic right now.</p>
+                ) : null}
 
-                <AvailableSlotsCalendar
-                  busySlotId={busySlotId}
-                  onBook={(slotId, mode) => void handleBook(slotId, mode)}
-                  services={services}
-                  slots={slots}
-                  clinicName={selectedClinic?.name || branding?.displayName}
-                  branding={branding}
-                />
+                {selectedBookingServiceId ? (
+                  <div className="booking-stage" aria-live="polite">
+                    <h2 className="booking-stage-title">2. Choose your doctor</h2>
+                    {bookingLoading && !selectedPractitioner ? <p className="slots-empty">Loading doctors…</p> : null}
+                    {bookingError && !selectedPractitioner ? <p className="booking-error" role="alert">{bookingError}</p> : null}
+                    {!bookingLoading && !bookingError && !bookablePractitioners.length ? <p className="slots-empty">No doctors are currently available for this service. Please choose another service or check back later.</p> : null}
+                    <div className="doctor-card-grid">
+                      {bookablePractitioners.map((practitioner) => {
+                        const credential = [practitioner.title, practitioner.specialty].filter(Boolean).join(" · ");
+                        const price = new Intl.NumberFormat(undefined, { style: "currency", currency: practitioner.currency }).format(practitioner.total_price);
+                        return (
+                          <button
+                            aria-pressed={selectedPractitioner?.practitioner_role_id === practitioner.practitioner_role_id}
+                            className={`doctor-card${selectedPractitioner?.practitioner_role_id === practitioner.practitioner_role_id ? " is-selected" : ""}`}
+                            key={practitioner.practitioner_role_id}
+                            onClick={() => void selectBookingPractitioner(practitioner)}
+                            type="button"
+                          >
+                            <span className="doctor-card__avatar" aria-hidden="true">{practitioner.display_name.slice(0, 1)}</span>
+                            <span className="doctor-card__content">
+                              <strong>{practitioner.display_name}</strong>
+                              {credential ? <span>{credential}</span> : <span>Clinic practitioner</span>}
+                              <b>{price} total</b>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedPractitioner ? (
+                  <div className="booking-stage" aria-labelledby="available-slots-heading">
+                    <h2 id="available-slots-heading" className="booking-stage-title">3. Choose a date and time</h2>
+                    {bookingLoading ? <p className="slots-empty">Loading available times…</p> : null}
+                    {bookingError ? <p className="booking-error" role="alert">{bookingError}</p> : null}
+                    {!bookingLoading && !bookingError ? <AvailableSlotsCalendar
+                      busySlotId={busySlotId}
+                      onBook={(slotId, mode) => void handleBook(slotId, mode)}
+                      selectedPractitioner={selectedPractitioner}
+                      services={services}
+                      slots={bookingSlots}
+                      clinicName={selectedClinic?.name || branding?.displayName}
+                      branding={branding}
+                    /> : null}
+                  </div>
+                ) : null}
               </section>
             )
           )}
