@@ -320,7 +320,8 @@ export type ClinicRolePermission =
   | "can_manage_professional_fees"
   | "can_view_clinic_queue"
   | "can_manage_rooms"
-  | "can_reassign_appointments";
+  | "can_reassign_appointments"
+  | "can_export_epidemiology_records";
 
 export interface ClinicRoleDefinition {
   code: string;
