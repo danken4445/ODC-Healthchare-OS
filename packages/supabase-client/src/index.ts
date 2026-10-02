@@ -3018,6 +3018,50 @@ export interface RoomAssignmentGrid {
   doctors: RoomAssignmentDoctorOption[];
 }
 
+export type ClinicCalendarRow = Database["public"]["Functions"]["list_clinic_calendar"]["Returns"][number];
+export type DoctorManagementRow = Database["public"]["Functions"]["list_doctor_management"]["Returns"][number];
+
+const clinicCalendarInputSchema = z.object({
+  organizationId: postgresUuidSchema,
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD."),
+  doctorRoleId: postgresUuidSchema.nullish(),
+  clinicServiceId: postgresUuidSchema.nullish(),
+});
+
+/** Reads the permission-gated, patient-free week projection for clinic admins. */
+export async function getClinicCalendar(
+  client: SupabaseClient<Database>,
+  input: z.input<typeof clinicCalendarInputSchema>,
+): Promise<SupabaseResult<ClinicCalendarRow[]>> {
+  const parsed = clinicCalendarInputSchema.safeParse(input);
+  if (!parsed.success) return failure({ message: parsed.error.issues[0]?.message ?? "Invalid calendar filters." });
+  const { organizationId, weekStart, doctorRoleId, clinicServiceId } = parsed.data;
+  const { data, error } = await client.rpc("list_clinic_calendar", {
+    p_organization_id: organizationId,
+    p_week_start: weekStart,
+    p_doctor_role_id: doctorRoleId ?? undefined,
+    p_clinic_service_id: clinicServiceId ?? undefined,
+  });
+  if (error) return failure(error);
+  return success(data ?? []);
+}
+
+/** Reads the organization-scoped doctor/service/room/queue management view. */
+export async function getDoctorManagement(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  date: string,
+): Promise<SupabaseResult<DoctorManagementRow[]>> {
+  const parsed = z.object({ organizationId: postgresUuidSchema, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.") }).safeParse({ organizationId, date });
+  if (!parsed.success) return failure({ message: parsed.error.issues[0]?.message ?? "Invalid doctor management filters." });
+  const { data, error } = await client.rpc("list_doctor_management", {
+    p_organization_id: parsed.data.organizationId,
+    p_date: parsed.data.date,
+  });
+  if (error) return failure(error);
+  return success(data ?? []);
+}
+
 /** Loads the small, organization-scoped data set used by the admin room grid. */
 export async function getRoomAssignmentGrid(
   client: SupabaseClient<Database>,

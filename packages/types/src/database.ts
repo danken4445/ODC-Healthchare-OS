@@ -5611,6 +5611,14 @@ export type Database = {
           error: string
         }[]
       }
+      is_active_practitioner_coverage: {
+        Args: {
+          p_organization_id: string
+          p_covered_practitioner_role_id: string
+          p_on_date: string
+        }
+        Returns: boolean
+      }
       is_active_staff: {
         Args: Record<PropertyKey, never>
         Returns: boolean
@@ -5687,6 +5695,23 @@ export type Database = {
         }
         Returns: string[]
       }
+      list_clinic_calendar: {
+        Args: {
+          p_organization_id: string
+          p_week_start: string
+          p_doctor_role_id?: string
+          p_clinic_service_id?: string
+        }
+        Returns: {
+          doctor_role_id: string
+          doctor_name: string
+          service_name: string
+          start_at: string
+          end_at: string
+          status: string
+          queue_label: string
+        }[]
+      }
       list_clinic_role_definitions: {
         Args: {
           p_organization_id: string
@@ -5721,6 +5746,20 @@ export type Database = {
           service_type: string
           period_start: string
           status: Database["public"]["Enums"]["encounter_status"]
+        }[]
+      }
+      list_doctor_management: {
+        Args: {
+          p_organization_id: string
+          p_date: string
+        }
+        Returns: {
+          practitioner_role_id: string
+          doctor_name: string
+          assigned_services: string[]
+          room_label: string
+          queue_prefix: string
+          declared_fee_summary: string
         }[]
       }
       list_doctor_payouts: {
