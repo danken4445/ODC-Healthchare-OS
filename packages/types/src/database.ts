@@ -224,6 +224,7 @@ export type Database = {
           payment_due_at: string | null
           practitioner_role_id: string | null
           queue_date: string | null
+          queue_label: string | null
           queue_number: number | null
           reason_codes: Json
           service_category: string | null
@@ -253,6 +254,7 @@ export type Database = {
           payment_due_at?: string | null
           practitioner_role_id?: string | null
           queue_date?: string | null
+          queue_label?: string | null
           queue_number?: number | null
           reason_codes?: Json
           service_category?: string | null
@@ -282,6 +284,7 @@ export type Database = {
           payment_due_at?: string | null
           practitioner_role_id?: string | null
           queue_date?: string | null
+          queue_label?: string | null
           queue_number?: number | null
           reason_codes?: Json
           service_category?: string | null
@@ -2877,18 +2880,21 @@ export type Database = {
           created_at: string
           fee_model: string
           organization_id: string
+          queue_mode: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           fee_model?: string
           organization_id: string
+          queue_mode?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           fee_model?: string
           organization_id?: string
+          queue_mode?: string
           updated_at?: string
         }
         Relationships: [
@@ -3531,6 +3537,7 @@ export type Database = {
           not_available: Json
           organization_id: string
           practitioner_id: string
+          queue_prefix: string | null
           role_code: string
           specialty_codes: Json
           telecom: Json
@@ -3544,6 +3551,7 @@ export type Database = {
           not_available?: Json
           organization_id: string
           practitioner_id: string
+          queue_prefix?: string | null
           role_code: string
           specialty_codes?: Json
           telecom?: Json
@@ -3557,6 +3565,7 @@ export type Database = {
           not_available?: Json
           organization_id?: string
           practitioner_id?: string
+          queue_prefix?: string | null
           role_code?: string
           specialty_codes?: Json
           telecom?: Json
@@ -4204,6 +4213,7 @@ export type Database = {
           id: string
           organization_id: string
           queue_date: string
+          queue_label: string
           queue_number: number
           scheduled_at: string
           service_name: string
@@ -4215,6 +4225,7 @@ export type Database = {
           id?: string
           organization_id: string
           queue_date: string
+          queue_label: string
           queue_number: number
           scheduled_at: string
           service_name: string
@@ -4226,6 +4237,7 @@ export type Database = {
           id?: string
           organization_id?: string
           queue_date?: string
+          queue_label?: string
           queue_number?: number
           scheduled_at?: string
           service_name?: string
@@ -4789,6 +4801,16 @@ export type Database = {
           can_manage_fee_model: boolean
         }[]
       }
+      get_organization_queue_settings: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: {
+          organization_id: string
+          queue_mode: string
+          can_manage_queue_mode: boolean
+        }[]
+      }
       get_patient_coverages: {
         Args: {
           p_organization_id: string
@@ -5170,6 +5192,17 @@ export type Database = {
           resource_type: string
           record_id: string
           metadata: Json
+        }[]
+      }
+      list_practitioner_queue_prefixes: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: {
+          practitioner_role_id: string
+          display_name: string
+          role_code: string
+          queue_prefix: string
         }[]
       }
       list_professional_fee_history: {
@@ -5582,6 +5615,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_organization_queue_mode: {
+        Args: {
+          p_organization_id: string
+          p_queue_mode: string
+        }
+        Returns: string
+      }
       set_patient_clinic_context: {
         Args: {
           p_organization_id: string
@@ -5594,6 +5634,13 @@ export type Database = {
           p_share_basis_points: number
         }
         Returns: undefined
+      }
+      set_practitioner_queue_prefix: {
+        Args: {
+          p_practitioner_role_id: string
+          p_queue_prefix?: string
+        }
+        Returns: string
       }
       set_professional_fee_for_practitioner: {
         Args: {

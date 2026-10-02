@@ -214,13 +214,13 @@ export type AvailableBookingSlotsInput = z.infer<typeof availableBookingSlotsInp
 const patientSummaryColumns =
   "id, organization_id, active, name, birth_date, blood_type, gender, photo_url, telecom, address, contact, walk_in_id, created_at, updated_at";
 const appointmentSummaryColumns =
-  "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction, clinic_service_id, queue_date, queue_number, delivery_mode";
+  "id, organization_id, patient_id, practitioner_role_id, status, service_type, appointment_type, start_at, end_at, minutes_duration, description, patient_instruction, clinic_service_id, queue_date, queue_number, queue_label, delivery_mode";
 const appointmentSlotSummaryColumns =
   "id, appointment_id, organization_id, practitioner_role_id, clinic_service_id, status, service_type, start_at, end_at";
 const clinicServiceSummaryColumns =
   "id, organization_id, owner_practitioner_role_id, code, name, description, duration_minutes, base_price, currency, active, booking_enabled, delivery_modes";
 const waitingRoomQueueColumns =
-  "appointment_id, organization_id, queue_date, queue_number, service_name, scheduled_at, stage";
+  "appointment_id, organization_id, queue_date, queue_number, queue_label, service_name, scheduled_at, stage";
 const publicClinicSummaryColumns = "id, name, telecom, address";
 const encounterSummaryColumns =
   "id, organization_id, patient_id, appointment_id, practitioner_role_id, status, class_code, service_type, period_start, period_end, diagnosis";
@@ -4208,3 +4208,4 @@ export async function saveCompanyCoverage(
 
 export * from "./pmr-builder.ts";
 export * from "./professional-fees.ts";
+export * from "./queue-settings.ts";

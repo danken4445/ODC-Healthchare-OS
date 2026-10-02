@@ -176,6 +176,7 @@ export type AppointmentSummary = Pick<
   | "patient_instruction"
   | "clinic_service_id"
   | "queue_date"
+  | "queue_label"
   | "queue_number"
   | "delivery_mode"
 >;
@@ -233,6 +234,7 @@ export type WaitingRoomQueueItem = Pick<
   | "appointment_id"
   | "organization_id"
   | "queue_date"
+  | "queue_label"
   | "queue_number"
   | "service_name"
   | "scheduled_at"
@@ -243,6 +245,8 @@ export type PublicClinicSummary = Pick<
   OrganizationRow,
   "id" | "name" | "telecom" | "address"
 >;
+
+export type QueueMode = "clinic_wide" | "per_practitioner";
 
 export type PortalName = "patient" | "provider" | "admin";
 
