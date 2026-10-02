@@ -312,7 +312,9 @@ export type ClinicRolePermission =
   | "can_manage_document_templates"
   | "can_manage_feature_modules"
   | "can_manage_services"
-  | "can_manage_professional_fees";
+  | "can_manage_professional_fees"
+  | "can_view_clinic_queue"
+  | "can_manage_rooms";
 
 export interface ClinicRoleDefinition {
   code: string;

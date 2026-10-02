@@ -27,3 +27,10 @@ The admin waiting-room/lobby route and legacy teleconsult summary still format
 `queue_number` directly; they have no React-key collision because keys remain
 appointment IDs. Updating those displays to group by doctor and room belongs
 to Loop D-2 and is intentionally not redesigned here.
+
+## D-UI public lobby grouping
+
+The Loop D-2 database projection and Realtime subscription now carry the
+assigned practitioner display name and room label. The public lobby display
+still needs a dedicated UI pass to group “Now serving” by doctor and room;
+that work is intentionally deferred and remains outside this loop.
