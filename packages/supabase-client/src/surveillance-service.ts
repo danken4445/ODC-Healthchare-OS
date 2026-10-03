@@ -9,7 +9,7 @@ import type {
   MorbidityTrend,
   SpatialChoroplethFeature,
 } from "@odyssey/types";
-import { detectSensitiveCategory } from "./pmr-builder.ts";
+import { detectSensitiveCategory } from "./pmr-builder";
 
 type Client = SupabaseClient<Database>;
 type SafeRollupRow = {
