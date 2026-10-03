@@ -113,7 +113,7 @@ import {
   type OrganizationModuleKey,
 } from "@odyssey/types";
 
-export * from "./surveillance-service.ts";
+export * from "./surveillance-service";
 
 let browserClient: SupabaseClient<Database> | undefined;
 let publicBrowserClient: SupabaseClient<Database> | undefined;

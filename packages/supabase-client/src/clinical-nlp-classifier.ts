@@ -3,7 +3,7 @@ import type {
   DiseaseCategory,
   DohNotifiableClass,
 } from "@odyssey/types";
-import { detectSensitiveCategory } from "./pmr-builder.ts";
+import { detectSensitiveCategory } from "./pmr-builder";
 
 /** Negation and provisional language detected in clinical free text. */
 export interface ClinicalTextModifiers {

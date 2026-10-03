@@ -29,9 +29,19 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
 }
 
 async function encryptForDoh(payload: ArrayBuffer, publicKeyPem: string): Promise<ArrayBuffer> {
-  const key = await crypto.subtle.importKey("spki", pemToArrayBuffer(publicKeyPem), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
-  const ciphertext = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, payload);
-  const envelope = new TextEncoder().encode(JSON.stringify({ algorithm: "RSA-OAEP-256", ciphertext: Buffer.from(ciphertext).toString("base64") }));
+  const recipientKey = await crypto.subtle.importKey("spki", pemToArrayBuffer(publicKeyPem), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  const contentKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, contentKey, payload);
+  const rawContentKey = await crypto.subtle.exportKey("raw", contentKey);
+  const wrappedContentKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, recipientKey, rawContentKey);
+  const envelope = new TextEncoder().encode(JSON.stringify({
+    algorithm: "AES-256-GCM",
+    key_wrap_algorithm: "RSA-OAEP-256",
+    iv: Buffer.from(iv).toString("base64"),
+    encrypted_key: Buffer.from(wrappedContentKey).toString("base64"),
+    ciphertext: Buffer.from(ciphertext).toString("base64"),
+  }));
   return envelope.buffer as ArrayBuffer;
 }
 
