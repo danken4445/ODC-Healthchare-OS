@@ -7,7 +7,7 @@ import { applyComplementarySuppression, getBarangayChoroplethData, getDemographi
 type QueryResult = { data: unknown; error: { message: string } | null };
 function mockClient(rows: unknown[], rpcRows: unknown[] = []): SupabaseClient<Database> {
   const query = { eq: () => query, order: () => query, limit: () => query, then: (resolve: (result: QueryResult) => unknown) => Promise.resolve(resolve({ data: rows, error: null })) };
-  return { from: () => query, rpc: () => Promise.resolve({ data: rpcRows, error: null }) } as unknown as SupabaseClient<Database>;
+  return { from: () => ({ select: () => query }), rpc: () => Promise.resolve({ data: rpcRows, error: null }) } as unknown as SupabaseClient<Database>;
 }
 
 test("suppresses small demographic cells", async () => {
@@ -37,7 +37,34 @@ test("choropleth uses the RPC and emits polygons without point coordinates", asy
 test("tenant filters are applied to every rollup read", async () => {
   const filters: string[] = [];
   const query = { eq: (column: string, value: string | number) => { filters.push(`${column}=${value}`); return query; }, order: () => query, limit: () => query, then: (resolve: (result: QueryResult) => unknown) => Promise.resolve(resolve({ data: [], error: null })) };
-  const client = { from: () => query } as unknown as SupabaseClient<Database>;
+  const client = { from: () => ({ select: () => query }) } as unknown as SupabaseClient<Database>;
   await getEpidemicCurve(client, { organizationId: "org-1", icd10Code: "A90" });
   assert.ok(filters.includes("organization_id=org-1"));
+});
+
+test("safe rollups select the privacy-safe projection before organization filtering", async () => {
+  const selects: string[] = [];
+  const filters: string[] = [];
+  const query = {
+    eq: (column: string, value: string | number) => {
+      filters.push(`${column}=${value}`);
+      return query;
+    },
+    order: () => query,
+    limit: () => query,
+    then: (resolve: (result: QueryResult) => unknown) => Promise.resolve(resolve({ data: [], error: null })),
+  };
+  const client = {
+    from: () => ({
+      select: (columns: string) => {
+        selects.push(columns);
+        return query;
+      },
+    }),
+  } as unknown as SupabaseClient<Database>;
+
+  await getEpidemicCurve(client, { organizationId: "org-safe", icd10Code: "A90" });
+
+  assert.deepEqual(selects, ["organization_id, epi_year, epi_week, icd10_code, disease_name, doh_category, age_bracket, gender, case_count, is_suppressed"]);
+  assert.ok(filters.includes("organization_id=org-safe"));
 });

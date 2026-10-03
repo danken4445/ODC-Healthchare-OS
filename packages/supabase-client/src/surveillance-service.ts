@@ -84,7 +84,9 @@ export function applyComplementarySuppression(
 }
 
 async function readSafeRollups(client: Client, filters: (query: SafeQuery) => SafeQuery): Promise<SafeRollupRow[]> {
-  const query = filters(client.from("disease_surveillance_rollups_safe" as never) as unknown as SafeQuery);
+  const query = filters(client
+    .from("disease_surveillance_rollups_safe" as never)
+    .select("organization_id, epi_year, epi_week, icd10_code, disease_name, doh_category, age_bracket, gender, case_count, is_suppressed") as unknown as SafeQuery);
   const result = await query;
   if (result.error) throw new SurveillanceError(result.error.message, result.error);
   return (result.data ?? []) as unknown as SafeRollupRow[];

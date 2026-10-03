@@ -14,10 +14,12 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-loop5-validation/types/**/*.ts",
     ".next-teleconsult-split-build/types/**/*.ts",
     ".next-template-maker-build/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-loop5-hardening/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

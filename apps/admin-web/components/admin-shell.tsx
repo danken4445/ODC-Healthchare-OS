@@ -90,6 +90,12 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
+    label: "ANALYTICS & GOVERNANCE",
+    items: [
+      { href: "/analytics/disease-trends", label: "Disease trends", icon: Activity, anyOf: ["can_view_analytics"] },
+    ],
+  },
+  {
     label: "PLATFORM SUPERADMIN",
     items: [
       { href: "/superadmin/dashboard", label: "Network Overview", icon: LayoutDashboard, superadminOnly: true },
