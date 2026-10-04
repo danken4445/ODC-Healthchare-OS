@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   UserCheck,
   UserCog,
+  UserPlus,
   Users,
   Video,
   X,
@@ -68,6 +69,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/appointments", label: "Booking / Appointments", icon: CalendarDays, anyOf: ["can_manage_appointments"] },
       { href: "/patients", label: "Outpatients", icon: UserCheck, anyOf: ["can_manage_patients"] },
+      { href: "/patients/register", label: "Register walk-in", icon: UserPlus, anyOf: ["can_manage_patients"] },
       { href: "/prescriptions", label: "Prescriptions", icon: Pill, anyOf: ["can_start_consultation", "can_manage_patients", "can_access_admin_portal"] },
       { href: "/laboratory-services", label: "Diagnostics / Mini-LIS", icon: FlaskConical, anyOf: ["can_manage_laboratory_services"] },
       { href: "/inventory", label: "Inventory", icon: Boxes, anyOf: ["can_view_inventory", "can_manage_inventory", "can_tag_inventory_usage"] },

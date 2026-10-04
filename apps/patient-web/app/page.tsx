@@ -14,7 +14,9 @@ import {
   getPatientCoverages,
   getPublicClinics,
   getWalkInPatientRecords,
+  claimWalkInPatient,
   registerPatient,
+  registerWalkInAccount,
   signInWithPassword,
   signOut,
   setPatientClinicContext,
@@ -165,6 +167,7 @@ export default function Home() {
   const [busySlotId, setBusySlotId] = useState<string | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
+  const [walkInClaimSubmitting, setWalkInClaimSubmitting] = useState(false);
   const authRequestInFlight = useRef(false);
   const walkInRequestInFlight = useRef(false);
   const [status, setStatus] = useState(
@@ -859,6 +862,86 @@ export default function Home() {
     }
   }
 
+  async function completeWalkInClaim(
+    credentials: WalkInAccessInput,
+    emailAddress: string,
+  ): Promise<boolean> {
+    const client = createBrowserSupabaseClient();
+    const claimResult = await claimWalkInPatient(client, credentials);
+    if (claimResult.error) {
+      setStatus(`We could not link this walk-in record: ${claimResult.error.message}`);
+      return false;
+    }
+    const contextResult = await setPatientClinicContext(
+      client,
+      credentials.organizationId,
+    );
+    if (contextResult.error) {
+      setStatus(`Your record was linked, but the clinic could not be opened: ${contextResult.error.message}`);
+      return false;
+    }
+    setWalkInCredentials(null);
+    setWalkInRecords(null);
+    setSignedInAs(emailAddress);
+    setStatus("Your walk-in record is now linked to this account. Your full health record is available.");
+    await loadPatientDashboard(credentials.organizationId);
+    return true;
+  }
+
+  async function handleClaimWalkIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!organizationId || !signedInAs || walkInClaimSubmitting) return;
+    const fields = new FormData(event.currentTarget);
+    setWalkInClaimSubmitting(true);
+    try {
+      await completeWalkInClaim(
+        {
+          organizationId,
+          walkInId: String(fields.get("walkInId") ?? ""),
+          pin: String(fields.get("pin") ?? ""),
+        },
+        signedInAs,
+      );
+    } finally {
+      setWalkInClaimSubmitting(false);
+    }
+  }
+
+  async function handleRegisterAndClaimWalkIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!organizationId || authRequestInFlight.current) return;
+    const fields = new FormData(event.currentTarget);
+    const credentials: WalkInAccessInput = {
+      organizationId,
+      walkInId: String(fields.get("walkInId") ?? ""),
+      pin: String(fields.get("pin") ?? ""),
+    };
+    authRequestInFlight.current = true;
+    setAuthSubmitting(true);
+    try {
+      const result = await registerWalkInAccount(
+        createBrowserSupabaseClient(),
+        {
+          email: String(fields.get("claimEmail") ?? ""),
+          password: String(fields.get("claimPassword") ?? ""),
+        },
+        window.location.origin,
+      );
+      if (result.error) {
+        setStatus(`Account creation failed: ${result.error.message}`);
+        return;
+      }
+      if (!result.data.signedIn) {
+        setStatus("Check your email to confirm the account. Then sign in and claim this walk-in record with the ID and PIN issued by the front desk.");
+        return;
+      }
+      await completeWalkInClaim(credentials, result.data.email);
+    } finally {
+      authRequestInFlight.current = false;
+      setAuthSubmitting(false);
+    }
+  }
+
   async function handleSignOut() {
     try {
       await signOut(createBrowserSupabaseClient());
@@ -1005,6 +1088,20 @@ export default function Home() {
         )}
 
       {!signedInAs && organizationId && (
+        <section className="claim-walk-in-card">
+          <h2>Already visited as a walk-in?</h2>
+          <p className="hint">Create a secure account and link the walk-in ID and PIN from the front desk. Your existing appointments, clinical notes, and PMR stay with the same record.</p>
+          <form className="stack" onSubmit={handleRegisterAndClaimWalkIn} aria-busy={authSubmitting}>
+            <Field label="Email"><Input name="claimEmail" type="email" required /></Field>
+            <Field label="Password"><Input name="claimPassword" type="password" minLength={8} required /></Field>
+            <Field label="Walk-in ID"><Input name="walkInId" pattern="WK-\d{4}-\d{6}" placeholder="WK-2026-000001" required /></Field>
+            <Field label="4-digit PIN"><Input name="pin" inputMode="numeric" pattern="\d{4}" required /></Field>
+            <Button type="submit" disabled={authSubmitting}>{authSubmitting ? "Creating account…" : "Create account and link record"}</Button>
+          </form>
+        </section>
+      )}
+
+      {!signedInAs && organizationId && (
         <div className="two-column">
           <section>
             <h2>Create an account</h2>
@@ -1091,22 +1188,23 @@ export default function Home() {
           </div>
           {!patientAtSelectedClinic ? (
             <section>
-              <h2>Join {selectedClinic?.name}</h2>
+              <h2>Link a walk-in record</h2>
               <p className="hint">
-                Your account is universal, but each clinic keeps a separate
-                patient record and booking history.
+                Use the ID and PIN issued by the front desk to bring your walk-in visits into this account.
               </p>
-              <form className="inline-form" onSubmit={handleJoinClinic}>
-                <Field label="Name at this clinic">
-                  <Input
-                    name="displayName"
-                    minLength={2}
-                    maxLength={120}
-                    required
-                  />
-                </Field>
-                <Button type="submit">Join clinic</Button>
+              <form className="inline-form" onSubmit={handleClaimWalkIn} aria-busy={walkInClaimSubmitting}>
+                <Field label="Walk-in ID"><Input name="walkInId" pattern="WK-\d{4}-\d{6}" placeholder="WK-2026-000001" required /></Field>
+                <Field label="4-digit PIN"><Input name="pin" inputMode="numeric" pattern="\d{4}" required /></Field>
+                <Button type="submit" disabled={walkInClaimSubmitting}>{walkInClaimSubmitting ? "Linking record…" : "Link my record"}</Button>
               </form>
+              <details className="claim-walk-in-alternative">
+                <summary>I do not have a walk-in record</summary>
+                <p className="hint">Join this clinic as a new patient instead.</p>
+                <form className="inline-form" onSubmit={handleJoinClinic}>
+                  <Field label="Name at this clinic"><Input name="displayName" minLength={2} maxLength={120} required /></Field>
+                  <Button type="submit">Join clinic</Button>
+                </form>
+              </details>
             </section>
           ) : (
             (activeTab === "all" || activeTab === "book") && (

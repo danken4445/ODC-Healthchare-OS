@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAdminData } from "../admin-data-context";
 import { AdminSignIn } from "../admin-sign-in";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./vesper-modals";
 
 export function VesperDashboard() {
+  const router = useRouter();
   const { email, loading: authLoading, organization, permissions, isSuperadmin } = useAdminData();
   const {
     loading,
@@ -128,7 +130,7 @@ export function VesperDashboard() {
                       className="vesper-cta-dropdown-item"
                       onClick={() => {
                         setCtaMenuOpen(false);
-                        setActiveModal("patient");
+                        router.push("/patients/register");
                       }}
                     >
                       <UserPlus size={15} />

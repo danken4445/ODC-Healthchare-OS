@@ -283,6 +283,19 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
 .fee-history__content li { display: grid; gap: .1rem; padding-left: .15rem; font-size: .72rem; }
 .fee-history__content li span { color: var(--muted-foreground); }
 .form-success { margin: 0; color: var(--primary); font-size: .76rem; }
+.field-optional { color: var(--muted-foreground); font-size: .68rem; font-weight: 500; }
+.walk-in-layout { align-items: start; }
+.walk-in-guidance { display: grid; gap: .85rem; }
+.walk-in-guidance ol { display: grid; gap: .7rem; margin: 0; padding-left: 1.25rem; color: var(--secondary-foreground); font-size: .78rem; line-height: 1.5; }
+.walk-in-guidance li::marker { color: var(--primary); font-weight: 800; }
+.walk-in-security-note { display: flex; align-items: flex-start; gap: .45rem; margin: 0; padding: .7rem; color: var(--muted-foreground); background: var(--muted); border: 1px solid var(--border); font-size: .72rem; line-height: 1.45; }
+.walk-in-security-note svg { flex: 0 0 auto; color: var(--primary); }
+.walk-in-result { max-width: 900px; }
+.walk-in-credentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-bottom: .85rem; }
+.walk-in-credential { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem; background: var(--muted); border: 1px solid var(--border); }
+.walk-in-credential > div { display: grid; gap: .2rem; }
+.walk-in-credential span { color: var(--muted-foreground); font-size: .68rem; }
+.walk-in-credential strong { color: var(--foreground); font-size: 1.05rem; letter-spacing: .06em; }
 
 .dialog-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(10, 24, 22, 0.58); animation: fade-in 140ms ease-out; }
 .dialog-content { position: fixed; top: 50%; left: 50%; z-index: 61; width: min(calc(100vw - 2rem), 520px); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem; background: var(--popover); border: 1px solid var(--border); border-radius: 0.5rem; box-shadow: var(--shadow-dialog); transform: translate(-50%, -50%); animation: dialog-in 160ms ease-out; }
@@ -427,6 +440,7 @@ h2 { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.35; }
   .scanner-panel { grid-template-columns: 1fr; }
   .scanner-view { max-width: 220px; }
   .identity-result dl, .form-grid, .check-grid, .review-list { grid-template-columns: 1fr; }
+  .walk-in-credentials { grid-template-columns: 1fr; }
   .identity-result dl > div + div, .review-list > div + div { border-top: 1px solid var(--border); border-left: 0; }
   .stepper li > div { display: none; }
   .stepper li:not(:last-child)::after { right: 8px; left: 38px; }

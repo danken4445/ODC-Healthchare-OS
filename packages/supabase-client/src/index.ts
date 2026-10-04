@@ -47,6 +47,7 @@ import {
   type PatientAccessRecords,
   type PatientRegistrationInput,
   type PatientRegistrationResult,
+  type WalkInAccountRegistrationInput,
   type PatientSummary,
   type PortalAccess,
   type PortalName,
@@ -1713,6 +1714,28 @@ export async function registerPatient(
   });
 }
 
+/** Creates an Auth account without creating a second Patient row. The patient
+ * must claim their existing walk-in record after authentication. */
+export async function registerWalkInAccount(
+  client: SupabaseClient<Database>,
+  input: WalkInAccountRegistrationInput,
+  emailRedirectTo: string,
+): Promise<SupabaseResult<PatientRegistrationResult>> {
+  const { data, error } = await client.auth.signUp({
+    email: input.email.trim(),
+    password: input.password,
+    options: {
+      emailRedirectTo,
+      data: { odyssey_walk_in_claim: true },
+    },
+  });
+  if (error) return failure(error);
+  return success({
+    email: data.user?.email ?? input.email.trim(),
+    signedIn: data.session !== null,
+  });
+}
+
 export async function requestMagicLink(
   client: SupabaseClient<Database>,
   email: string,
@@ -1760,7 +1783,9 @@ export async function createWalkInPatient(
   const { data, error } = await client.rpc("create_walk_in_patient", {
     p_organization_id: input.organizationId,
     p_name: { text: input.name },
-    p_telecom: [],
+    p_telecom: input.telecom
+      ? [{ system: "phone", value: input.telecom }]
+      : [],
     p_birth_date: input.birthDate ?? undefined,
     p_gender: input.gender ?? undefined,
   });

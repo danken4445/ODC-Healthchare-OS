@@ -836,11 +836,17 @@ export interface PatientRegistrationResult {
   signedIn: boolean;
 }
 
+export interface WalkInAccountRegistrationInput {
+  email: string;
+  password: string;
+}
+
 export interface WalkInRegistrationInput {
   organizationId: string;
   name: string;
   birthDate?: string | null;
   gender?: string | null;
+  telecom?: string | null;
 }
 
 export interface WalkInAccessInput {

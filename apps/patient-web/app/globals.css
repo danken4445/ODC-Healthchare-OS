@@ -83,6 +83,11 @@ p { overflow-wrap: anywhere; }
 section > .stack, section > .inline-form { display: grid; gap: 1rem; }
 .two-column { display: grid; gap: 1rem; }
 .two-column > section { padding: 0; }
+.claim-walk-in-card { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); }
+.claim-walk-in-card > h2 { margin-top: 0; }
+.claim-walk-in-alternative { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.claim-walk-in-alternative summary { min-height: 2.75rem; color: var(--primary); font-size: .9rem; font-weight: 750; cursor: pointer; }
+.claim-walk-in-alternative > .hint { margin: .35rem 0 .8rem; }
 .clinic-picker { display: flex; gap: .6rem; overflow-x: auto; padding: .15rem .15rem .5rem; scrollbar-width: none; }
 .clinic-picker .odyssey-button { flex: 0 0 auto; }
 .service-grid { display: grid; grid-template-columns: 1fr; gap: .75rem; }

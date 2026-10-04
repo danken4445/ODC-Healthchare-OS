@@ -15,6 +15,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/superadmin", superadminOnly: true },
   { href: "/patients/audit", anyOf: ["can_view_audit_log"] },
   { href: "/patients/import", anyOf: ["can_manage_patients"] },
+  { href: "/patients/register", anyOf: ["can_manage_patients"] },
   { href: "/patients", anyOf: ["can_manage_patients"] },
   { href: "/patient-lookup", anyOf: ["can_identify_patients"] },
   { href: "/appointments", anyOf: ["can_manage_appointments"] },
