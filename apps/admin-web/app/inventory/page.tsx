@@ -7,6 +7,7 @@ import {
   getCurrentStaffDepartment,
   getInventoryWorkspace,
   getMyInventoryViewMode,
+  getRootSupplyDepartment,
   listInventoryEncounters,
   receiveInventoryStock,
   saveInventoryExpirySettings,
@@ -43,7 +44,10 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   CircleDollarSign,
   Clock,
   ExternalLink,
@@ -60,26 +64,34 @@ import {
   PackageCheck,
   PackagePlus,
   PackageSearch,
+  Pill,
   Plus,
   ReceiptText,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings2,
+  ShieldCheck,
   Sliders,
-  Sparkles,
   Tag,
   Trash2,
   TrendingUp,
+  Truck,
   UserCheck,
   X,
 } from "lucide-react";
 import { useAdminData } from "../../components/admin-data-context";
 import { AdminSignIn } from "../../components/admin-sign-in";
+import { GsoCsvImportModal } from "../../components/gso-csv-import-modal";
+import { PharmacyInventoryImportModal } from "../../components/pharmacy-inventory-import-modal";
+import { InventoryReportModal } from "../../components/inventory-report-modal";
 import { InventoryHierarchy } from "../../components/inventory-hierarchy";
+import { InventoryRequisitionHub } from "../../components/inventory-requisition-hub";
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -197,6 +209,7 @@ interface BatchInputLine {
 const mainNavTabs = [
   { id: "ledger", label: "Stock Ledger", icon: Boxes },
   { id: "batches", label: "Batches & FEFO", icon: Layers },
+  { id: "requisitions", label: "Requisitions & Supply", icon: Truck },
   { id: "catalog", label: "Item Catalog", icon: FileSpreadsheet },
   { id: "operations", label: "Operations Hub", icon: ArrowLeftRight },
   { id: "usage", label: "Clinical Tagging", icon: UserCheck },
@@ -211,6 +224,7 @@ export default function InventoryPage() {
   const {
     client,
     email: signedInAs,
+    isSuperadmin,
     organization,
     permissions,
     signOut: handleSignOut,
@@ -225,6 +239,12 @@ export default function InventoryPage() {
   const [inventoryDepartmentId, setInventoryDepartmentId] = useState<
     string | null
   >(null);
+  const [rootSupplyDepartmentId, setRootSupplyDepartmentId] = useState<
+    string | null
+  >(null);
+  const [showGsoImportModal, setShowGsoImportModal] = useState(false);
+  const [showPharmacyImportModal, setShowPharmacyImportModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [inventoryDepartmentSelection, setInventoryDepartmentSelection] =
     useState("");
   const [busy, setBusy] = useState(false);
@@ -235,17 +255,80 @@ export default function InventoryPage() {
     type: "info" | "success" | "error";
   } | null>(null);
 
+  const deptStateRef = useRef<{
+    staffDeptId: string | null;
+    rootDeptId: string | null;
+  }>({ staffDeptId: null, rootDeptId: null });
+  deptStateRef.current = {
+    staffDeptId: inventoryDepartmentId,
+    rootDeptId: rootSupplyDepartmentId,
+  };
+
+  const isScopedDepartment = useMemo(() => {
+    return Boolean(
+      inventoryDepartmentId &&
+      !isSuperadmin &&
+      (!rootSupplyDepartmentId || inventoryDepartmentId !== rootSupplyDepartmentId)
+    );
+  }, [inventoryDepartmentId, isSuperadmin, rootSupplyDepartmentId]);
+
+  const isAssignedToRootSupply = useMemo(() => {
+    return Boolean(
+      rootSupplyDepartmentId && inventoryDepartmentId === rootSupplyDepartmentId
+    );
+  }, [inventoryDepartmentId, rootSupplyDepartmentId]);
+
+  const isAssignedToPharmacy = useMemo(() => {
+    return Boolean(
+      isScopedDepartment ||
+      signedInAs?.toLowerCase().includes("pharmacy") ||
+      (inventoryDepartmentId && inventoryDepartmentId !== rootSupplyDepartmentId)
+    );
+  }, [inventoryDepartmentId, isScopedDepartment, rootSupplyDepartmentId, signedInAs]);
+
+  const canShowGsoImport = useMemo(() => {
+    // Pharmacy staff cannot receive inbound GSO bulk manifests; only Root Supply or Superadmin
+    if (isAssignedToPharmacy) return false;
+    return Boolean(
+      isSuperadmin ||
+      isAssignedToRootSupply ||
+      (!inventoryDepartmentId && canManage)
+    );
+  }, [canManage, inventoryDepartmentId, isAssignedToPharmacy, isAssignedToRootSupply, isSuperadmin]);
+
+  const canShowPharmacyImport = useMemo(() => {
+    return Boolean(
+      isAssignedToPharmacy ||
+      isSuperadmin ||
+      (!inventoryDepartmentId && canManage)
+    );
+  }, [canManage, inventoryDepartmentId, isAssignedToPharmacy, isSuperadmin]);
+
   /* Primary Navigation */
   const [activeMainTab, setActiveMainTab] = useState<string>("ledger");
   const [operationsSubTab, setOperationsSubTab] = useState<string>("receive");
 
   /* Global and local filter state */
   const [globalSearch, setGlobalSearch] = useState<string>("");
+  const [stockSearch, setStockSearch] = useState<string>("");
   const [stockFilterDept, setStockFilterDept] = useState<string>("all");
   const [stockFilterStatus, setStockFilterStatus] = useState<string>("all");
+  const [stockFilterExpiry, setStockFilterExpiry] = useState<string>("all");
+  const [stockSortBy, setStockSortBy] = useState<string>("name_asc");
+  const [stockPage, setStockPage] = useState<number>(1);
+  const [stockPageSize, setStockPageSize] = useState<number>(25);
   const [batchFilterDept, setBatchFilterDept] = useState<string>("all");
   const [batchFilterStatus, setBatchFilterStatus] = useState<string>("all");
   const [showHierarchyMap, setShowHierarchyMap] = useState<boolean>(true);
+
+  /* Catalog filter & pagination state */
+  const [catalogSearch, setCatalogSearch] = useState<string>("");
+  const [catalogStatusFilter, setCatalogStatusFilter] = useState<string>("all");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<string>("all");
+  const [catalogStockFilter, setCatalogStockFilter] = useState<string>("all");
+  const [catalogSortBy, setCatalogSortBy] = useState<string>("name_asc");
+  const [catalogPage, setCatalogPage] = useState<number>(1);
+  const [catalogPageSize, setCatalogPageSize] = useState<number>(25);
 
   /* Pricing / Master item edit modal state */
   const [pricingItemId, setPricingItemId] = useState("");
@@ -307,8 +390,146 @@ export default function InventoryPage() {
     [workspace.items, workspace.stock, workspace.batches],
   );
 
+  /* ─── Filtered, Sorted & Paginated Catalog Items ─────────────── */
+  const filteredAndSortedCatalogItems = useMemo(() => {
+    let list = [...itemTotals];
+
+    // Search query filter (matches name, SKU, description, unit)
+    if (catalogSearch.trim()) {
+      const q = catalogSearch.trim().toLowerCase();
+      list = list.filter((item) => {
+        const name = (item.name ?? "").toLowerCase();
+        const sku = (item.sku ?? "").toLowerCase();
+        const desc = (item.description ?? "").toLowerCase();
+        const uom = (item.unit_of_measure ?? "").toLowerCase();
+        return name.includes(q) || sku.includes(q) || desc.includes(q) || uom.includes(q);
+      });
+    }
+
+    // Status filter
+    if (catalogStatusFilter === "active") {
+      list = list.filter((i) => i.active);
+    } else if (catalogStatusFilter === "inactive") {
+      list = list.filter((i) => !i.active);
+    }
+
+    // Perishable / FEFO filter
+    if (catalogTypeFilter === "perishable") {
+      list = list.filter((i) => i.is_perishable);
+    } else if (catalogTypeFilter === "non-perishable") {
+      list = list.filter((i) => !i.is_perishable);
+    }
+
+    // Stock availability filter
+    if (catalogStockFilter === "in_stock") {
+      list = list.filter((i) => i.total > 0);
+    } else if (catalogStockFilter === "low_stock") {
+      list = list.filter((i) => i.total > 0 && i.total <= i.lowestReorder);
+    } else if (catalogStockFilter === "out_of_stock") {
+      list = list.filter((i) => i.total <= 0);
+    } else if (catalogStockFilter === "expired") {
+      list = list.filter((i) => i.expiredTotal > 0);
+    }
+
+    // Sort order
+    list.sort((a, b) => {
+      switch (catalogSortBy) {
+        case "name_asc":
+          return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        case "name_desc":
+          return b.name.localeCompare(a.name, undefined, { sensitivity: "base" });
+        case "sku_asc":
+          return (a.sku ?? "").localeCompare(b.sku ?? "");
+        case "stock_desc":
+          return b.total - a.total;
+        case "stock_asc":
+          return a.total - b.total;
+        case "price_desc":
+          return Number(b.selling_price ?? 0) - Number(a.selling_price ?? 0);
+        case "price_asc":
+          return Number(a.selling_price ?? 0) - Number(b.selling_price ?? 0);
+        case "margin_desc": {
+          const marginA = Number(a.selling_price ?? 0) - Number(a.unit_cost ?? 0);
+          const marginB = Number(b.selling_price ?? 0) - Number(b.unit_cost ?? 0);
+          return marginB - marginA;
+        }
+        default:
+          return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      }
+    });
+
+    return list;
+  }, [
+    itemTotals,
+    catalogSearch,
+    catalogStatusFilter,
+    catalogTypeFilter,
+    catalogStockFilter,
+    catalogSortBy,
+  ]);
+
+  const totalCatalogItems = filteredAndSortedCatalogItems.length;
+  const totalCatalogPages = Math.max(1, Math.ceil(totalCatalogItems / catalogPageSize));
+  const currentCatalogPage = Math.min(catalogPage, totalCatalogPages);
+  const catalogStartIndex = (currentCatalogPage - 1) * catalogPageSize;
+  const catalogEndIndex = Math.min(catalogStartIndex + catalogPageSize, totalCatalogItems);
+
+  const paginatedCatalogItems = useMemo(() => {
+    return filteredAndSortedCatalogItems.slice(catalogStartIndex, catalogEndIndex);
+  }, [filteredAndSortedCatalogItems, catalogStartIndex, catalogEndIndex]);
+
+  const isCatalogFiltered =
+    catalogSearch.trim() !== "" ||
+    catalogStatusFilter !== "all" ||
+    catalogTypeFilter !== "all" ||
+    catalogStockFilter !== "all" ||
+    catalogSortBy !== "name_asc";
+
+  const handleResetCatalogFilters = () => {
+    setCatalogSearch("");
+    setCatalogStatusFilter("all");
+    setCatalogTypeFilter("all");
+    setCatalogStockFilter("all");
+    setCatalogSortBy("name_asc");
+    setCatalogPage(1);
+  };
+
+  const getCatalogPageNumbers = () => {
+    const pages: (number | "ellipsis")[] = [];
+    if (totalCatalogPages <= 7) {
+      for (let i = 1; i <= totalCatalogPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentCatalogPage <= 4) {
+        pages.push(1, 2, 3, 4, 5, "ellipsis", totalCatalogPages);
+      } else if (currentCatalogPage >= totalCatalogPages - 3) {
+        pages.push(
+          1,
+          "ellipsis",
+          totalCatalogPages - 4,
+          totalCatalogPages - 3,
+          totalCatalogPages - 2,
+          totalCatalogPages - 1,
+          totalCatalogPages,
+        );
+      } else {
+        pages.push(
+          1,
+          "ellipsis",
+          currentCatalogPage - 1,
+          currentCatalogPage,
+          currentCatalogPage + 1,
+          "ellipsis",
+          totalCatalogPages,
+        );
+      }
+    }
+    return pages;
+  };
+
   /* ─── Stock Rows with Enriched Batch & Expiry Context ────────── */
-  const stockRows = useMemo(() => {
+  const allStockRows = useMemo(() => {
     const heldQuantityByStockId = new Map<string, number>();
     for (const hold of workspace.holds) {
       heldQuantityByStockId.set(
@@ -316,69 +537,204 @@ export default function InventoryPage() {
         (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
       );
     }
-    return workspace.stock
-      .map((stock) => {
-        const item = workspace.items.find((i) => i.id === stock.item_id);
-        const dept = workspace.departments.find(
-          (d) => d.id === stock.department_id,
-        );
-        const stockBatches = workspace.batches.filter(
-          (b) => b.stock_id === stock.id,
-        );
-        const usableQuantity =
-          stockBatches.length > 0
-            ? stockBatches.reduce((sum, b) => sum + Number(b.usable_quantity), 0)
-            : Number(stock.quantity);
-        const expiredQuantity = Math.max(0, Number(stock.quantity) - usableQuantity);
-        const nearExpiryBatches = stockBatches.filter(
-          (b) => b.expiry_status === "near_expiry" && b.quantity > 0,
-        );
-        const expiredBatches = stockBatches.filter(
-          (b) => b.expiry_status === "expired" && b.quantity > 0,
-        );
+    return workspace.stock.map((stock) => {
+      const item = workspace.items.find((i) => i.id === stock.item_id);
+      const dept = workspace.departments.find(
+        (d) => d.id === stock.department_id,
+      );
+      const stockBatches = workspace.batches.filter(
+        (b) => b.stock_id === stock.id,
+      );
+      const usableQuantity =
+        stockBatches.length > 0
+          ? stockBatches.reduce((sum, b) => sum + Number(b.usable_quantity), 0)
+          : Number(stock.quantity);
+      const expiredQuantity = Math.max(
+        0,
+        Number(stock.quantity) - usableQuantity,
+      );
+      const nearExpiryBatches = stockBatches.filter(
+        (b) => b.expiry_status === "near_expiry" && b.quantity > 0,
+      );
+      const expiredBatches = stockBatches.filter(
+        (b) => b.expiry_status === "expired" && b.quantity > 0,
+      );
 
-        return {
-          ...stock,
-          availableQuantity: Math.max(
-            0,
-            usableQuantity - (heldQuantityByStockId.get(stock.id) ?? 0),
+      return {
+        ...stock,
+        availableQuantity: Math.max(
+          0,
+          usableQuantity - (heldQuantityByStockId.get(stock.id) ?? 0),
+        ),
+        usableQuantity,
+        expiredQuantity,
+        batches: stockBatches,
+        nearExpiryCount: nearExpiryBatches.length,
+        expiredCount: expiredBatches.length,
+        isPerishable: item?.is_perishable ?? false,
+        itemName: item?.name ?? "Unknown item",
+        itemSku: item?.sku ?? "—",
+        unit: item?.unit_of_measure ?? "unit",
+        unitCost: Number(item?.unit_cost ?? 0),
+        sellingPrice: Number(item?.selling_price ?? 0),
+        departmentName: dept?.name ?? "Unknown",
+        departmentCode: dept?.code ?? "—",
+        stockStatus: getStockStatus(
+          Number(stock.quantity),
+          Number(stock.reorder_level),
+        ),
+      };
+    });
+  }, [workspace]);
+
+  /* ─── Filtered, Sorted & Paginated Stock Rows ─────────────────── */
+  const filteredAndSortedStockRows = useMemo(() => {
+    let list = [...allStockRows];
+
+    // Search query filter (matches Item Name, SKU, Department Name, Lot Number)
+    const query = stockSearch.trim().toLowerCase();
+    if (query) {
+      list = list.filter(
+        (row) =>
+          row.itemName.toLowerCase().includes(query) ||
+          row.itemSku.toLowerCase().includes(query) ||
+          row.departmentName.toLowerCase().includes(query) ||
+          row.batches.some((b) =>
+            (b.lot_number ?? "").toLowerCase().includes(query),
           ),
-          usableQuantity,
-          expiredQuantity,
-          batches: stockBatches,
-          nearExpiryCount: nearExpiryBatches.length,
-          expiredCount: expiredBatches.length,
-          isPerishable: item?.is_perishable ?? false,
-          itemName: item?.name ?? "Unknown item",
-          itemSku: item?.sku ?? "—",
-          unit: item?.unit_of_measure ?? "unit",
-          unitCost: Number(item?.unit_cost ?? 0),
-          sellingPrice: Number(item?.selling_price ?? 0),
-          departmentName: dept?.name ?? "Unknown",
-          departmentCode: dept?.code ?? "—",
-          stockStatus: getStockStatus(
-            Number(stock.quantity),
-            Number(stock.reorder_level),
-          ),
-        };
-      })
-      .filter((row) => {
-        if (stockFilterDept !== "all" && row.department_id !== stockFilterDept)
-          return false;
-        if (stockFilterStatus !== "all" && row.stockStatus !== stockFilterStatus)
-          return false;
-        if (globalSearch) {
-          const q = globalSearch.toLowerCase();
-          const match =
-            row.itemName.toLowerCase().includes(q) ||
-            row.itemSku.toLowerCase().includes(q) ||
-            row.departmentName.toLowerCase().includes(q) ||
-            row.batches.some((b) => (b.lot_number ?? "").toLowerCase().includes(q));
-          if (!match) return false;
-        }
-        return true;
-      });
-  }, [workspace, stockFilterDept, stockFilterStatus, globalSearch]);
+      );
+    }
+
+    // Department filter
+    if (stockFilterDept !== "all") {
+      list = list.filter((row) => row.department_id === stockFilterDept);
+    }
+
+    // Stock health filter
+    if (stockFilterStatus !== "all") {
+      list = list.filter((row) => row.stockStatus === stockFilterStatus);
+    }
+
+    // Expiry / Lot filter
+    if (stockFilterExpiry === "near_expiry") {
+      list = list.filter((row) => row.nearExpiryCount > 0);
+    } else if (stockFilterExpiry === "expired") {
+      list = list.filter(
+        (row) => row.expiredQuantity > 0 || row.expiredCount > 0,
+      );
+    } else if (stockFilterExpiry === "good") {
+      list = list.filter(
+        (row) => row.usableQuantity > 0 && row.expiredQuantity === 0,
+      );
+    } else if (stockFilterExpiry === "perishable") {
+      list = list.filter((row) => row.isPerishable);
+    }
+
+    // Sort
+    list.sort((a, b) => {
+      switch (stockSortBy) {
+        case "name_asc":
+          return a.itemName.localeCompare(b.itemName, undefined, {
+            sensitivity: "base",
+          });
+        case "name_desc":
+          return b.itemName.localeCompare(a.itemName, undefined, {
+            sensitivity: "base",
+          });
+        case "dept_asc":
+          return a.departmentName.localeCompare(b.departmentName, undefined, {
+            sensitivity: "base",
+          });
+        case "qty_desc":
+          return Number(b.quantity) - Number(a.quantity);
+        case "qty_asc":
+          return Number(a.quantity) - Number(b.quantity);
+        case "usable_desc":
+          return b.usableQuantity - a.usableQuantity;
+        case "usable_asc":
+          return a.usableQuantity - b.usableQuantity;
+        default:
+          return a.itemName.localeCompare(b.itemName, undefined, {
+            sensitivity: "base",
+          });
+      }
+    });
+
+    return list;
+  }, [
+    allStockRows,
+    stockSearch,
+    stockFilterDept,
+    stockFilterStatus,
+    stockFilterExpiry,
+    stockSortBy,
+  ]);
+
+  const totalStockRows = filteredAndSortedStockRows.length;
+  const totalStockPages = Math.max(
+    1,
+    Math.ceil(totalStockRows / stockPageSize),
+  );
+  const currentStockPage = Math.min(stockPage, totalStockPages);
+  const stockStartIndex = (currentStockPage - 1) * stockPageSize;
+  const stockEndIndex = Math.min(
+    stockStartIndex + stockPageSize,
+    totalStockRows,
+  );
+
+  const paginatedStockRows = useMemo(() => {
+    return filteredAndSortedStockRows.slice(stockStartIndex, stockEndIndex);
+  }, [filteredAndSortedStockRows, stockStartIndex, stockEndIndex]);
+
+  const isStockFiltered =
+    stockSearch.trim() !== "" ||
+    (stockFilterDept !== "all" && !isScopedDepartment) ||
+    stockFilterStatus !== "all" ||
+    stockFilterExpiry !== "all" ||
+    stockSortBy !== "name_asc";
+
+  const handleResetStockFilters = () => {
+    setStockSearch("");
+    if (!isScopedDepartment) setStockFilterDept("all");
+    setStockFilterStatus("all");
+    setStockFilterExpiry("all");
+    setStockSortBy("name_asc");
+    setStockPage(1);
+  };
+
+  const getStockPageNumbers = () => {
+    const pages: (number | "ellipsis")[] = [];
+    if (totalStockPages <= 7) {
+      for (let i = 1; i <= totalStockPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentStockPage <= 4) {
+        pages.push(1, 2, 3, 4, 5, "ellipsis", totalStockPages);
+      } else if (currentStockPage >= totalStockPages - 3) {
+        pages.push(
+          1,
+          "ellipsis",
+          totalStockPages - 4,
+          totalStockPages - 3,
+          totalStockPages - 2,
+          totalStockPages - 1,
+          totalStockPages,
+        );
+      } else {
+        pages.push(
+          1,
+          "ellipsis",
+          currentStockPage - 1,
+          currentStockPage,
+          currentStockPage + 1,
+          "ellipsis",
+          totalStockPages,
+        );
+      }
+    }
+    return pages;
+  };
 
   const taggableStockRows = useMemo(() => {
     const heldQuantityByStockId = new Map<string, number>();
@@ -477,10 +833,33 @@ export default function InventoryPage() {
 
   /* ─── Data Loading ────────────────────────────────────────── */
   const loadInventory = useCallback(
-    async (clinicId = organizationId, manage = canManage) => {
+    async (
+      clinicId = organizationId,
+      manage = canManage,
+      overrideStaffDeptId?: string | null,
+      overrideRootDeptId?: string | null,
+    ) => {
       if (!clinicId) return;
+      const staffDeptId =
+        overrideStaffDeptId !== undefined
+          ? overrideStaffDeptId
+          : deptStateRef.current.staffDeptId;
+      const rootDeptId =
+        overrideRootDeptId !== undefined
+          ? overrideRootDeptId
+          : deptStateRef.current.rootDeptId;
+      const isScoped = Boolean(
+        staffDeptId &&
+        !isSuperadmin &&
+        (!rootDeptId || staffDeptId !== rootDeptId),
+      );
       const [inventoryResult, encounterResult] = await Promise.all([
-        getInventoryWorkspace(client, clinicId, manage),
+        getInventoryWorkspace(
+          client,
+          clinicId,
+          manage,
+          isScoped ? staffDeptId : undefined,
+        ),
         listInventoryEncounters(client, clinicId),
       ]);
       if (inventoryResult.error) {
@@ -503,7 +882,7 @@ export default function InventoryPage() {
         );
       }
     },
-    [canManage, client, organizationId],
+    [canManage, client, isSuperadmin, organizationId],
   );
 
   /* ─── Effects ─────────────────────────────────────────────── */
@@ -513,21 +892,37 @@ export default function InventoryPage() {
       return () => {
         current = false;
       };
-    void getCurrentStaffDepartment(client, organizationId).then(
-      async (departmentResult) => {
-        if (!current) return;
-        if (departmentResult.error) {
-          setStatus(
-            `Department context query failed: ${departmentResult.error.message}`,
-          );
-          return;
-        }
-        setInventoryDepartmentId(departmentResult.data);
-        setInventoryDepartmentSelection(departmentResult.data ?? "");
-        setStatus("Inventory workspace ready.");
-        await loadInventory(organizationId, canManage);
-      },
-    );
+    void Promise.all([
+      getCurrentStaffDepartment(client, organizationId),
+      getRootSupplyDepartment(client, organizationId),
+    ]).then(async ([departmentResult, rootSupplyResult]) => {
+      if (!current) return;
+      if (departmentResult.error) {
+        setStatus(
+          `Department context query failed: ${departmentResult.error.message}`,
+        );
+        return;
+      }
+      const staffDeptId = departmentResult.data;
+      const rootDeptId = rootSupplyResult.error ? null : (rootSupplyResult.data ?? null);
+
+      setInventoryDepartmentId(staffDeptId);
+      setRootSupplyDepartmentId(rootDeptId);
+      setInventoryDepartmentSelection(staffDeptId ?? "");
+
+      const isScoped = Boolean(
+        staffDeptId &&
+        !isSuperadmin &&
+        (!rootDeptId || staffDeptId !== rootDeptId),
+      );
+      if (isScoped && staffDeptId) {
+        setStockFilterDept(staffDeptId);
+        setBatchFilterDept(staffDeptId);
+      }
+
+      setStatus("Inventory workspace ready.");
+      await loadInventory(organizationId, canManage, staffDeptId, rootDeptId);
+    });
     return () => {
       current = false;
     };
@@ -644,8 +1039,8 @@ export default function InventoryPage() {
   }, [workspace.batches, batchFilterDept, batchFilterStatus, globalSearch]);
 
   const inspectedStockRow = useMemo(
-    () => stockRows.find((s) => s.id === inspectStockId),
-    [stockRows, inspectStockId],
+    () => allStockRows.find((s) => s.id === inspectStockId),
+    [allStockRows, inspectStockId],
   );
 
   /* ─── Sign-in Screen ──────────────────────────────────────── */
@@ -766,6 +1161,49 @@ export default function InventoryPage() {
               </button>
             )}
           </div>
+
+          {/* Inbound GSO CSV Import Tool (Root Supply Room only) */}
+          {canShowGsoImport && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowGsoImportModal(true)}
+              title="Import bulk delivery from GSO CSV into Root Supply Room"
+            >
+              <FileSpreadsheet size={14} className="mr-1" />
+              Import GSO CSV
+            </Button>
+          )}
+
+          {/* Inbound Pharmacy Inventory Import Tool (Pharmacy Stockroom) */}
+          {canShowPharmacyImport && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowPharmacyImportModal(true)}
+              title="Import medicines and supplies from Pharmacy Excel (.xlsx) or CSV"
+            >
+              <Pill size={14} className="mr-1 text-emerald-500" />
+              Import Pharmacy (XLSX)
+            </Button>
+          )}
+
+          {/* Department Inventory Report Generator */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowReportModal(true)}
+            title="Generate printable inventory report for assigned department"
+            style={{
+              borderColor: "#cbd5e1",
+              background: "#ffffff",
+              color: "#0f172a",
+              fontWeight: 600,
+            }}
+          >
+            <FileText size={14} className="mr-1 text-sky-600" />
+            Generate Report
+          </Button>
 
           {/* Quick Action Button for Operations */}
           {canManage && (
@@ -945,24 +1383,66 @@ export default function InventoryPage() {
         {/* Visual Batch Health Ribbon */}
         {kpi.totalBatches > 0 && (
           <div className="inv-health-ribbon">
-            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <Sparkles size={13} className="text-primary" />
-                Lot Integrity & Expiry Health
-              </span>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Good: {kpi.okBatchCount}
+            <div className="inv-health-ribbon__header">
+              <div className="inv-health-ribbon__title-group">
+                <span className="inv-health-ribbon__icon-badge">
+                  <ShieldCheck size={16} />
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  Near Expiry: {kpi.nearExpiryBatchCount}
+                <span className="inv-health-ribbon__title">
+                  Lot Integrity & Expiry Health
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
-                  Expired: {kpi.expiredBatchCount}
+                <span className="inv-health-ribbon__total-pill">
+                  {kpi.totalBatches} {kpi.totalBatches === 1 ? "Lot" : "Lots"} Total
                 </span>
+              </div>
+              <div className="inv-health-ribbon__actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainTab("batches");
+                    setBatchFilterStatus("ok");
+                  }}
+                  className="inv-health-ribbon__btn inv-health-ribbon__btn--ok"
+                  title="Filter batches: Good / Unexpired"
+                >
+                  <span className="inv-health-ribbon__dot inv-health-ribbon__dot--ok" />
+                  <span>Good:</span>
+                  <span className="inv-health-ribbon__count">{kpi.okBatchCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainTab("batches");
+                    setBatchFilterStatus("near_expiry");
+                  }}
+                  className={`inv-health-ribbon__btn ${
+                    kpi.nearExpiryBatchCount > 0
+                      ? "inv-health-ribbon__btn--near"
+                      : "inv-health-ribbon__btn--muted"
+                  }`}
+                  title="Filter batches: Near Expiry (≤90 days)"
+                >
+                  <span className="inv-health-ribbon__dot inv-health-ribbon__dot--near" />
+                  <span>Near Expiry:</span>
+                  <span className="inv-health-ribbon__count">{kpi.nearExpiryBatchCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainTab("batches");
+                    setBatchFilterStatus("expired");
+                  }}
+                  className={`inv-health-ribbon__btn ${
+                    kpi.expiredBatchCount > 0
+                      ? "inv-health-ribbon__btn--expired"
+                      : "inv-health-ribbon__btn--muted"
+                  }`}
+                  title="Filter batches: Expired Lots"
+                >
+                  <span className="inv-health-ribbon__dot inv-health-ribbon__dot--expired" />
+                  <span>Expired:</span>
+                  <span className="inv-health-ribbon__count">{kpi.expiredBatchCount}</span>
+                </button>
               </div>
             </div>
             <div className="inv-health-bar">
@@ -971,21 +1451,21 @@ export default function InventoryPage() {
                 style={{
                   width: `${(kpi.okBatchCount / kpi.totalBatches) * 100}%`,
                 }}
-                title={`Good lots: ${kpi.okBatchCount}`}
+                title={`Good lots: ${kpi.okBatchCount} (${Math.round((kpi.okBatchCount / kpi.totalBatches) * 100)}%)`}
               />
               <div
                 className="inv-health-bar__segment inv-health-bar__segment--near"
                 style={{
                   width: `${(kpi.nearExpiryBatchCount / kpi.totalBatches) * 100}%`,
                 }}
-                title={`Near expiry lots: ${kpi.nearExpiryBatchCount}`}
+                title={`Near expiry lots: ${kpi.nearExpiryBatchCount} (${Math.round((kpi.nearExpiryBatchCount / kpi.totalBatches) * 100)}%)`}
               />
               <div
                 className="inv-health-bar__segment inv-health-bar__segment--expired"
                 style={{
                   width: `${(kpi.expiredBatchCount / kpi.totalBatches) * 100}%`,
                 }}
-                title={`Expired lots: ${kpi.expiredBatchCount}`}
+                title={`Expired lots: ${kpi.expiredBatchCount} (${Math.round((kpi.expiredBatchCount / kpi.totalBatches) * 100)}%)`}
               />
             </div>
           </div>
@@ -1059,28 +1539,69 @@ export default function InventoryPage() {
                   <h2 className="text-base font-bold text-foreground">
                     Real-Time Stock Ledger
                   </h2>
-                  <span className="text-xs text-muted-foreground">
-                    ({stockRows.length} active records)
+                  <span className="text-xs text-muted-foreground font-medium">
+                    ({filteredAndSortedStockRows.length === allStockRows.length
+                      ? `${allStockRows.length} active records`
+                      : `${filteredAndSortedStockRows.length} of ${allStockRows.length} records filtered`})
                   </span>
                 </div>
                 <p className="inv-section__description">
                   Live physical inventory balances, unexpired quantities, and batch allocations across departments.
                 </p>
               </div>
+            </div>
 
-              {/* Ledger Controls */}
-              <div className="flex items-center gap-2 flex-wrap">
+            {/* Ledger Search & Filters Toolbar */}
+            <div className="inv-catalog-toolbar">
+              {/* Top row: Search Bar */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="inv-catalog-search-wrap">
+                  <Search size={14} className="inv-catalog-search-icon" />
+                  <input
+                    type="text"
+                    className="odyssey-input inv-catalog-search-input"
+                    placeholder="Search ledger by item name, SKU, department, or lot number..."
+                    value={stockSearch}
+                    onChange={(e) => {
+                      setStockSearch(e.target.value);
+                      setStockPage(1);
+                    }}
+                  />
+                  {stockSearch.trim() !== "" && (
+                    <button
+                      type="button"
+                      className="inv-catalog-search-clear"
+                      onClick={() => {
+                        setStockSearch("");
+                        setStockPage(1);
+                      }}
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom row: Filters & Sorter */}
+              <div className="inv-catalog-filters">
                 <div className="inv-filter">
-                  <label htmlFor="stock-dept-select">Department</label>
+                  <label htmlFor="stock-dept-select">
+                    Department {isScopedDepartment && <span className="text-amber-500 font-semibold">(Isolated)</span>}
+                  </label>
                   <select
                     id="stock-dept-select"
                     className="odyssey-input text-xs"
                     value={stockFilterDept}
-                    onChange={(e) => setStockFilterDept(e.target.value)}
+                    disabled={isScopedDepartment}
+                    onChange={(e) => {
+                      setStockFilterDept(e.target.value);
+                      setStockPage(1);
+                    }}
                   >
-                    <option value="all">All Departments</option>
+                    {!isScopedDepartment && <option value="all">All Departments</option>}
                     {workspace.departments
-                      .filter((d) => d.active)
+                      .filter((d) => (isScopedDepartment ? d.id === inventoryDepartmentId : d.active))
                       .map((dept) => (
                         <option key={dept.id} value={dept.id}>
                           {dept.name}
@@ -1095,7 +1616,10 @@ export default function InventoryPage() {
                     id="stock-status-select"
                     className="odyssey-input text-xs"
                     value={stockFilterStatus}
-                    onChange={(e) => setStockFilterStatus(e.target.value)}
+                    onChange={(e) => {
+                      setStockFilterStatus(e.target.value);
+                      setStockPage(1);
+                    }}
                   >
                     <option value="all">All Stock Statuses</option>
                     <option value="in_stock">In Stock</option>
@@ -1103,13 +1627,70 @@ export default function InventoryPage() {
                     <option value="out">Out of Stock</option>
                   </select>
                 </div>
+
+                <div className="inv-filter">
+                  <label htmlFor="stock-expiry-select">Lot & Expiry</label>
+                  <select
+                    id="stock-expiry-select"
+                    className="odyssey-input text-xs"
+                    value={stockFilterExpiry}
+                    onChange={(e) => {
+                      setStockFilterExpiry(e.target.value);
+                      setStockPage(1);
+                    }}
+                  >
+                    <option value="all">All Lots</option>
+                    <option value="good">Good / Unexpired Only</option>
+                    <option value="near_expiry">Near Expiry (≤90d)</option>
+                    <option value="expired">Has Expired Stock</option>
+                    <option value="perishable">Lot Tracked Only</option>
+                  </select>
+                </div>
+
+                <div className="inv-filter">
+                  <label htmlFor="stock-sort-select">Sort By</label>
+                  <select
+                    id="stock-sort-select"
+                    className="odyssey-input text-xs"
+                    value={stockSortBy}
+                    onChange={(e) => {
+                      setStockSortBy(e.target.value);
+                      setStockPage(1);
+                    }}
+                  >
+                    <option value="name_asc">Item Description (A → Z)</option>
+                    <option value="name_desc">Item Description (Z → A)</option>
+                    <option value="dept_asc">Department (A → Z)</option>
+                    <option value="qty_desc">On Hand (High → Low)</option>
+                    <option value="qty_asc">On Hand (Low → High)</option>
+                    <option value="usable_desc">Usable Stock (High → Low)</option>
+                  </select>
+                </div>
+
+                {isStockFiltered && (
+                  <div className="flex items-center self-end mb-[2px]">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-muted-foreground hover:text-foreground h-[32px] px-2.5"
+                      onClick={handleResetStockFilters}
+                    >
+                      <RotateCcw size={12} className="mr-1.5" />
+                      Reset Filters
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
             <DataTable
               caption="Current stock and usable lots by department. Usable stock excludes expired batches."
-              data={stockRows}
-              emptyMessage="No stock allocations match the current filters."
+              data={paginatedStockRows}
+              emptyMessage={
+                isStockFiltered
+                  ? "No stock allocations match your search and filter criteria."
+                  : "No stock allocations match the current filters."
+              }
               getRowId={(row) => row.id}
               columns={[
                 {
@@ -1228,6 +1809,116 @@ export default function InventoryPage() {
                 },
               ]}
             />
+
+            {/* Pagination Controls */}
+            {totalStockRows > 0 && (
+              <div className="inv-pagination-bar">
+                <div className="inv-pagination-info">
+                  <span>
+                    Showing{" "}
+                    <strong>
+                      {stockStartIndex + 1}–{stockEndIndex}
+                    </strong>{" "}
+                    of <strong>{totalStockRows}</strong> records
+                    {isStockFiltered && (
+                      <span className="ml-1 text-muted-foreground">
+                        (filtered from {allStockRows.length} total)
+                      </span>
+                    )}
+                  </span>
+
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <label htmlFor="stock-page-size" className="text-xs text-muted-foreground whitespace-nowrap">
+                      Rows per page:
+                    </label>
+                    <select
+                      id="stock-page-size"
+                      className="odyssey-input text-xs py-1 px-2 h-7"
+                      value={stockPageSize}
+                      onChange={(e) => {
+                        setStockPageSize(Number(e.target.value));
+                        setStockPage(1);
+                      }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                {totalStockPages > 1 && (
+                  <div className="inv-pagination-controls" aria-label="Stock ledger pagination">
+                    <button
+                      type="button"
+                      className="inv-page-btn"
+                      onClick={() => setStockPage(1)}
+                      disabled={currentStockPage === 1}
+                      title="First page"
+                      aria-label="First page"
+                    >
+                      <ChevronsLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="inv-page-btn"
+                      onClick={() => setStockPage((prev) => Math.max(1, prev - 1))}
+                      disabled={currentStockPage === 1}
+                      title="Previous page"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+
+                    {getStockPageNumbers().map((p, idx) => {
+                      if (p === "ellipsis") {
+                        return (
+                          <span key={`stock-ellipsis-${idx}`} className="inv-page-ellipsis">
+                            …
+                          </span>
+                        );
+                      }
+                      const isActive = p === currentStockPage;
+                      return (
+                        <button
+                          key={`stock-page-${p}`}
+                          type="button"
+                          className={`inv-page-btn ${isActive ? "inv-page-btn--active" : ""}`}
+                          onClick={() => setStockPage(p)}
+                          aria-current={isActive ? "page" : undefined}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      className="inv-page-btn"
+                      onClick={() =>
+                        setStockPage((prev) => Math.min(totalStockPages, prev + 1))
+                      }
+                      disabled={currentStockPage === totalStockPages}
+                      title="Next page"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="inv-page-btn"
+                      onClick={() => setStockPage(totalStockPages)}
+                      disabled={currentStockPage === totalStockPages}
+                      title="Last page"
+                      aria-label="Last page"
+                    >
+                      <ChevronsRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       )}
@@ -1255,18 +1946,23 @@ export default function InventoryPage() {
             {/* Filter Bar */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="inv-filter">
-                <label>Department</label>
+                <label>
+                  Department {isScopedDepartment && <span className="text-amber-500 font-semibold">(Isolated)</span>}
+                </label>
                 <select
                   className="odyssey-input text-xs"
                   value={batchFilterDept}
+                  disabled={isScopedDepartment}
                   onChange={(e) => setBatchFilterDept(e.target.value)}
                 >
-                  <option value="all">All Departments</option>
-                  {workspace.departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
+                  {!isScopedDepartment && <option value="all">All Departments</option>}
+                  {workspace.departments
+                    .filter((d) => (isScopedDepartment ? d.id === inventoryDepartmentId : d.active))
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -1412,6 +2108,20 @@ export default function InventoryPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════ */}
+      {/* ── TAB: REQUISITIONS & SUPPLY DISPERSAL ────────────── */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {activeMainTab === "requisitions" && (
+        <InventoryRequisitionHub
+          organizationId={organizationId}
+          assignedDepartmentId={inventoryDepartmentId}
+          rootSupplyDepartmentId={rootSupplyDepartmentId}
+          canManageInventory={canManage || inventoryDepartmentId === rootSupplyDepartmentId}
+          departments={workspace.departments}
+          items={workspace.items}
+        />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════ */}
       {/* ── TAB 3: ITEM MASTER CATALOG ──────────────────────── */}
       {/* ═══════════════════════════════════════════════════════ */}
       {activeMainTab === "catalog" && (
@@ -1422,8 +2132,10 @@ export default function InventoryPage() {
                 <h2 className="text-base font-bold text-foreground">
                   Item Master Catalog
                 </h2>
-                <span className="text-xs text-muted-foreground">
-                  ({itemTotals.length} items registered)
+                <span className="text-xs text-muted-foreground font-medium">
+                  ({filteredAndSortedCatalogItems.length === itemTotals.length
+                    ? `${itemTotals.length} items registered`
+                    : `${filteredAndSortedCatalogItems.length} of ${itemTotals.length} items filtered`})
                 </span>
               </div>
               <p className="inv-section__description">
@@ -1447,18 +2159,139 @@ export default function InventoryPage() {
             )}
           </div>
 
+          {/* Catalog Search & Filters Toolbar */}
+          <div className="inv-catalog-toolbar">
+            {/* Top row: Search Bar */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="inv-catalog-search-wrap">
+                <Search size={14} className="inv-catalog-search-icon" />
+                <input
+                  type="text"
+                  className="odyssey-input inv-catalog-search-input"
+                  placeholder="Search catalog by SKU, item name, unit, or description..."
+                  value={catalogSearch}
+                  onChange={(e) => {
+                    setCatalogSearch(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                />
+                {catalogSearch.trim() !== "" && (
+                  <button
+                    type="button"
+                    className="inv-catalog-search-clear"
+                    onClick={() => {
+                      setCatalogSearch("");
+                      setCatalogPage(1);
+                    }}
+                    title="Clear search"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom row: Filters & Sorter */}
+            <div className="inv-catalog-filters">
+              <div className="inv-filter">
+                <label htmlFor="catalog-status-filter">Status</label>
+                <select
+                  id="catalog-status-filter"
+                  className="odyssey-input text-xs"
+                  value={catalogStatusFilter}
+                  onChange={(e) => {
+                    setCatalogStatusFilter(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
+              </div>
+
+              <div className="inv-filter">
+                <label htmlFor="catalog-type-filter">Item Type</label>
+                <select
+                  id="catalog-type-filter"
+                  className="odyssey-input text-xs"
+                  value={catalogTypeFilter}
+                  onChange={(e) => {
+                    setCatalogTypeFilter(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                >
+                  <option value="all">All Types</option>
+                  <option value="perishable">Perishable / FEFO</option>
+                  <option value="non-perishable">Standard / Non-Perishable</option>
+                </select>
+              </div>
+
+              <div className="inv-filter">
+                <label htmlFor="catalog-stock-filter">Stock Health</label>
+                <select
+                  id="catalog-stock-filter"
+                  className="odyssey-input text-xs"
+                  value={catalogStockFilter}
+                  onChange={(e) => {
+                    setCatalogStockFilter(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                >
+                  <option value="all">All Stock Levels</option>
+                  <option value="in_stock">In Stock (&gt; 0)</option>
+                  <option value="low_stock">Low Stock (≤ Reorder)</option>
+                  <option value="out_of_stock">Out of Stock (= 0)</option>
+                  <option value="expired">Has Expired Stock</option>
+                </select>
+              </div>
+
+              <div className="inv-filter">
+                <label htmlFor="catalog-sort-filter">Sort By</label>
+                <select
+                  id="catalog-sort-filter"
+                  className="odyssey-input text-xs"
+                  value={catalogSortBy}
+                  onChange={(e) => {
+                    setCatalogSortBy(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                >
+                  <option value="name_asc">Item Name (A → Z)</option>
+                  <option value="name_desc">Item Name (Z → A)</option>
+                  <option value="sku_asc">SKU (A → Z)</option>
+                  <option value="stock_desc">Total Stock (High → Low)</option>
+                  <option value="stock_asc">Total Stock (Low → High)</option>
+                  <option value="price_desc">Selling Price (High → Low)</option>
+                  <option value="price_asc">Selling Price (Low → High)</option>
+                  <option value="margin_desc">Gross Margin % (High → Low)</option>
+                </select>
+              </div>
+
+              {isCatalogFiltered && (
+                <div className="flex items-center self-end mb-[2px]">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-muted-foreground hover:text-foreground h-[32px] px-2.5"
+                    onClick={handleResetCatalogFilters}
+                  >
+                    <RotateCcw size={12} className="mr-1.5" />
+                    Reset Filters
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
           <DataTable
             caption="Item-master totals derived across all department stock rows."
-            data={itemTotals.filter((i) => {
-              if (!globalSearch) return true;
-              const q = globalSearch.toLowerCase();
-              return (
-                i.name.toLowerCase().includes(q) ||
-                i.sku.toLowerCase().includes(q) ||
-                (i.description ?? "").toLowerCase().includes(q)
-              );
-            })}
-            emptyMessage="No items registered in catalog."
+            data={paginatedCatalogItems}
+            emptyMessage={
+              isCatalogFiltered
+                ? "No catalog items matched your filter criteria."
+                : "No items registered in catalog."
+            }
             getRowId={(row) => row.id}
             columns={[
               {
@@ -1574,6 +2407,116 @@ export default function InventoryPage() {
               },
             ]}
           />
+
+          {/* Pagination Controls */}
+          {totalCatalogItems > 0 && (
+            <div className="inv-pagination-bar">
+              <div className="inv-pagination-info">
+                <span>
+                  Showing{" "}
+                  <strong>
+                    {catalogStartIndex + 1}–{catalogEndIndex}
+                  </strong>{" "}
+                  of <strong>{totalCatalogItems}</strong> items
+                  {isCatalogFiltered && (
+                    <span className="ml-1 text-muted-foreground">
+                      (filtered from {itemTotals.length} total)
+                    </span>
+                  )}
+                </span>
+
+                <div className="flex items-center gap-1.5 ml-2">
+                  <label htmlFor="catalog-page-size" className="text-xs text-muted-foreground whitespace-nowrap">
+                    Rows per page:
+                  </label>
+                  <select
+                    id="catalog-page-size"
+                    className="odyssey-input text-xs py-1 px-2 h-7"
+                    value={catalogPageSize}
+                    onChange={(e) => {
+                      setCatalogPageSize(Number(e.target.value));
+                      setCatalogPage(1);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {totalCatalogPages > 1 && (
+                <div className="inv-pagination-controls" aria-label="Catalog pagination">
+                  <button
+                    type="button"
+                    className="inv-page-btn"
+                    onClick={() => setCatalogPage(1)}
+                    disabled={currentCatalogPage === 1}
+                    title="First page"
+                    aria-label="First page"
+                  >
+                    <ChevronsLeft size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="inv-page-btn"
+                    onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentCatalogPage === 1}
+                    title="Previous page"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+
+                  {getCatalogPageNumbers().map((p, idx) => {
+                    if (p === "ellipsis") {
+                      return (
+                        <span key={`ellipsis-${idx}`} className="inv-page-ellipsis">
+                          …
+                        </span>
+                      );
+                    }
+                    const isActive = p === currentCatalogPage;
+                    return (
+                      <button
+                        key={`page-${p}`}
+                        type="button"
+                        className={`inv-page-btn ${isActive ? "inv-page-btn--active" : ""}`}
+                        onClick={() => setCatalogPage(p)}
+                        aria-current={isActive ? "page" : undefined}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    className="inv-page-btn"
+                    onClick={() =>
+                      setCatalogPage((prev) => Math.min(totalCatalogPages, prev + 1))
+                    }
+                    disabled={currentCatalogPage === totalCatalogPages}
+                    title="Next page"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="inv-page-btn"
+                    onClick={() => setCatalogPage(totalCatalogPages)}
+                    disabled={currentCatalogPage === totalCatalogPages}
+                    title="Last page"
+                    aria-label="Last page"
+                  >
+                    <ChevronsRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -1684,7 +2627,10 @@ export default function InventoryPage() {
                   }
                   const form = event.currentTarget;
                   const formData = new FormData(form);
-                  const departmentId = String(formData.get("departmentId"));
+                  const departmentId = String(
+                    formData.get("departmentId") ||
+                    (isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
+                  );
                   const movementType = String(formData.get("movementType")) as
                     | "opening"
                     | "receipt";
@@ -1760,10 +2706,19 @@ export default function InventoryPage() {
                         ))}
                     </select>
                   </Field>
-                  <Field label="Destination Department">
+                  <Field
+                    label="Destination Department"
+                    hint={
+                      isScopedDepartment && inventoryDepartmentId
+                        ? "Your account is assigned to this department."
+                        : undefined
+                    }
+                  >
                     <select
                       className="odyssey-input"
                       name="departmentId"
+                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -1946,7 +2901,10 @@ export default function InventoryPage() {
                     async (fields) =>
                       transferDepartmentStock(client, {
                         itemId: String(fields.get("transferItemId")),
-                        fromDepartmentId: String(fields.get("fromDepartmentId")),
+                        fromDepartmentId: String(
+                          fields.get("fromDepartmentId") ||
+                          (isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
+                        ),
                         toDepartmentId: String(fields.get("toDepartmentId")),
                         quantity: Number(fields.get("transferQuantity")),
                         reason: String(fields.get("transferReason")),
@@ -1975,10 +2933,19 @@ export default function InventoryPage() {
                 </Field>
 
                 <div className="two-column">
-                  <Field label="From Department (Source)">
+                  <Field
+                    label="From Department (Source)"
+                    hint={
+                      isScopedDepartment && inventoryDepartmentId
+                        ? "Transfers must originate from your assigned department."
+                        : undefined
+                    }
+                  >
                     <select
                       className="odyssey-input"
                       name="fromDepartmentId"
+                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -2095,10 +3062,19 @@ export default function InventoryPage() {
                         ))}
                     </select>
                   </Field>
-                  <Field label="Department">
+                  <Field
+                    label="Department"
+                    hint={
+                      isScopedDepartment && inventoryDepartmentId
+                        ? "Adjustments are limited to your assigned department."
+                        : undefined
+                    }
+                  >
                     <select
                       className="odyssey-input"
                       name="departmentId"
+                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -2505,7 +3481,7 @@ export default function InventoryPage() {
             <Field
               label="Dispensing Department"
               hint={
-                inventoryDepartmentId
+                isScopedDepartment && inventoryDepartmentId
                   ? "Your account is assigned to this department."
                   : "Choose where this usage should be subtracted."
               }
@@ -2517,7 +3493,7 @@ export default function InventoryPage() {
                 onChange={(event) =>
                   setInventoryDepartmentSelection(event.target.value)
                 }
-                disabled={Boolean(inventoryDepartmentId)}
+                disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
                 required
               >
                 <option value="" disabled>
@@ -2856,100 +3832,154 @@ export default function InventoryPage() {
 
       {/* ── Batch Drilldown Modal Dialog ────────────────────── */}
       {inspectStockId && inspectedStockRow && (
-        <div className="inv-modal-backdrop">
-          <div className="inv-modal-card">
-            <div className="inv-modal-header">
-              <div>
-                <span className="eyebrow">Lot & Expiry Inspection</span>
-                <h3 className="text-base font-bold text-foreground">
-                  {inspectedStockRow.itemName} ({inspectedStockRow.departmentName})
-                </h3>
+        <div
+          className="inv-modal-backdrop"
+          onClick={() => setInspectStockId(null)}
+        >
+          <div
+            className="inv-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inspect-modal-title"
+          >
+            <div className="inv-inspect-header">
+              <div className="inv-inspect-header__left">
+                <div className="inv-inspect-icon-pill" aria-hidden="true">
+                  <Layers size={18} />
+                </div>
+                <div>
+                  <div className="inv-inspect-eyebrow">Lot & Expiry Inspection</div>
+                  <div className="inv-inspect-title-group">
+                    <h3 id="inspect-modal-title" className="inv-inspect-title">
+                      {inspectedStockRow.itemName}
+                    </h3>
+                    <span className="inv-dept-badge">
+                      {inspectedStockRow.departmentName}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <Button
-                size="sm"
-                variant="secondary"
+              <button
+                type="button"
+                className="inv-modal-close-btn"
                 onClick={() => setInspectStockId(null)}
+                aria-label="Close dialog"
               >
-                <X size={15} />
-              </Button>
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="p-4 overflow-y-auto flex-1 space-y-4">
-              {/* Summary Stats */}
-              <div className="grid grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg text-xs">
-                <div>
-                  <span className="text-muted-foreground block font-medium">
-                    Total on hand:
-                  </span>
-                  <strong className="text-sm font-bold text-foreground">
-                    {fmt(Number(inspectedStockRow.quantity))}{" "}
-                    {inspectedStockRow.unit}
-                  </strong>
+            <div className="inv-inspect-body">
+              {/* Summary Stats Grid */}
+              <div className="inv-inspect-stats-grid">
+                <div className="inv-inspect-stat-card">
+                  <div className="inv-inspect-stat-label">
+                    <Boxes size={14} />
+                    <span>Total on hand</span>
+                  </div>
+                  <div className="inv-inspect-stat-value">
+                    <span>{fmt(Number(inspectedStockRow.quantity))}</span>
+                    <span className="inv-inspect-stat-unit">{inspectedStockRow.unit}</span>
+                  </div>
+                  <div className="inv-inspect-stat-meta">
+                    Aggregate physical count
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground block font-medium">
-                    Usable (unexpired):
-                  </span>
-                  <strong className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                    {fmt(inspectedStockRow.usableQuantity)}{" "}
-                    {inspectedStockRow.unit}
-                  </strong>
+
+                <div className="inv-inspect-stat-card inv-inspect-stat-card--usable">
+                  <div className="inv-inspect-stat-label text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 size={14} />
+                    <span>Usable (unexpired)</span>
+                  </div>
+                  <div className="inv-inspect-stat-value inv-inspect-stat-value--emerald">
+                    <span>{fmt(inspectedStockRow.usableQuantity)}</span>
+                    <span className="inv-inspect-stat-unit">{inspectedStockRow.unit}</span>
+                  </div>
+                  <div className="inv-inspect-stat-meta text-emerald-700 dark:text-emerald-400">
+                    Ready for dispensing
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground block font-medium">
-                    Expired to dispose:
-                  </span>
-                  <strong className="text-sm font-bold text-rose-600">
-                    {fmt(inspectedStockRow.expiredQuantity)}{" "}
-                    {inspectedStockRow.unit}
-                  </strong>
+
+                <div className="inv-inspect-stat-card inv-inspect-stat-card--expired">
+                  <div className="inv-inspect-stat-label text-rose-700 dark:text-rose-400">
+                    <AlertTriangle size={14} />
+                    <span>Expired to dispose</span>
+                  </div>
+                  <div className="inv-inspect-stat-value inv-inspect-stat-value--rose">
+                    <span>{fmt(inspectedStockRow.expiredQuantity)}</span>
+                    <span className="inv-inspect-stat-unit">{inspectedStockRow.unit}</span>
+                  </div>
+                  <div className="inv-inspect-stat-meta text-rose-700 dark:text-rose-400">
+                    {inspectedStockRow.expiredQuantity > 0
+                      ? "Requires disposal action"
+                      : "Zero expired units"}
+                  </div>
                 </div>
               </div>
 
+              {/* Batches Table or Empty State */}
               {inspectedStockRow.batches.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-xs">
-                  <Layers size={28} className="mx-auto mb-2 opacity-40" />
-                  No specific lot allocations recorded. This item is tracked via aggregate department count.
+                <div className="inv-inspect-empty-card">
+                  <div className="inv-inspect-empty-icon-circle" aria-hidden="true">
+                    <Layers size={24} />
+                  </div>
+                  <h4 className="inv-inspect-empty-title">No Specific Lot Allocations Recorded</h4>
+                  <p className="inv-inspect-empty-desc">
+                    This item is tracked via aggregate department inventory count. Inbound deliveries received with specific lot numbers and expiry dates will be tracked individually here.
+                  </p>
+                  <span className="inv-badge-pill inv-badge-pill--legacy">
+                    Aggregate Department Count Active
+                  </span>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Allocated Lots ({inspectedStockRow.batches.length})
-                  </h4>
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-muted text-muted-foreground font-semibold border-b border-border">
+                <div className="inv-inspect-section">
+                  <div className="inv-inspect-section-header">
+                    <div className="inv-inspect-section-title">
+                      <Tag size={14} />
+                      <span>Allocated Lots ({inspectedStockRow.batches.length})</span>
+                    </div>
+                    <span className="inv-inspect-fefo-badge">
+                      <Clock size={12} />
+                      FEFO Dispense Priority
+                    </span>
+                  </div>
+                  <div className="inv-inspect-table-wrap">
+                    <table className="inv-inspect-table">
+                      <thead>
                         <tr>
-                          <th className="p-2.5">Lot / Batch #</th>
-                          <th className="p-2.5">Expiry Date</th>
-                          <th className="p-2.5">Status</th>
-                          <th className="p-2.5">Received</th>
-                          <th className="p-2.5 text-right">Quantity</th>
+                          <th>Lot / Batch #</th>
+                          <th>Expiry Date</th>
+                          <th>Status</th>
+                          <th>Received</th>
+                          <th style={{ textAlign: "right" }}>Quantity</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border">
+                      <tbody>
                         {inspectedStockRow.batches.map((batch) => (
-                          <tr key={batch.id} className="hover:bg-muted/40">
-                            <td className="p-2.5 font-mono font-semibold">
-                              {batch.lot_number || (
+                          <tr key={batch.id}>
+                            <td>
+                              {batch.lot_number ? (
+                                <span className="inv-lot-tag">{batch.lot_number}</span>
+                              ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </td>
-                            <td className="p-2.5">
+                            <td>
                               {batch.expiry_date
                                 ? fmtDate(batch.expiry_date)
                                 : "Unassigned"}
                             </td>
-                            <td className="p-2.5">
+                            <td>
                               {getExpiryBadge(
                                 batch.expiry_status,
                                 batch.days_until_expiry,
                               )}
                             </td>
-                            <td className="p-2.5 text-muted-foreground">
+                            <td className="text-muted-foreground">
                               {fmtDate(batch.received_at)}
                             </td>
-                            <td className="p-2.5 text-right font-bold text-foreground">
+                            <td style={{ textAlign: "right", fontWeight: 700 }}>
                               {fmt(batch.quantity)} {inspectedStockRow.unit}
                             </td>
                           </tr>
@@ -2961,15 +3991,66 @@ export default function InventoryPage() {
               )}
             </div>
 
-            <div className="p-3 border-t border-border bg-muted/20 flex justify-between items-center text-xs text-muted-foreground">
-              <span>FEFO rule automatically dispenses earlier expiry lots first.</span>
-              <Button size="sm" onClick={() => setInspectStockId(null)}>
+            <div className="inv-inspect-footer">
+              <div className="inv-inspect-fefo-notice">
+                <Info size={16} className="shrink-0" />
+                <span>FEFO (First-Expiring, First-Out) rule automatically dispenses earlier expiry lots first.</span>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setInspectStockId(null)}
+              >
                 Close
               </Button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Inbound GSO CSV Intake Modal ────────────────────── */}
+      <GsoCsvImportModal
+        organizationId={organizationId}
+        isOpen={showGsoImportModal}
+        onClose={() => setShowGsoImportModal(false)}
+        onSuccess={(count) => {
+          setShowGsoImportModal(false);
+          setToastMessage({
+            text: `Successfully received ${count} items from GSO CSV into Root Supply Room.`,
+            type: "success",
+          });
+          void loadInventory();
+        }}
+      />
+
+      {/* ── Pharmacy Inventory Import Modal ─────────────────── */}
+      <PharmacyInventoryImportModal
+        organizationId={organizationId}
+        isOpen={showPharmacyImportModal}
+        onClose={() => setShowPharmacyImportModal(false)}
+        onSuccess={(count) => {
+          setShowPharmacyImportModal(false);
+          setToastMessage({
+            text: `Successfully received ${count} item batches into Pharmacy Department stock.`,
+            type: "success",
+          });
+          void loadInventory();
+        }}
+      />
+
+      {/* ── Department Inventory Report Modal ────────────────── */}
+      <InventoryReportModal
+        organizationId={organizationId}
+        organizationName={organization?.name}
+        assignedDepartmentId={inventoryDepartmentId}
+        rootSupplyDepartmentId={rootSupplyDepartmentId}
+        isSuperadmin={isSuperadmin}
+        departments={workspace.departments}
+        workspace={workspace}
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        signedInAs={signedInAs}
+      />
 
       {/* Discreet Persistent Status footer */}
       <p role="status" className="inv-status-bar">

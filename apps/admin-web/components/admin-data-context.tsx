@@ -3,8 +3,10 @@
 import {
   createBrowserSupabaseClient,
   getAccessibleOrganizations,
+  getCurrentStaffDepartment,
   getMyOrganizationPermissions,
   getPortalAccess,
+  getRootSupplyDepartment,
   signInWithPassword,
   signOut,
 } from "@odyssey/supabase-client";
@@ -14,9 +16,11 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 type Client = ReturnType<typeof createBrowserSupabaseClient>;
 
 interface AdminDataContextValue {
+  assignedDepartmentId: string | null;
   client: Client;
   email: string | null;
   error: string | null;
+  isScopedDepartment: boolean;
   isSuperadmin: boolean;
   loading: boolean;
   organization: PublicClinicSummary | null;
@@ -26,6 +30,7 @@ interface AdminDataContextValue {
   permissionsLoading: boolean;
   readCache: <T>(key: string, maxAgeMs?: number) => T | undefined;
   refreshAccess: () => Promise<void>;
+  rootSupplyDepartmentId: string | null;
   selectOrganization: (organizationId: string) => void;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -48,6 +53,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<ClinicRolePermission[]>([]);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [assignedDepartmentId, setAssignedDepartmentId] = useState<string | null>(null);
+  const [rootSupplyDepartmentId, setRootSupplyDepartmentId] = useState<string | null>(null);
 
   const readCache = useCallback(<T,>(key: string, maxAgeMs = 30_000): T | undefined => {
     const entry = cache.current.get(key);
@@ -68,6 +75,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     setPermissions([]);
     setPermissionsError(null);
     setPermissionsLoading(true);
+    setAssignedDepartmentId(null);
+    setRootSupplyDepartmentId(null);
     setError(null);
     const userResult = await client.auth.getUser();
     if (userResult.error || !userResult.data.user) {
@@ -125,8 +134,29 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     setPermissions([]);
     setPermissionsError(null);
     setPermissionsLoading(true);
+    setAssignedDepartmentId(null);
+    setRootSupplyDepartmentId(null);
     setOrganizationId(nextId);
   }, [organizations]);
+
+  useEffect(() => {
+    let current = true;
+    if (loading) return () => { current = false; };
+    if (!organizationId) {
+      setAssignedDepartmentId(null);
+      setRootSupplyDepartmentId(null);
+      return () => { current = false; };
+    }
+    void Promise.all([
+      getCurrentStaffDepartment(client, organizationId),
+      getRootSupplyDepartment(client, organizationId),
+    ]).then(([deptResult, rootResult]) => {
+      if (!current) return;
+      setAssignedDepartmentId(deptResult.error ? null : deptResult.data);
+      setRootSupplyDepartmentId(rootResult.error ? null : (rootResult.data ?? null));
+    });
+    return () => { current = false; };
+  }, [client, loading, organizationId]);
 
   useEffect(() => {
     let current = true;
@@ -152,6 +182,14 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     return () => { current = false; };
   }, [client, email, error, isSuperadmin, loading, organizationId]);
 
+  const isScopedDepartment = useMemo(() => {
+    return Boolean(
+      assignedDepartmentId &&
+      !isSuperadmin &&
+      (!rootSupplyDepartmentId || assignedDepartmentId !== rootSupplyDepartmentId)
+    );
+  }, [assignedDepartmentId, isSuperadmin, rootSupplyDepartmentId]);
+
   const handleSignIn = useCallback(async (accountEmail: string, password: string) => {
     const result = await signInWithPassword(client, accountEmail, password);
     if (result.error) return result.error.message;
@@ -165,7 +203,33 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   }, [client, refreshAccess]);
 
   const organization = organizations.find((item) => item.id === organizationId) ?? null;
-  return <AdminDataContext.Provider value={{ client, email, error, isSuperadmin, loading, organization, organizations, permissions, permissionsError, permissionsLoading, readCache, refreshAccess, selectOrganization, signIn: handleSignIn, signOut: handleSignOut, writeCache }}>{children}</AdminDataContext.Provider>;
+  return (
+    <AdminDataContext.Provider
+      value={{
+        assignedDepartmentId,
+        client,
+        email,
+        error,
+        isScopedDepartment,
+        isSuperadmin,
+        loading,
+        organization,
+        organizations,
+        permissions,
+        permissionsError,
+        permissionsLoading,
+        readCache,
+        refreshAccess,
+        rootSupplyDepartmentId,
+        selectOrganization,
+        signIn: handleSignIn,
+        signOut: handleSignOut,
+        writeCache,
+      }}
+    >
+      {children}
+    </AdminDataContext.Provider>
+  );
 }
 
 export function useAdminData() {
