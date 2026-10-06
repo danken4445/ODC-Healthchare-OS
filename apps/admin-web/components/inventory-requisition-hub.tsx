@@ -3,6 +3,7 @@
 import {
   disperseInventoryRequisitionItem,
   listInventoryRequisitions,
+  subscribeToInventoryRequisitions,
 } from "@odyssey/supabase-client";
 import type {
   DepartmentSummary,
@@ -10,11 +11,12 @@ import type {
   InventoryRequisitionItemSummary,
   InventoryRequisitionSummary,
 } from "@odyssey/types";
-import { Button } from "@odyssey/ui";
+import { Button, soundCueEngine } from "@odyssey/ui";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
+  Bell,
   Boxes,
   Calendar,
   CheckCircle2,
@@ -29,8 +31,9 @@ import {
   RefreshCw,
   Search,
   Truck,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdminData } from "./admin-data-context";
 import {
   buildRequisitionCsv,
@@ -45,6 +48,7 @@ interface Props {
   canManageInventory: boolean;
   departments: DepartmentSummary[];
   items: InventoryItemSummary[];
+  onNotify?: (notification: { text: string; type: "info" | "success" | "error" }) => void;
 }
 
 export function InventoryRequisitionHub({
@@ -54,6 +58,7 @@ export function InventoryRequisitionHub({
   canManageInventory,
   departments,
   items,
+  onNotify,
 }: Props) {
   const { client } = useAdminData();
   const [requisitions, setRequisitions] = useState<InventoryRequisitionSummary[]>([]);
@@ -61,12 +66,48 @@ export function InventoryRequisitionHub({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [hubNotification, setHubNotification] = useState<{
+    id: string;
+    type: "success" | "info" | "warning";
+    message: string;
+  } | null>(null);
+  const notifTimerRef = useRef<number | null>(null);
   const [dispersingItemId, setDispersingItemId] = useState<string | null>(null);
 
   const [expandedReqId, setExpandedReqId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "fulfilled">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const showNotification = useCallback(
+    (type: "success" | "info" | "warning", message: string) => {
+      if (notifTimerRef.current) {
+        window.clearTimeout(notifTimerRef.current);
+      }
+      setHubNotification({
+        id: String(Date.now()),
+        type,
+        message,
+      });
+      onNotify?.({
+        text: message,
+        type: type === "warning" ? "info" : type,
+      });
+      notifTimerRef.current = window.setTimeout(() => {
+        setHubNotification(null);
+        notifTimerRef.current = null;
+      }, 7000);
+    },
+    [onNotify]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (notifTimerRef.current) {
+        window.clearTimeout(notifTimerRef.current);
+      }
+    };
+  }, []);
 
   // Is current user in Root Supply or Admin?
   const isSupplyOfficer =
@@ -123,6 +164,35 @@ export function InventoryRequisitionHub({
     loadRequisitions();
   }, [loadRequisitions]);
 
+  // Real-time subscription to inventory requisition changes
+  useEffect(() => {
+    if (!organizationId) return;
+    const unsubscribe = subscribeToInventoryRequisitions(
+      client,
+      organizationId,
+      (event) => {
+        if (!event) return;
+        if (event.eventType === "INSERT" && event.table === "inventory_requisitions") {
+          const reqNum = event.new?.requisition_number ?? "New requisition";
+          const isEmerg = event.new?.is_emergency;
+          soundCueEngine.playRequisitionChime();
+          showNotification(
+            "info",
+            isEmerg
+              ? `🚨 Emergency Requisition ${reqNum} received! Immediate fulfillment required.`
+              : `📦 New Requisition ${reqNum} submitted to Central Supply.`
+          );
+          void loadRequisitions();
+        } else if (event.eventType === "UPDATE") {
+          void loadRequisitions();
+        }
+      }
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [client, organizationId, showNotification, loadRequisitions]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadRequisitions();
@@ -141,6 +211,8 @@ export function InventoryRequisitionHub({
     if (res.error) {
       setActionError(`Dispersal error: ${res.error.message}`);
     } else {
+      soundCueEngine.playRequisitionChime();
+      showNotification("success", "Item stock successfully dispersed via FEFO.");
       await loadRequisitions();
     }
   };

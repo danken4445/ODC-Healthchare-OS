@@ -28,7 +28,10 @@ interface Props {
   rootSupplyDepartmentId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (requisitionId: string) => void;
+  onSuccess: (
+    requisitionId: string,
+    details?: { requisitionNumber: string; isEmergency?: boolean }
+  ) => void;
 }
 
 export function InventoryRequisitionModal({
@@ -174,7 +177,24 @@ export function InventoryRequisitionModal({
         setError(`Failed to submit requisition: ${msg}`);
       }
     } else if (res.data) {
-      onSuccess(res.data);
+      let requisitionNumber = `REQ-${res.data.slice(0, 8)}`;
+      try {
+        const { data: reqRow } = await client
+          .from("inventory_requisitions")
+          .select("requisition_number")
+          .eq("id", res.data)
+          .maybeSingle();
+        if (reqRow?.requisition_number) {
+          requisitionNumber = reqRow.requisition_number;
+        }
+      } catch {
+        // Fallback to ID slice
+      }
+
+      onSuccess(res.data, {
+        requisitionNumber,
+        isEmergency,
+      });
       onClose();
     }
   };

@@ -1897,6 +1897,45 @@ export async function listInventoryRequisitions(
   return success(formatted);
 }
 
+export interface InventoryRequisitionEvent {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  table: "inventory_requisitions" | "inventory_requisition_items";
+  new?: Record<string, any>;
+  old?: Record<string, any>;
+}
+
+export function subscribeToInventoryRequisitions(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  onRequisitionChange: (event?: InventoryRequisitionEvent) => void,
+  onStatus?: (status: string) => void,
+): () => void {
+  const channel = client.channel(`inventory_requisitions:${organizationId}`);
+  for (const table of ["inventory_requisitions", "inventory_requisition_items"] as const) {
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table,
+        filter: `organization_id=eq.${organizationId}`,
+      },
+      (payload: any) => {
+        onRequisitionChange({
+          eventType: payload.eventType,
+          table,
+          new: payload.new,
+          old: payload.old,
+        });
+      },
+    );
+  }
+  channel.subscribe((status) => onStatus?.(status));
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
 export async function importGsoInventoryRows(
   client: SupabaseClient<Database>,
   organizationId: string,
@@ -2227,7 +2266,12 @@ export function subscribeToInventory(
   onStatus?: (status: string) => void,
 ): () => void {
   const channel = client.channel(`inventory:${organizationId}`);
-  for (const table of ["department_stock", "inventory_usages"] as const) {
+  for (const table of [
+    "department_stock",
+    "inventory_usages",
+    "inventory_requisitions",
+    "inventory_requisition_items",
+  ] as const) {
     channel.on(
       "postgres_changes",
       {

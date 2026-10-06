@@ -1,6 +1,7 @@
 import type { ClinicRolePermission } from "@odyssey/types";
 
 export interface AdminAccessRule {
+  allowAuthenticated?: boolean;
   allowSuperadmin?: boolean;
   anyOf?: readonly ClinicRolePermission[];
   public?: boolean;
@@ -13,6 +14,7 @@ export interface AdminDestination extends AdminAccessRule {
 
 const routeRules: readonly AdminDestination[] = [
   { href: "/superadmin", superadminOnly: true },
+  { href: "/profile", allowAuthenticated: true },
   { href: "/patients/audit", anyOf: ["can_view_audit_log"] },
   { href: "/patients/import", anyOf: ["can_manage_patients"] },
   { href: "/patients/register", anyOf: ["can_manage_patients"] },

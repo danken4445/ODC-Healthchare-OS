@@ -17,6 +17,7 @@ export {
   AppointmentNotificationControl,
   AppointmentNotificationProvider,
   AppointmentNotificationToast,
+  soundCueEngine,
   useAppointmentNotifications,
   useOptionalAppointmentNotifications,
 } from "./appointment-notifications";

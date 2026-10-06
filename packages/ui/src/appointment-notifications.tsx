@@ -100,6 +100,26 @@ class SoundCueEngine {
     }
   }
 
+  /**
+   * Plays a crisp 2-tone chime (F5 -> C6) for inventory and supply requisition events.
+   */
+  public playRequisitionChime(): boolean {
+    if (this.muted) return false;
+    const ctx = this.getContext();
+    if (!ctx) return false;
+
+    try {
+      const now = ctx.currentTime;
+      // Tone 1: F5 (698.46 Hz)
+      this.scheduleTone(ctx, 698.46, now, 0.45, 0.22);
+      // Tone 2: C6 (1046.50 Hz) - staggered by 130ms
+      this.scheduleTone(ctx, 1046.5, now + 0.13, 0.65, 0.28);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private scheduleTone(
     ctx: AudioContext,
     freq: number,
