@@ -126,10 +126,12 @@ insert into public.observations (id, organization_id, patient_id, encounter_id, 
   ('70000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002', 'final', 'synthetic-observation', '{"value":2}'::jsonb)
 on conflict (id) do nothing;
 
-insert into public.departments (id, organization_id, code, name, description) values
-  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'OPD', 'Outpatient Department', 'Synthetic outpatient stock location.'),
-  ('90000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'ER', 'Emergency Room', 'Synthetic emergency stock location.'),
-  ('90000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'OPD', 'Other Clinic OPD', 'Tenant-isolation test location.')
+insert into public.departments (id, organization_id, code, name, description, is_root_supply) values
+  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'OPD', 'Outpatient Department', 'Synthetic outpatient stock location.', false),
+  ('90000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'ER', 'Emergency Room', 'Synthetic emergency stock location.', false),
+  ('90000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'OPD', 'Other Clinic OPD', 'Tenant-isolation test location.', false),
+  ('90000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', 'SUPPLY', 'Central Supply Department', 'Root warehouse for clinic intake and requisition dispersal.', true),
+  ('90000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', 'PHARM', 'Pharmacy Department', 'Satellite pharmacy department for medication dispensing and POS.', false)
 on conflict (id) do nothing;
 
 insert into public.inventory_categories (

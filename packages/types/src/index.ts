@@ -41,6 +41,8 @@ export type InventoryStockMovementRow =
   DatabaseRow<"inventory_stock_movements">;
 export type StaffDepartmentAssignmentRow =
   DatabaseRow<"staff_department_assignments">;
+export type InventoryRequisitionRow = DatabaseRow<"inventory_requisitions">;
+export type InventoryRequisitionItemRow = DatabaseRow<"inventory_requisition_items">;
 export interface BillingEventRow {
   id: string;
   organization_id: string;
@@ -802,6 +804,143 @@ export interface StockTransferInput {
   reason: string;
 }
 
+export type RequisitionStatus =
+  | "submitted"
+  | "approved"
+  | "partially_dispersed"
+  | "fulfilled"
+  | "cancelled";
+
+export type RequisitionItemStatus =
+  | "pending"
+  | "awaiting_supply_intake"
+  | "ready_for_dispersal"
+  | "dispersed"
+  | "cancelled";
+
+export interface InventoryRequisitionItemSummary {
+  id: string;
+  requisition_id: string;
+  organization_id: string;
+  item_id: string;
+  item_name?: string;
+  item_sku?: string;
+  unit_of_measure?: string;
+  requested_quantity: number;
+  dispersed_quantity: number;
+  status: RequisitionItemStatus;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryRequisitionSummary {
+  id: string;
+  organization_id: string;
+  requisition_number: string;
+  requesting_department_id: string;
+  requesting_department_name?: string;
+  supply_department_id: string;
+  supply_department_name?: string;
+  status: RequisitionStatus;
+  is_emergency: boolean;
+  emergency_justification?: string | null;
+  target_delivery_week: string;
+  notes?: string | null;
+  submitted_by: string;
+  submitted_by_name?: string;
+  submitted_at: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  items: InventoryRequisitionItemSummary[];
+}
+
+export interface SubmitRequisitionLineItem {
+  item_id: string;
+  requested_quantity: number;
+  notes?: string;
+}
+
+export interface SubmitInventoryRequisitionInput {
+  organizationId: string;
+  requestingDepartmentId: string;
+  items: SubmitRequisitionLineItem[];
+  notes?: string;
+  isEmergency?: boolean;
+  emergencyJustification?: string;
+  simulatedDate?: string;
+}
+
+export interface DisperseInventoryRequisitionItemInput {
+  requisitionItemId: string;
+  quantity?: number;
+}
+
+export interface GsoCsvRow {
+  category: string;
+  description: string;
+  expiryDateRaw: string | null;
+  expiryDateNormalized: string | null; // ISO YYYY-MM-DD or null
+  unitOfMeasure: string;
+  quantity: number | null;
+  sku?: string | null;
+  lotNumber?: string | null;
+  unitCostInCentavos?: bigint | number | null;
+  notes?: string | null;
+}
+
+export interface GsoCsvParseResult {
+  items: GsoCsvRow[];
+  totalParsed: number;
+  categoriesFound: string[];
+  datedCount: number;
+  undatedCount: number;
+  errors: Array<{ line: number; message: string }>;
+}
+
+export interface PharmacyInventoryImportRow {
+  category: string;
+  genericName: string;
+  dosageForm: string | null;
+  brandName: string | null;
+  itemName: string;
+  unitOfMeasure: string;
+  expiryDateRaw: string | null;
+  expiryDateNormalized: string | null; // ISO YYYY-MM-DD or null
+  lotNumber: string | null;
+  dateDelivered: string | null; // ISO YYYY-MM-DD or null
+  stocksReceived: number | null;
+  totalStocks: number | null;
+  balanceSept: number | null;
+  qtyDispensed: number | null;
+  actualBalance: number | null;
+  effectiveQuantity: number;
+  sku: string;
+  notes?: string | null;
+}
+
+export interface PharmacyInventoryParseResult {
+  sheetName: string;
+  sheetsAvailable: string[];
+  items: PharmacyInventoryImportRow[];
+  totalParsed: number;
+  categoriesFound: string[];
+  datedCount: number;
+  undatedCount: number;
+  withStockCount: number;
+  zeroStockCount: number;
+  errors: Array<{ line: number; message: string }>;
+}
+
+export interface ImportPharmacyInventoryOptions {
+  departmentId?: string | null;
+  includeZeroStock?: boolean;
+  defaultQuantityIfZero?: number;
+  overrideCategory?: string | null;
+}
+
 export interface InventoryUsageInput {
   encounterId: string;
   stockId: string;
@@ -1538,4 +1677,25 @@ export interface NbbPosCheckoutResult {
   receipt_number: string;
   standard_total_in_centavos: number | bigint;
   patient_balance_due_in_centavos: number | bigint;
+}
+
+export interface NbbReceiptTransactionItem {
+  name: string;
+  quantity: number;
+  standardUnitPriceInCentavos: number;
+  standardLineTotalInCentavos: number;
+}
+
+export interface NbbReceiptTransaction {
+  id: string;
+  billingEventId: string;
+  receiptNumber: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  patientName: string;
+  status: string;
+  completedAt: string;
+  standardTotalInCentavos: number;
+  patientBalanceDueCentavos: number;
+  items: NbbReceiptTransactionItem[];
 }

@@ -1265,6 +1265,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_root_supply: boolean
           name: string
           organization_id: string
           updated_at: string
@@ -1275,6 +1276,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_root_supply?: boolean
           name: string
           organization_id: string
           updated_at?: string
@@ -1285,6 +1287,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_root_supply?: boolean
           name?: string
           organization_id?: string
           updated_at?: string
@@ -2541,6 +2544,146 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "departments"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_requisition_items: {
+        Row: {
+          created_at: string
+          dispersed_quantity: number
+          id: string
+          item_id: string
+          notes: string | null
+          organization_id: string
+          requested_quantity: number
+          requisition_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dispersed_quantity?: number
+          id?: string
+          item_id: string
+          notes?: string | null
+          organization_id: string
+          requested_quantity: number
+          requisition_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dispersed_quantity?: number
+          id?: string
+          item_id?: string
+          notes?: string | null
+          organization_id?: string
+          requested_quantity?: number
+          requisition_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_requisition_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_requisition_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_requisition_items_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_requisitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_requisitions: {
+        Row: {
+          created_at: string
+          emergency_justification: string | null
+          id: string
+          is_emergency: boolean
+          notes: string | null
+          organization_id: string
+          requesting_department_id: string
+          requisition_number: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string
+          supply_department_id: string
+          target_delivery_week: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          emergency_justification?: string | null
+          id?: string
+          is_emergency?: boolean
+          notes?: string | null
+          organization_id: string
+          requesting_department_id: string
+          requisition_number: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by: string
+          supply_department_id: string
+          target_delivery_week: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          emergency_justification?: string | null
+          id?: string
+          is_emergency?: boolean
+          notes?: string | null
+          organization_id?: string
+          requesting_department_id?: string
+          requisition_number?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string
+          supply_department_id?: string
+          target_delivery_week?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_requisitions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_requisitions_requesting_department_id_organizati_fkey"
+            columns: ["requesting_department_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "inventory_requisitions_supply_department_id_organization_i_fkey"
+            columns: ["supply_department_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "organization_id"]
           },
         ]
       }
@@ -5349,6 +5492,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      disperse_inventory_requisition_item: {
+        Args: {
+          p_requisition_item_id: string
+          p_quantity?: number
+        }
+        Returns: string
+      }
       enroll_patient_at_clinic: {
         Args: {
           p_organization_id: string
@@ -6082,6 +6232,12 @@ export type Database = {
           current_fee: number
           current_fee_effective_from: string
         }[]
+      }
+      get_root_supply_department: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: string
       }
       get_specialist_options: {
         Args: {
@@ -7023,6 +7179,13 @@ export type Database = {
         }
         Returns: string
       }
+      set_root_supply_department: {
+        Args: {
+          p_organization_id: string
+          p_department_id: string
+        }
+        Returns: undefined
+      }
       settle_doctor_payouts: {
         Args: {
           p_organization_id: string
@@ -7052,6 +7215,18 @@ export type Database = {
           p_claim_id: string
         }
         Returns: undefined
+      }
+      submit_inventory_requisition: {
+        Args: {
+          p_organization_id: string
+          p_requesting_department_id: string
+          p_items: Json
+          p_notes?: string
+          p_is_emergency?: boolean
+          p_emergency_justification?: string
+          p_simulated_date?: string
+        }
+        Returns: string
       }
       sync_inventory_hold_to_billing: {
         Args: {
