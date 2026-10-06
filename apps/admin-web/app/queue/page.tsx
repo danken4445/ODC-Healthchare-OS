@@ -15,14 +15,14 @@ export default function QueuePage() {
   const [queue, setQueue] = useState<WaitingRoomQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadQueue = async () => {
+  const loadQueue = async (silent = false) => {
     if (!organization) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const result = await getWaitingRoomQueue(client, organization.id);
     if (!result.error && result.data) {
       setQueue(result.data);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   useEffect(() => {
@@ -31,12 +31,12 @@ export default function QueuePage() {
     const unsubQueue = subscribeToWaitingRoomQueue(
       client,
       organization.id,
-      () => void loadQueue(),
+      () => void loadQueue(true),
     );
     const unsubAppts = subscribeToAppointmentQueue(
       client,
       organization.id,
-      () => void loadQueue(),
+      () => void loadQueue(true),
     );
     return () => {
       unsubQueue();

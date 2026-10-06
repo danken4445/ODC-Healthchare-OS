@@ -25,7 +25,7 @@ import { SummaryStrip } from "./summary-strip";
 import { Tabs, TabsContent } from "./ui/tabs";
 
 export function StaffManagementScreen() {
-  const { client, email, error: accessError, isSuperadmin, loading: authLoading, organization, permissions } = useAdminData();
+  const { assignedDepartmentId, client, email, error: accessError, isSuperadmin, loading: authLoading, organization, permissions } = useAdminData();
   const [revision, setRevision] = useState(0);
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [roles, setRoles] = useState<ClinicRoleDefinition[]>([]);
@@ -52,14 +52,18 @@ export function StaffManagementScreen() {
       if (departmentResult.error || roleResult.error) {
         setCatalogError(departmentResult.error?.message ?? roleResult.error?.message ?? "Staff configuration could not be loaded.");
       } else {
-        setDepartments(departmentResult.data);
+        let depts = departmentResult.data;
+        if (assignedDepartmentId && !isSuperadmin) {
+          depts = depts.filter((d) => d.id === assignedDepartmentId);
+        }
+        setDepartments(depts);
         setRoles(roleResult.data);
       }
       setCatalogLoading(false);
     }
     void loadCatalogs();
     return () => { current = false; };
-  }, [client, organization, revision]);
+  }, [assignedDepartmentId, client, isSuperadmin, organization, revision]);
 
   const departmentRows = useMemo<DataRow[]>(() => departments.map((department) => ({
     id: department.id,
@@ -82,8 +86,8 @@ export function StaffManagementScreen() {
 
   if (!authLoading && !email) return <AdminSignIn />;
   const summaryItems = [
-    { label: "Staff accounts", value: staffRecords.data.length.toLocaleString(), detail: "Assigned to this clinic" },
-    { label: "Active departments", value: departments.filter((department) => department.active).length.toLocaleString(), detail: `${departments.length} total departments` },
+    { label: "Staff accounts", value: staffRecords.data.length.toLocaleString(), detail: assignedDepartmentId && !isSuperadmin ? "Assigned to your department" : "Assigned to this clinic" },
+    { label: "Active departments", value: departments.filter((department) => department.active).length.toLocaleString(), detail: assignedDepartmentId && !isSuperadmin ? "Your assigned department" : `${departments.length} total departments` },
     { label: "Configured roles", value: roles.length.toLocaleString(), detail: `${roles.filter((role) => role.isCustom).length} custom roles` },
   ];
 

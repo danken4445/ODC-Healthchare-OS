@@ -124,7 +124,7 @@ function useCanManage(dataset: AdminDataset) {
 }
 
 function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps) {
-  const { client, organization } = useAdminData();
+  const { assignedDepartmentId, client, isSuperadmin, organization } = useAdminData();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -162,7 +162,13 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
       if (roleResult.error) setError(roleResult.error.message);
       else setRoles(roleResult.data);
       if (staffResult.error) setError(staffResult.error.message);
-      else setDepartments(staffResult.data.departments.filter((department) => department.active).map((department) => ({ id: department.id, label: department.name })));
+      else {
+        let depts = staffResult.data.departments.filter((department) => department.active);
+        if (assignedDepartmentId && !isSuperadmin) {
+          depts = depts.filter((d) => d.id === assignedDepartmentId);
+        }
+        setDepartments(depts.map((department) => ({ id: department.id, label: department.name })));
+      }
     } else if (dataset === "pos") {
       const [itemResult, stockResult] = await Promise.all([
         client.from("inventory_items").select("id, name, sku, selling_price").eq("organization_id", organization.id).eq("active", true).order("name"),
@@ -176,7 +182,7 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
       }
     }
     setLoadingOptions(false);
-  }, [client, dataset, organization]);
+  }, [assignedDepartmentId, client, dataset, isSuperadmin, organization]);
 
   useEffect(() => {
     if (open) void loadOptions();
@@ -213,6 +219,7 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
         active: Boolean(form.get("active")),
       });
     } else if (dataset === "staff" && !editing) {
+      const targetDeptId = (assignedDepartmentId && !isSuperadmin) ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
       const accountResult = await createClinicAccount(client, {
         organizationId: organization.id,
         displayName: String(form.get("displayName") ?? "").trim(),
@@ -221,11 +228,12 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
         roleCode: String(form.get("roleCode") ?? "front_desk"),
       });
       result = accountResult;
-      if (!accountResult.error && accountResult.data && form.get("departmentId")) {
-        result = await assignStaffDepartment(client, { organizationId: organization.id, userId: accountResult.data.id, departmentId: String(form.get("departmentId")) });
+      if (!accountResult.error && accountResult.data && targetDeptId) {
+        result = await assignStaffDepartment(client, { organizationId: organization.id, userId: accountResult.data.id, departmentId: targetDeptId });
       }
     } else if (dataset === "staff" && editing) {
-      result = await assignStaffDepartment(client, { organizationId: organization.id, userId: value(row, "id"), departmentId: String(form.get("departmentId") || "") || null });
+      const targetDeptId = (assignedDepartmentId && !isSuperadmin) ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
+      result = await assignStaffDepartment(client, { organizationId: organization.id, userId: value(row, "id"), departmentId: targetDeptId });
     } else if (dataset === "appointments") {
       result = await bookAppointmentSlot(client, String(form.get("slotId")), String(form.get("patientId")), String(form.get("deliveryMode")) as AppointmentDeliveryMode, organization.id);
     } else if (dataset === "billing") {
@@ -297,7 +305,20 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
 
           {dataset === "staff" ? <div className="form-grid">
             {!editing ? <><Field label="Full name"><Input name="displayName" required /></Field><Field label="Work email"><Input name="email" type="email" required /></Field><Field label="Temporary password"><Input name="password" type="password" minLength={8} required /></Field><Field label="Role"><Select name="roleCode" defaultValue="front_desk">{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</Select></Field></> : <div className="confirmation-summary field-span"><span>Staff member</span><strong>{value(row, "name")}</strong></div>}
-            <Field label="Department" span><Select name="departmentId" defaultValue={value(row, "departmentId")}><option value="">Not assigned</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.label}</option>)}</Select></Field>
+            <Field label="Department" span>
+              <Select
+                name="departmentId"
+                defaultValue={value(row, "departmentId") || (assignedDepartmentId ?? "")}
+                disabled={Boolean(assignedDepartmentId && !isSuperadmin)}
+              >
+                {!(assignedDepartmentId && !isSuperadmin) && <option value="">Not assigned</option>}
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div> : null}
 
           {dataset === "appointments" ? <div className="form-grid">

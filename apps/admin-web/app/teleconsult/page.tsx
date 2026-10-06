@@ -193,10 +193,10 @@ export default function TeleconsultPage() {
     [showToast],
   );
 
-  const loadTeleconsults = useCallback(async () => {
+  const loadTeleconsults = useCallback(async (silent = false) => {
     if (!organization) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       // Attempt to load practitioner roles to associate clinician names
       const practitionerRoleMap = new Map<string, string>();
@@ -248,7 +248,7 @@ export default function TeleconsultPage() {
 
       if (error) {
         console.warn("Error fetching teleconsult appointments:", error);
-        setTeleconsults([]);
+        if (!silent) setTeleconsults([]);
         return;
       }
 
@@ -328,9 +328,9 @@ export default function TeleconsultPage() {
       setTeleconsults(mapped);
     } catch (err) {
       console.warn("Failed to load teleconsult appointments:", err);
-      setTeleconsults([]);
+      if (!silent) setTeleconsults([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [client, organization]);
 
@@ -340,7 +340,7 @@ export default function TeleconsultPage() {
     const unsub = subscribeToAppointmentQueue(
       client,
       organization.id,
-      () => void loadTeleconsults(),
+      () => void loadTeleconsults(true),
     );
     return () => {
       unsub();

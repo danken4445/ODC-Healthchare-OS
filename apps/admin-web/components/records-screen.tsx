@@ -45,18 +45,25 @@ export function RecordsScreen({ config, actionHref }: { config: RecordsConfig; a
         title={config.title}
       />
       {summaries.length ? <SummaryStrip items={summaries} /> : null}
-      {error ? (
+      {error && !data.length ? (
         <section className="data-error" role="alert"><strong>Database records could not be loaded.</strong><p>{error}</p></section>
-      ) : loading ? (
+      ) : loading && !data.length ? (
         <section className="data-loading" aria-live="polite">Loading database records…</section>
       ) : (
-        <DataTable
-          caption={config.title}
-          columns={config.columns}
-          data={data}
-          emptyMessage={config.emptyMessage}
-          rowActions={datasetsWithRowActions.has(config.dataset) ? rowActions : undefined}
-        />
+        <>
+          {error ? (
+            <div className="data-error-banner" role="alert" style={{ marginBottom: "1rem" }}>
+              <strong>Notice:</strong> {error}
+            </div>
+          ) : null}
+          <DataTable
+            caption={config.title}
+            columns={config.columns}
+            data={data}
+            emptyMessage={config.emptyMessage}
+            rowActions={datasetsWithRowActions.has(config.dataset) ? rowActions : undefined}
+          />
+        </>
       )}
     </>
   );

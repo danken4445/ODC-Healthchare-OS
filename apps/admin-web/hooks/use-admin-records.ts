@@ -66,6 +66,7 @@ export function useAdminRecords(
   revision = 0,
 ): AdminRecordsState {
   const {
+    assignedDepartmentId,
     client,
     error: accessError,
     isSuperadmin,
@@ -111,13 +112,19 @@ export function useAdminRecords(
         });
         return;
       }
-      const cacheKey = `records:${dataset}:${organizationId ?? "platform"}:${isSuperadmin ? "superadmin" : "clinic"}:${revision}`;
+      const cacheKey = `records:${dataset}:${organizationId ?? "platform"}:${isSuperadmin ? "superadmin" : "clinic"}:${assignedDepartmentId ?? "nodept"}:${revision}`;
       const cached = readCache<AdminRecordsState>(cacheKey);
-      if (!bypassCache && dataset !== "appointments" && cached) {
+      if (cached) {
         setState(cached);
-        return;
+        if (!bypassCache && dataset !== "appointments") {
+          return;
+        }
       }
-      setState((previous) => ({ ...previous, error: null, loading: true }));
+      setState((previous) => ({
+        ...previous,
+        error: null,
+        loading: previous.data.length === 0 && (!cached || cached.data.length === 0),
+      }));
       try {
         let data: DataRow[] = [];
         let summaries: SummaryItem[] = [];
@@ -351,7 +358,13 @@ export function useAdminRecords(
           const departments = new Map(
             result.data.departments.map((item) => [item.id, item.name]),
           );
-          data = result.data.staff.map((member) => ({
+          let staffMembers = result.data.staff;
+          if (assignedDepartmentId && !isSuperadmin) {
+            staffMembers = staffMembers.filter(
+              (member) => member.departmentId === assignedDepartmentId,
+            );
+          }
+          data = staffMembers.map((member) => ({
             id: member.userId,
             userId: member.userId,
             active: member.active,
@@ -369,21 +382,21 @@ export function useAdminRecords(
             {
               label: "Staff accounts",
               value: data.length.toLocaleString(),
-              detail: "Assigned to this clinic",
+              detail: assignedDepartmentId && !isSuperadmin
+                ? `Assigned to ${departments.get(assignedDepartmentId) ?? "your department"}`
+                : "Assigned to this clinic",
             },
             {
               label: "Active",
-              value: result.data.staff
+              value: staffMembers
                 .filter((item) => item.active)
                 .length.toLocaleString(),
               detail: "Enabled accounts",
             },
             {
               label: "Departments",
-              value: result.data.departments
-                .filter((item) => item.active)
-                .length.toLocaleString(),
-              detail: "Active departments",
+              value: (assignedDepartmentId && !isSuperadmin ? 1 : result.data.departments.filter((item) => item.active).length).toLocaleString(),
+              detail: assignedDepartmentId && !isSuperadmin ? "Scoped department" : "Active departments",
             },
           ];
         } else if (dataset === "departments") {
@@ -392,8 +405,12 @@ export function useAdminRecords(
             getStaffAdministration(client, organizationId!),
           ]);
           if (deptResult.error) throw new Error(deptResult.error.message);
+          let deptList = deptResult.data;
+          if (assignedDepartmentId && !isSuperadmin) {
+            deptList = deptList.filter((dept) => dept.id === assignedDepartmentId);
+          }
           const staffList = staffResult.data?.staff ?? [];
-          data = deptResult.data.map((dept) => ({
+          data = deptList.map((dept) => ({
             id: dept.id,
             name: dept.name,
             code: dept.code,
@@ -408,11 +425,13 @@ export function useAdminRecords(
             {
               label: "Departments",
               value: data.length.toLocaleString(),
-              detail: "Total clinic departments",
+              detail: assignedDepartmentId && !isSuperadmin
+                ? "Your assigned department"
+                : "Total clinic departments",
             },
             {
               label: "Active",
-              value: deptResult.data
+              value: deptList
                 .filter((d) => d.active)
                 .length.toLocaleString(),
               detail: "Available for assignment and stock",
@@ -420,7 +439,7 @@ export function useAdminRecords(
             {
               label: "Assigned staff",
               value: staffList
-                .filter((m) => Boolean(m.departmentId))
+                .filter((m) => assignedDepartmentId && !isSuperadmin ? m.departmentId === assignedDepartmentId : Boolean(m.departmentId))
                 .length.toLocaleString(),
               detail: "Members with department context",
             },
@@ -748,15 +767,15 @@ export function useAdminRecords(
         }
       } catch (error) {
         if (current)
-          setState({
-            data: [],
+          setState((previous) => ({
+            data: previous.data,
             error:
               error instanceof Error
                 ? error.message
                 : "Database records could not be loaded.",
             loading: false,
-            summaries: [],
-          });
+            summaries: previous.summaries,
+          }));
       }
     }
     void load();

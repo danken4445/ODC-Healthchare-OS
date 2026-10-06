@@ -132,14 +132,14 @@ export function useVesperDashboardData() {
   const [notifications, setNotifications] = useState<VesperNotification[]>([]);
   const [appointments, setAppointments] = useState<AppointmentQueueItem[]>([]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (silent = false) => {
     if (!organization) {
       setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       // 1. Fetch real patients from Supabase
@@ -218,7 +218,7 @@ export function useVesperDashboardData() {
         appointmentsRes.value.data
       ) {
         setAppointments(appointmentsRes.value.data);
-      } else {
+      } else if (!silent) {
         setAppointments([]);
       }
 
@@ -569,7 +569,7 @@ export function useVesperDashboardData() {
       console.warn("Error loading Vesper dashboard data from Supabase:", err);
       setError(err?.message ?? "Failed to load clinic records");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [client, organization]);
 
@@ -579,12 +579,12 @@ export function useVesperDashboardData() {
     const unsubscribeQueue = subscribeToAppointmentQueue(
       client,
       organization.id,
-      () => void loadData(),
+      () => void loadData(true),
     );
     const unsubscribeWaiting = subscribeToWaitingRoomQueue(
       client,
       organization.id,
-      () => void loadData(),
+      () => void loadData(true),
     );
     return () => {
       unsubscribeQueue();
@@ -595,7 +595,7 @@ export function useVesperDashboardData() {
   const appointmentNotifs = useOptionalAppointmentNotifications();
   useEffect(() => {
     if (appointmentNotifs?.latestNotification && organization) {
-      void loadData();
+      void loadData(true);
     }
   }, [appointmentNotifs?.latestNotification, organization, loadData]);
 
