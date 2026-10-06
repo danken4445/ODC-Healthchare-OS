@@ -30,6 +30,15 @@ import {
   TabPanel,
 } from "@odyssey/ui";
 import Link from "next/link";
+import {
+  Boxes,
+  Building2,
+  CircleDollarSign,
+  Landmark,
+  RefreshCw,
+  TrendingUp,
+  TriangleAlert,
+} from "lucide-react";
 import { useAdminData } from "../../components/admin-data-context";
 import { AdminSignIn } from "../../components/admin-sign-in";
 import { InventoryHierarchy } from "../../components/inventory-hierarchy";
@@ -79,10 +88,7 @@ function fmtTime(value: string | null | undefined): string {
 }
 
 type StockStatus = "in_stock" | "low" | "out";
-function getStockStatus(
-  quantity: number,
-  reorderLevel: number,
-): StockStatus {
+function getStockStatus(quantity: number, reorderLevel: number): StockStatus {
   if (quantity <= 0) return "out";
   if (quantity <= reorderLevel) return "low";
   return "in_stock";
@@ -99,28 +105,34 @@ const stockStatusConfig: Record<
 
 /* ─── SR Operations Tabs ──────────────────────────────────────── */
 const srTabs = [
-  { id: "receive", label: "Receive stock", icon: "📦" },
-  { id: "adjust", label: "Adjust", icon: "🔧" },
-  { id: "transfer", label: "Transfer", icon: "🔀" },
-  { id: "add-item", label: "Add item", icon: "➕" },
-  { id: "pricing", label: "Pricing", icon: "₱" },
-  { id: "add-dept", label: "Add department", icon: "🏢" },
+  { id: "receive", label: "Receive stock" },
+  { id: "adjust", label: "Adjust" },
+  { id: "transfer", label: "Transfer" },
+  { id: "add-item", label: "Add item" },
+  { id: "pricing", label: "Pricing" },
+  { id: "add-dept", label: "Add department" },
 ];
 
 /* ─── Page Component ──────────────────────────────────────────── */
 
 export default function InventoryPage() {
   /* Auth and workspace state */
-  const { client, email: signedInAs, organization, permissions, signOut: handleSignOut } = useAdminData();
+  const {
+    client,
+    email: signedInAs,
+    organization,
+    permissions,
+    signOut: handleSignOut,
+  } = useAdminData();
   const organizationId = organization?.id ?? "";
   const canManage = permissions.includes("can_manage_inventory");
   const canTag = permissions.includes("can_tag_inventory_usage");
   const [workspace, setWorkspace] =
     useState<InventoryWorkspace>(emptyWorkspace);
   const [encounters, setEncounters] = useState<InventoryEncounterOption[]>([]);
-  const [inventoryDepartmentId, setInventoryDepartmentId] = useState<string | null>(
-    null,
-  );
+  const [inventoryDepartmentId, setInventoryDepartmentId] = useState<
+    string | null
+  >(null);
   const [inventoryDepartmentSelection, setInventoryDepartmentSelection] =
     useState("");
   const [busy, setBusy] = useState(false);
@@ -139,13 +151,8 @@ export default function InventoryPage() {
   const itemTotals = useMemo(
     () =>
       workspace.items.map((item) => {
-        const stockRows = workspace.stock.filter(
-          (s) => s.item_id === item.id,
-        );
-        const total = stockRows.reduce(
-          (sum, s) => sum + Number(s.quantity),
-          0,
-        );
+        const stockRows = workspace.stock.filter((s) => s.item_id === item.id);
+        const total = stockRows.reduce((sum, s) => sum + Number(s.quantity), 0);
         const lowestReorder = stockRows.reduce(
           (min, s) => Math.min(min, Number(s.reorder_level)),
           Infinity,
@@ -155,44 +162,41 @@ export default function InventoryPage() {
     [workspace.items, workspace.stock],
   );
 
-  const stockRows = useMemo(
-    () => {
-      const heldQuantityByStockId = new Map<string, number>();
-      for (const hold of workspace.holds) {
-        heldQuantityByStockId.set(
-          hold.stock_id,
-          (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
+  const stockRows = useMemo(() => {
+    const heldQuantityByStockId = new Map<string, number>();
+    for (const hold of workspace.holds) {
+      heldQuantityByStockId.set(
+        hold.stock_id,
+        (heldQuantityByStockId.get(hold.stock_id) ?? 0) + Number(hold.quantity),
+      );
+    }
+    return workspace.stock
+      .map((stock) => {
+        const item = workspace.items.find((i) => i.id === stock.item_id);
+        const dept = workspace.departments.find(
+          (d) => d.id === stock.department_id,
         );
-      }
-      return workspace.stock
-        .map((stock) => {
-          const item = workspace.items.find((i) => i.id === stock.item_id);
-          const dept = workspace.departments.find(
-            (d) => d.id === stock.department_id,
-          );
-          return {
-            ...stock,
-            availableQuantity: Math.max(
-              0,
-              Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0),
-            ),
-            itemName: item?.name ?? "Unknown item",
-            itemSku: item?.sku ?? "—",
-            unit: item?.unit_of_measure ?? "unit",
-            departmentName: dept?.name ?? "Unknown",
-            departmentCode: dept?.code ?? "—",
-            stockStatus: getStockStatus(
-              Number(stock.quantity),
-              Number(stock.reorder_level),
-            ),
-          };
-        })
-        .filter(
-          (row) =>
-            stockFilter === "all" || row.department_id === stockFilter,
-        );
-    }, [workspace, stockFilter],
-  );
+        return {
+          ...stock,
+          availableQuantity: Math.max(
+            0,
+            Number(stock.quantity) - (heldQuantityByStockId.get(stock.id) ?? 0),
+          ),
+          itemName: item?.name ?? "Unknown item",
+          itemSku: item?.sku ?? "—",
+          unit: item?.unit_of_measure ?? "unit",
+          departmentName: dept?.name ?? "Unknown",
+          departmentCode: dept?.code ?? "—",
+          stockStatus: getStockStatus(
+            Number(stock.quantity),
+            Number(stock.reorder_level),
+          ),
+        };
+      })
+      .filter(
+        (row) => stockFilter === "all" || row.department_id === stockFilter,
+      );
+  }, [workspace, stockFilter]);
 
   const taggableStockRows = useMemo(() => {
     const heldQuantityByStockId = new Map<string, number>();
@@ -235,8 +239,7 @@ export default function InventoryPage() {
     ).length;
     const lowStockCount = workspace.stock.filter(
       (s) =>
-        Number(s.quantity) > 0 &&
-        Number(s.quantity) <= Number(s.reorder_level),
+        Number(s.quantity) > 0 && Number(s.quantity) <= Number(s.reorder_level),
     ).length;
     const outOfStockCount = workspace.stock.filter(
       (s) => Number(s.quantity) <= 0,
@@ -283,19 +286,28 @@ export default function InventoryPage() {
   /* ─── Effects ─────────────────────────────────────────────── */
   useEffect(() => {
     let current = true;
-    if (!signedInAs || !organizationId) return () => { current = false; };
-    void getCurrentStaffDepartment(client, organizationId).then(async (departmentResult) => {
-      if (!current) return;
-      if (departmentResult.error) {
-        setStatus(`Department context query failed: ${departmentResult.error.message}`);
-        return;
-      }
-      setInventoryDepartmentId(departmentResult.data);
-      setInventoryDepartmentSelection(departmentResult.data ?? "");
-      setStatus("Inventory workspace ready.");
-      await loadInventory(organizationId, canManage);
-    });
-    return () => { current = false; };
+    if (!signedInAs || !organizationId)
+      return () => {
+        current = false;
+      };
+    void getCurrentStaffDepartment(client, organizationId).then(
+      async (departmentResult) => {
+        if (!current) return;
+        if (departmentResult.error) {
+          setStatus(
+            `Department context query failed: ${departmentResult.error.message}`,
+          );
+          return;
+        }
+        setInventoryDepartmentId(departmentResult.data);
+        setInventoryDepartmentSelection(departmentResult.data ?? "");
+        setStatus("Inventory workspace ready.");
+        await loadInventory(organizationId, canManage);
+      },
+    );
+    return () => {
+      current = false;
+    };
   }, [canManage, client, loadInventory, organizationId, signedInAs]);
 
   useEffect(() => {
@@ -332,7 +344,8 @@ export default function InventoryPage() {
     if (forceSimpleMode && mode === "visual") return;
     setPreferredViewMode(mode);
     const result = await saveMyInventoryViewMode(client, organizationId, mode);
-    if (result.error) setStatus(`Could not save view preference: ${result.error.message}`);
+    if (result.error)
+      setStatus(`Could not save view preference: ${result.error.message}`);
   }
 
   /* ─── Handlers ────────────────────────────────────────────── */
@@ -361,7 +374,9 @@ export default function InventoryPage() {
       <main className="inv-login">
         <div className="inv-login__card">
           <div className="inv-login__header">
-            <span className="inv-login__icon">📦</span>
+            <span className="inv-login__icon" aria-hidden="true">
+              <Boxes size={23} />
+            </span>
             <p className="eyebrow">Supply Room Operations</p>
             <h1>Inventory Management</h1>
             <p className="hint">
@@ -387,23 +402,24 @@ export default function InventoryPage() {
       <div className="inv-header">
         <div className="inv-header__left">
           <p className="eyebrow">Supply Room Operations</p>
-          <h1>
-            Inventory Dashboard
-            {currentClinic ? (
-              <span className="inv-header__clinic">{currentClinic.name}</span>
-            ) : null}
-          </h1>
+          <h1>Inventory Dashboard</h1>
+          {currentClinic ? (
+            <span className="inv-header__clinic">
+              <Building2 size={14} aria-hidden="true" />
+              {currentClinic.name}
+            </span>
+          ) : null}
         </div>
         <div className="inv-header__right">
-          <span
-            className="live-indicator"
-            data-live={liveStatus === "Live"}
-          >
+          <span className="live-indicator" data-live={liveStatus === "Live"}>
             {liveStatus} stock
           </span>
           <span className="inv-header__user">{signedInAs}</span>
-          <Link href="/appointments">Appointments</Link>
+          <Link className="inv-header__link" href="/appointments">
+            Appointments
+          </Link>
           <Button size="sm" onClick={() => void loadInventory()}>
+            <RefreshCw size={15} aria-hidden="true" />
             Refresh
           </Button>
           <Button
@@ -418,23 +434,29 @@ export default function InventoryPage() {
 
       {/* ── Clinic selector ─────────────────────────────────── */}
       {/* ── KPI Cards ───────────────────────────────────────── */}
-      <section className="inv-kpi-grid">
+      <section className="inv-kpi-grid" aria-label="Inventory overview">
         <div className="inv-kpi-card">
-          <span className="inv-kpi-card__icon">📋</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <Boxes size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">{kpi.totalItems}</span>
             <span className="inv-kpi-card__label">Active items</span>
           </div>
         </div>
         <div className="inv-kpi-card">
-          <span className="inv-kpi-card__icon">🏢</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <Building2 size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">{kpi.totalDepartments}</span>
             <span className="inv-kpi-card__label">Departments</span>
           </div>
         </div>
         <div className="inv-kpi-card inv-kpi-card--alert">
-          <span className="inv-kpi-card__icon">⚠️</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <TriangleAlert size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">{kpi.alertCount}</span>
             <span className="inv-kpi-card__label">
@@ -445,7 +467,9 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className="inv-kpi-card inv-kpi-card--value">
-          <span className="inv-kpi-card__icon">💰</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <Landmark size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">
               {fmtCurrency(kpi.inventoryCost)}
@@ -454,7 +478,9 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className="inv-kpi-card inv-kpi-card--value">
-          <span className="inv-kpi-card__icon" aria-hidden="true">₱</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <CircleDollarSign size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">
               {fmtCurrency(kpi.retailValue)}
@@ -463,7 +489,9 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className="inv-kpi-card inv-kpi-card--value">
-          <span className="inv-kpi-card__icon" aria-hidden="true">↗</span>
+          <span className="inv-kpi-card__icon" aria-hidden="true">
+            <TrendingUp size={19} />
+          </span>
           <div className="inv-kpi-card__content">
             <span className="inv-kpi-card__value">
               {fmtCurrency(kpi.potentialMargin)}
@@ -480,17 +508,22 @@ export default function InventoryPage() {
         workspace={workspace}
       />
       {forceSimpleMode ? (
-        <p className="inventory-compact-note">Simple Mode is used on compact phone viewports. Your saved preference remains unchanged.</p>
+        <p className="inventory-compact-note">
+          Simple Mode is used on compact phone viewports. Your saved preference
+          remains unchanged.
+        </p>
       ) : null}
 
-      <section>
+      <section className="inv-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Real-time ledger</p>
             <h2>Stock by department</h2>
           </div>
           <div className="inv-filter">
+            <label htmlFor="stock-department-filter">Department</label>
             <select
+              id="stock-department-filter"
               className="odyssey-input"
               value={stockFilter}
               onChange={(event) => setStockFilter(event.target.value)}
@@ -515,9 +548,7 @@ export default function InventoryPage() {
             {
               id: "sku",
               header: "SKU",
-              cell: (row) => (
-                <span className="inv-sku">{row.itemSku}</span>
-              ),
+              cell: (row) => <span className="inv-sku">{row.itemSku}</span>,
             },
             {
               id: "item",
@@ -543,17 +574,14 @@ export default function InventoryPage() {
             {
               id: "reorder",
               header: "Reorder at",
-              cell: (row) =>
-                `${fmt(Number(row.reorder_level))} ${row.unit}`,
+              cell: (row) => `${fmt(Number(row.reorder_level))} ${row.unit}`,
             },
             {
               id: "status",
               header: "Status",
               cell: (row) => {
                 const config = stockStatusConfig[row.stockStatus];
-                return (
-                  <Badge variant={config.variant}>{config.label}</Badge>
-                );
+                return <Badge variant={config.variant}>{config.label}</Badge>;
               },
             },
           ]}
@@ -561,7 +589,7 @@ export default function InventoryPage() {
       </section>
 
       {/* ── Item Master Totals ──────────────────────────────── */}
-      <section>
+      <section className="inv-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Catalog</p>
@@ -580,9 +608,7 @@ export default function InventoryPage() {
             {
               id: "sku",
               header: "SKU",
-              cell: (row) => (
-                <span className="inv-sku">{row.sku}</span>
-              ),
+              cell: (row) => <span className="inv-sku">{row.sku}</span>,
             },
             {
               id: "name",
@@ -606,8 +632,7 @@ export default function InventoryPage() {
             {
               id: "cost",
               header: "Unit cost",
-              cell: (row) =>
-                fmtCurrency(Number(row.unit_cost), row.currency),
+              cell: (row) => fmtCurrency(Number(row.unit_cost), row.currency),
             },
             {
               id: "price",
@@ -621,7 +646,8 @@ export default function InventoryPage() {
               cell: (row) => {
                 const sellingPrice = Number(row.selling_price);
                 const margin = sellingPrice - Number(row.unit_cost);
-                const rate = sellingPrice > 0 ? (margin / sellingPrice) * 100 : 0;
+                const rate =
+                  sellingPrice > 0 ? (margin / sellingPrice) * 100 : 0;
                 return `${fmtCurrency(margin, row.currency)} (${rate.toFixed(1)}%)`;
               },
             },
@@ -641,11 +667,15 @@ export default function InventoryPage() {
 
       {/* ── SR Operations ───────────────────────────────────── */}
       {canManage && (
-        <section>
+        <section className="inv-section inv-section--operations">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Supply room</p>
               <h2>SR Operations</h2>
+              <p className="inv-section__description">
+                Receive, move, and reconcile physical stock while preserving the
+                audit ledger.
+              </p>
             </div>
           </div>
 
@@ -668,33 +698,21 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        adjustDepartmentStock(
-                          client,
-                          {
-                            itemId: String(fields.get("itemId")),
-                            departmentId: String(
-                              fields.get("departmentId"),
-                            ),
-                            quantityDelta: Number(
-                              fields.get("quantity"),
-                            ),
-                            reason: String(fields.get("reason")),
-                            movementType: String(
-                              fields.get("movementType"),
-                            ) as "opening" | "receipt",
-                          },
-                        ),
+                        adjustDepartmentStock(client, {
+                          itemId: String(fields.get("itemId")),
+                          departmentId: String(fields.get("departmentId")),
+                          quantityDelta: Number(fields.get("quantity")),
+                          reason: String(fields.get("reason")),
+                          movementType: String(fields.get("movementType")) as
+                            "opening" | "receipt",
+                        }),
                       "Stock received and ledger updated.",
                     )
                   }
                 >
                   <div className="two-column">
                     <Field label="Item">
-                      <select
-                        className="odyssey-input"
-                        name="itemId"
-                        required
-                      >
+                      <select className="odyssey-input" name="itemId" required>
                         <option value="" disabled>
                           Select an item
                         </option>
@@ -719,10 +737,7 @@ export default function InventoryPage() {
                         {workspace.departments
                           .filter((department) => department.active)
                           .map((department) => (
-                            <option
-                              key={department.id}
-                              value={department.id}
-                            >
+                            <option key={department.id} value={department.id}>
                               {department.name} ({department.code})
                             </option>
                           ))}
@@ -731,10 +746,7 @@ export default function InventoryPage() {
                   </div>
                   <div className="two-column">
                     <Field label="Movement type">
-                      <select
-                        className="odyssey-input"
-                        name="movementType"
-                      >
+                      <select className="odyssey-input" name="movementType">
                         <option value="receipt">Receipt</option>
                         <option value="opening">Opening stock</option>
                       </select>
@@ -769,8 +781,8 @@ export default function InventoryPage() {
               <Card>
                 <h3>Stock correction</h3>
                 <p className="hint">
-                  Post an adjustment to correct miscounts, breakage, or
-                  expiry. Use a negative number to reduce stock.
+                  Post an adjustment to correct miscounts, breakage, or expiry.
+                  Use a negative number to reduce stock.
                 </p>
                 <form
                   className="stack"
@@ -778,31 +790,20 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        adjustDepartmentStock(
-                          client,
-                          {
-                            itemId: String(fields.get("itemId")),
-                            departmentId: String(
-                              fields.get("departmentId"),
-                            ),
-                            quantityDelta: Number(
-                              fields.get("quantity"),
-                            ),
-                            reason: String(fields.get("reason")),
-                            movementType: "adjustment",
-                          },
-                        ),
+                        adjustDepartmentStock(client, {
+                          itemId: String(fields.get("itemId")),
+                          departmentId: String(fields.get("departmentId")),
+                          quantityDelta: Number(fields.get("quantity")),
+                          reason: String(fields.get("reason")),
+                          movementType: "adjustment",
+                        }),
                       "Stock adjustment posted.",
                     )
                   }
                 >
                   <div className="two-column">
                     <Field label="Item">
-                      <select
-                        className="odyssey-input"
-                        name="itemId"
-                        required
-                      >
+                      <select className="odyssey-input" name="itemId" required>
                         <option value="" disabled>
                           Select an item
                         </option>
@@ -827,10 +828,7 @@ export default function InventoryPage() {
                         {workspace.departments
                           .filter((department) => department.active)
                           .map((department) => (
-                            <option
-                              key={department.id}
-                              value={department.id}
-                            >
+                            <option key={department.id} value={department.id}>
                               {department.name}
                             </option>
                           ))}
@@ -868,8 +866,8 @@ export default function InventoryPage() {
               <Card>
                 <h3>Inter-department transfer</h3>
                 <p className="hint">
-                  Move stock from one department to another within the
-                  same clinic. Both sides update atomically.
+                  Move stock from one department to another within the same
+                  clinic. Both sides update atomically.
                 </p>
                 <form
                   className="stack"
@@ -877,26 +875,15 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        transferDepartmentStock(
-                          client,
-                          {
-                            itemId: String(
-                              fields.get("transferItemId"),
-                            ),
-                            fromDepartmentId: String(
-                              fields.get("fromDepartmentId"),
-                            ),
-                            toDepartmentId: String(
-                              fields.get("toDepartmentId"),
-                            ),
-                            quantity: Number(
-                              fields.get("transferQuantity"),
-                            ),
-                            reason: String(
-                              fields.get("transferReason"),
-                            ),
-                          },
-                        ),
+                        transferDepartmentStock(client, {
+                          itemId: String(fields.get("transferItemId")),
+                          fromDepartmentId: String(
+                            fields.get("fromDepartmentId"),
+                          ),
+                          toDepartmentId: String(fields.get("toDepartmentId")),
+                          quantity: Number(fields.get("transferQuantity")),
+                          reason: String(fields.get("transferReason")),
+                        }),
                       "Stock transferred atomically between departments.",
                     )
                   }
@@ -932,10 +919,7 @@ export default function InventoryPage() {
                         {workspace.departments
                           .filter((department) => department.active)
                           .map((department) => (
-                            <option
-                              key={department.id}
-                              value={department.id}
-                            >
+                            <option key={department.id} value={department.id}>
                               {department.name}
                             </option>
                           ))}
@@ -953,10 +937,7 @@ export default function InventoryPage() {
                         {workspace.departments
                           .filter((department) => department.active)
                           .map((department) => (
-                            <option
-                              key={department.id}
-                              value={department.id}
-                            >
+                            <option key={department.id} value={department.id}>
                               {department.name}
                             </option>
                           ))}
@@ -994,8 +975,8 @@ export default function InventoryPage() {
               <Card>
                 <h3>Register new item master</h3>
                 <p className="hint">
-                  Add a new consumable or supply to the clinic catalog.
-                  Stock quantities are managed separately after adding.
+                  Add a new consumable or supply to the clinic catalog. Stock
+                  quantities are managed separately after adding.
                 </p>
                 <form
                   className="stack"
@@ -1003,21 +984,14 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        createInventoryItem(
-                          client,
-                          {
-                            organizationId,
-                            name: String(fields.get("name") ?? ""),
-                            description: String(
-                              fields.get("description") ?? "",
-                            ),
-                            unitOfMeasure: String(
-                              fields.get("unit") ?? "",
-                            ),
-                            unitCost: Number(fields.get("unitCost")),
-                            sellingPrice: Number(fields.get("sellingPrice")),
-                          },
-                        ),
+                        createInventoryItem(client, {
+                          organizationId,
+                          name: String(fields.get("name") ?? ""),
+                          description: String(fields.get("description") ?? ""),
+                          unitOfMeasure: String(fields.get("unit") ?? ""),
+                          unitCost: Number(fields.get("unitCost")),
+                          sellingPrice: Number(fields.get("sellingPrice")),
+                        }),
                       "Item added to the master catalog.",
                     )
                   }
@@ -1089,14 +1063,11 @@ export default function InventoryPage() {
                     void runForm(
                       event,
                       async (fields) =>
-                        updateInventoryItemPricing(
-                          client,
-                          {
-                            itemId: String(fields.get("itemId") ?? ""),
-                            unitCost: Number(fields.get("unitCost")),
-                            sellingPrice: Number(fields.get("sellingPrice")),
-                          },
-                        ),
+                        updateInventoryItemPricing(client, {
+                          itemId: String(fields.get("itemId") ?? ""),
+                          unitCost: Number(fields.get("unitCost")),
+                          sellingPrice: Number(fields.get("sellingPrice")),
+                        }),
                       "Item pricing updated. Future usage will use the new selling price.",
                     )
                   }
@@ -1161,8 +1132,8 @@ export default function InventoryPage() {
               <Card>
                 <h3>Create stock location</h3>
                 <p className="hint">
-                  Departments are the stock boundary. Each department
-                  maintains its own quantity per item.
+                  Departments are the stock boundary. Each department maintains
+                  its own quantity per item.
                 </p>
                 <form
                   className="stack"
@@ -1173,9 +1144,7 @@ export default function InventoryPage() {
                         createDepartment(client, {
                           organizationId,
                           name: String(fields.get("name") ?? ""),
-                          description: String(
-                            fields.get("description") ?? "",
-                          ),
+                          description: String(fields.get("description") ?? ""),
                         }),
                       "Department created as a new stock location.",
                     )
@@ -1238,11 +1207,7 @@ export default function InventoryPage() {
             }
           >
             <Field label="In-progress encounter">
-              <select
-                className="odyssey-input"
-                name="encounterId"
-                required
-              >
+              <select className="odyssey-input" name="encounterId" required>
                 <option value="">Select encounter</option>
                 {encounters.map((encounter) => (
                   <option key={encounter.id} value={encounter.id}>
@@ -1410,7 +1375,10 @@ export default function InventoryPage() {
                 header: "Recorded by",
                 cell: (row) => (
                   <span className="inv-actor-name">
-                    {row.actorName ?? (row.recorded_by ? row.recorded_by.slice(0, 8) : "System")}
+                    {row.actorName ??
+                      (row.recorded_by
+                        ? row.recorded_by.slice(0, 8)
+                        : "System")}
                   </span>
                 ),
               },
@@ -1433,7 +1401,8 @@ export default function InventoryPage() {
               <h2>Encounter usage records</h2>
             </div>
             <span className="hint">
-              Confirmed usage records are created only after billing finalization.
+              Confirmed usage records are created only after billing
+              finalization.
             </span>
           </div>
           <DataTable
@@ -1505,7 +1474,8 @@ export default function InventoryPage() {
                 header: "Tagged by",
                 cell: (row) => (
                   <span className="inv-actor-name">
-                    {row.actorName ?? (row.tagged_by ? row.tagged_by.slice(0, 8) : "—")}
+                    {row.actorName ??
+                      (row.tagged_by ? row.tagged_by.slice(0, 8) : "—")}
                   </span>
                 ),
               },
