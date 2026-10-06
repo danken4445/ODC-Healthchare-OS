@@ -3,24 +3,37 @@
 import {
   createNbbPharmacyPosSale,
   getNbbPharmacyPosCatalog,
+  listNbbPharmacyPosReceipts,
 } from "@odyssey/supabase-client";
-import type { NbbPharmacyPosCatalogItem, NbbPosCheckoutResult } from "@odyssey/types";
+import type {
+  NbbPharmacyPosCatalogItem,
+  NbbPosCheckoutResult,
+  NbbReceiptTransaction,
+} from "@odyssey/types";
 import { Button } from "@odyssey/ui";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Eye,
+  FileText,
+  Minus,
   Package,
   Pill,
   Plus,
-  Minus,
+  Printer,
+  ReceiptText,
   RefreshCw,
   Search,
   ShieldCheck,
   ShoppingBag,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminData } from "./admin-data-context";
+import { buildNbbPharmacyReceiptPrintDocument } from "./nbb-pharmacy-receipt-document";
 import { PageHeader } from "./page-header";
 
 interface CartLine {
@@ -59,6 +72,16 @@ export function NbbPharmacyPosTerminal({
   const [patientName, setPatientName] = useState("");
   const [cart, setCart] = useState<Map<string, CartLine>>(new Map());
 
+  // Navigation tab state
+  const [activeTab, setActiveTab] = useState<"terminal" | "history">("terminal");
+
+  // History state
+  const [historyList, setHistoryList] = useState<NbbReceiptTransaction[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historySearch, setHistorySearch] = useState("");
+  const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
+
   // Checkout submission state
   const [submitting, setSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -66,6 +89,7 @@ export function NbbPharmacyPosTerminal({
     result: NbbPosCheckoutResult;
     patientName: string;
     items: Array<{ name: string; quantity: number; standardCentavos: number }>;
+    issuedAt?: string;
   } | null>(null);
 
   const canManagePos = permissions.includes("can_manage_pos");
@@ -102,6 +126,40 @@ export function NbbPharmacyPosTerminal({
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  const loadHistory = useCallback(async () => {
+    if (!organizationId) return;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const res = await listNbbPharmacyPosReceipts(client, organizationId);
+    if (res.error) {
+      console.error("Failed to load receipt history:", res.error);
+      setHistoryError(res.error.message || "Failed to load receipt history.");
+    } else {
+      setHistoryList(res.data);
+    }
+    setHistoryLoading(false);
+  }, [client, organizationId]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return historyList;
+    return historyList.filter(
+      (txn) =>
+        txn.receiptNumber.toLowerCase().includes(q) ||
+        txn.patientName.toLowerCase().includes(q) ||
+        txn.invoiceNumber.toLowerCase().includes(q) ||
+        txn.items.some((it) => it.name.toLowerCase().includes(q))
+    );
+  }, [historyList, historySearch]);
+
+  const historyTotalStandardCentavos = useMemo(() => {
+    return historyList.reduce((acc, curr) => acc + BigInt(curr.standardTotalInCentavos), 0n);
+  }, [historyList]);
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -228,20 +286,182 @@ export function NbbPharmacyPosTerminal({
         quantity: l.quantity,
         standardCentavos: Number(l.catalogItem.standard_unit_price_in_centavos) * l.quantity,
       })),
+      issuedAt: new Date().toISOString(),
     });
     setCart(new Map());
     setPatientName("");
     setSubmitting(false);
+    void loadHistory();
   };
+
+  const printHistoricalReceipt = useCallback(
+    (receipt: NbbReceiptTransaction) => {
+      const html = buildNbbPharmacyReceiptPrintDocument({
+        organizationName,
+        receiptNumber: receipt.receiptNumber,
+        invoiceId: receipt.invoiceId,
+        patientName: receipt.patientName,
+        standardTotalCentavos: receipt.standardTotalInCentavos,
+        patientBalanceDueCentavos: receipt.patientBalanceDueCentavos,
+        items: receipt.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          standardCentavos: it.standardLineTotalInCentavos,
+        })),
+        issuedAt: receipt.completedAt,
+      });
+
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.top = "-9999px";
+      iframe.style.left = "-9999px";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "none";
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) {
+        window.print();
+        return;
+      }
+
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      iframe.contentWindow?.focus();
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.print();
+        } catch {
+          window.print();
+        } finally {
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+          }, 1000);
+        }
+      }, 200);
+    },
+    [organizationName]
+  );
+
+  const handlePrintReceipt = useCallback(() => {
+    if (!completedSale) return;
+    const html = buildNbbPharmacyReceiptPrintDocument({
+      organizationName,
+      receiptNumber: completedSale.result.receipt_number,
+      invoiceId: completedSale.result.invoice_id,
+      patientName: completedSale.patientName,
+      standardTotalCentavos: completedSale.result.standard_total_in_centavos,
+      patientBalanceDueCentavos: completedSale.result.patient_balance_due_in_centavos,
+      items: completedSale.items,
+      issuedAt: completedSale.issuedAt,
+    });
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.print();
+      } catch {
+        window.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 200);
+  }, [completedSale, organizationName]);
 
   const startNewSale = () => {
     setCompletedSale(null);
     setCheckoutError(null);
+    setActiveTab("terminal");
     void loadCatalog();
   };
 
   return (
     <div className="nbb-pos-container" style={{ padding: "1.5rem", maxWidth: "1400px", margin: "0 auto" }}>
+      <style>{`
+        @media print {
+          @page {
+            size: auto;
+            margin: 4mm;
+          }
+          body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .sidebar,
+          .mobile-header,
+          .org-context-bar,
+          .page-header,
+          .no-print,
+          .no-print *,
+          button,
+          .appointment-notification-toast {
+            display: none !important;
+          }
+          .workspace, .workspace__main, .nbb-pos-container {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+          }
+          .nbb-receipt-card {
+            width: 76mm !important;
+            max-width: 76mm !important;
+            margin: 0 !important;
+            padding: 3.5mm 3mm !important;
+            box-shadow: none !important;
+            border: 1px dashed #333333 !important;
+            border-radius: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            font-size: 10px !important;
+          }
+          .nbb-receipt-card * {
+            color: #000000 !important;
+            border-color: #333333 !important;
+          }
+          .nbb-print-cut-line {
+            display: block !important;
+            margin-top: 8px;
+            padding-top: 3px;
+            border-top: 1px dashed #666666;
+            font-size: 8px;
+            text-align: center;
+            color: #444444 !important;
+          }
+        }
+      `}</style>
       <PageHeader
         eyebrow="No-Balance-Billing Terminal"
         title="Pharmacy Point of Sale"
@@ -252,16 +472,70 @@ export function NbbPharmacyPosTerminal({
         }
         actions={
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <Button
-              variant="outline"
-              onClick={() => void loadCatalog()}
-              disabled={loading || submitting}
-            >
-              <RefreshCw aria-hidden="true" size={16} /> Refresh Stock
-            </Button>
+            {activeTab === "terminal" ? (
+              <Button
+                variant="outline"
+                onClick={() => void loadCatalog()}
+                disabled={loading || submitting}
+              >
+                <RefreshCw aria-hidden="true" size={16} /> Refresh Stock
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => void loadHistory()}
+                disabled={historyLoading}
+              >
+                <RefreshCw aria-hidden="true" size={16} className={historyLoading ? "spin" : ""} /> Refresh History
+              </Button>
+            )}
           </div>
         }
       />
+
+      {/* POS Terminal & Receipt History Navigation Tabs */}
+      <div
+        className="no-print"
+        style={{
+          display: "flex",
+          gap: "0.5rem",
+          marginBottom: "1.5rem",
+          borderBottom: "1px solid var(--border)",
+          paddingBottom: "0.75rem",
+        }}
+      >
+        <Button
+          variant={activeTab === "terminal" ? "default" : "outline"}
+          onClick={() => setActiveTab("terminal")}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+        >
+          <ShoppingBag size={16} /> Dispense Register
+        </Button>
+        <Button
+          variant={activeTab === "history" ? "default" : "outline"}
+          onClick={() => {
+            setActiveTab("history");
+            void loadHistory();
+          }}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+        >
+          <ReceiptText size={16} /> Receipt History
+          {historyList.length > 0 && (
+            <span
+              style={{
+                background: activeTab === "history" ? "rgba(255,255,255,0.2)" : "var(--muted)",
+                padding: "0.1rem 0.5rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                marginLeft: "0.25rem",
+              }}
+            >
+              {historyList.length}
+            </span>
+          )}
+        </Button>
+      </div>
 
       {/* Permission or Configuration Error Banners */}
       {!canManagePos ? (
@@ -308,8 +582,9 @@ export function NbbPharmacyPosTerminal({
         </section>
       ) : null}
 
-      {/* Completed Sale Receipt View */}
-      {completedSale ? (
+      {/* Terminal Dispensing vs History Tab View */}
+      {activeTab === "terminal" ? (
+        completedSale ? (
         <section
           className="nbb-receipt-card"
           style={{
@@ -397,10 +672,82 @@ export function NbbPharmacyPosTerminal({
             </tbody>
           </table>
 
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <Button onClick={startNewSale} style={{ minWidth: "180px" }}>
-              <Plus size={16} /> New NBB Sale
-            </Button>
+          <div className="nbb-print-cut-line" style={{ display: "none" }}>
+            ✂ - - - - - - - - - Cut along line (occupies only necessary space) - - - - - - - - - ✂
+          </div>
+
+          <div
+            className="no-print"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.75rem",
+              marginTop: "1.5rem",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+                width: "100%",
+              }}
+            >
+              <Button
+                onClick={handlePrintReceipt}
+                style={{
+                  minWidth: "160px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <Printer size={16} /> Print Receipt
+              </Button>
+              <Button
+                variant="outline"
+                onClick={startNewSale}
+                style={{
+                  minWidth: "160px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <Plus size={16} /> New NBB Sale
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCompletedSale(null);
+                  setActiveTab("history");
+                  void loadHistory();
+                }}
+                style={{
+                  minWidth: "160px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <ReceiptText size={16} /> View in History
+              </Button>
+            </div>
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--muted-foreground)",
+                margin: 0,
+                textAlign: "center",
+              }}
+            >
+              Compact receipt slip format: sized for 80mm thermal printers or standard bond paper without occupying the whole sheet.
+            </p>
           </div>
         </section>
       ) : (
@@ -767,6 +1114,418 @@ export function NbbPharmacyPosTerminal({
               </Button>
             </form>
           </div>
+        </div>
+        )
+      ) : (
+        /* Receipt Transactions History View */
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {/* Summary Metric Cards */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "1rem",
+            }}
+          >
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", fontWeight: 500, textTransform: "uppercase" }}>
+                Total Transactions
+              </div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
+                {historyList.length}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                NBB PhilHealth dispenses
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", fontWeight: 500, textTransform: "uppercase" }}>
+                Standard Audit Value
+              </div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--foreground)" }}>
+                {formatCentavos(historyTotalStandardCentavos)}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                Recorded hospital charges
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "var(--status-success-bg)",
+                border: "1px solid var(--status-success-border)",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <div style={{ fontSize: "0.75rem", color: "var(--status-success)", fontWeight: 600, textTransform: "uppercase" }}>
+                PhilHealth NBB Subsidy
+              </div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--status-success)" }}>
+                {formatCentavos(historyTotalStandardCentavos)}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--status-success)", marginTop: "0.25rem" }}>
+                100% Guaranteed Coverage
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", fontWeight: 500, textTransform: "uppercase" }}>
+                Patient Out-of-Pocket
+              </div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--status-success)" }}>
+                ₱0.00
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                Zero Balance Billing policy
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Refresh Controls Bar */}
+          <div
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: "0.5rem",
+              padding: "0.875rem 1rem",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ position: "relative", flex: 1, minWidth: "260px" }}>
+              <Search
+                size={16}
+                style={{
+                  position: "absolute",
+                  left: "0.75rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--muted-foreground)",
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Search by receipt # (RCT-...), patient name, or item description..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem 0.75rem 0.5rem 2.25rem",
+                  borderRadius: "0.375rem",
+                  border: "1px solid var(--input)",
+                  background: "var(--background)",
+                  color: "var(--foreground)",
+                  fontSize: "0.875rem",
+                  outline: "none",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
+                {filteredHistory.length} of {historyList.length} receipt{historyList.length === 1 ? "" : "s"}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => void loadHistory()}
+                disabled={historyLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
+              >
+                <RefreshCw size={14} className={historyLoading ? "spin" : ""} /> Refresh
+              </Button>
+            </div>
+          </div>
+
+          {/* History List or Empty State */}
+          {historyLoading && historyList.length === 0 ? (
+            <div style={{ padding: "3rem", textAlign: "center", color: "var(--muted-foreground)" }}>
+              <RefreshCw size={24} style={{ margin: "0 auto 0.5rem", animation: "spin 1s linear infinite" }} />
+              <p style={{ margin: 0 }}>Loading receipt transactions…</p>
+            </div>
+          ) : historyError ? (
+            <div
+              style={{
+                padding: "1.5rem",
+                textAlign: "center",
+                background: "var(--status-danger-bg)",
+                border: "1px solid var(--status-danger-border)",
+                borderRadius: "0.5rem",
+                color: "var(--status-danger)",
+              }}
+            >
+              <AlertCircle size={24} style={{ margin: "0 auto 0.5rem" }} />
+              <p style={{ margin: "0 0 0.5rem 0", fontWeight: 600 }}>{historyError}</p>
+              <Button variant="outline" onClick={() => void loadHistory()}>Retry</Button>
+            </div>
+          ) : filteredHistory.length === 0 ? (
+            <div
+              style={{
+                padding: "3rem 1.5rem",
+                textAlign: "center",
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.75rem",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              <ReceiptText size={40} style={{ margin: "0 auto 0.75rem", opacity: 0.5 }} />
+              <h3 style={{ margin: "0 0 0.25rem 0", color: "var(--foreground)", fontSize: "1rem" }}>
+                {historySearch.trim() ? "No matching receipt transactions" : "No receipt transactions recorded yet"}
+              </h3>
+              <p style={{ margin: "0 0 1rem 0", fontSize: "0.875rem" }}>
+                {historySearch.trim()
+                  ? "Try searching for a different receipt number, patient name, or medication."
+                  : "Completed NBB pharmacy dispenses will appear here automatically."}
+              </p>
+              {historySearch.trim() ? (
+                <Button variant="outline" onClick={() => setHistorySearch("")}>Clear Search</Button>
+              ) : (
+                <Button onClick={() => setActiveTab("terminal")}>
+                  <ShoppingBag size={15} /> Open Dispense Register
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.75rem",
+                overflow: "hidden",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+                <thead>
+                  <tr
+                    style={{
+                      borderBottom: "1px solid var(--border)",
+                      background: "var(--muted)",
+                      textAlign: "left",
+                      color: "var(--muted-foreground)",
+                      fontSize: "0.75rem",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    <th style={{ padding: "0.75rem 1rem" }}>Receipt #</th>
+                    <th style={{ padding: "0.75rem 1rem" }}>Date &amp; Time</th>
+                    <th style={{ padding: "0.75rem 1rem" }}>Patient Name</th>
+                    <th style={{ padding: "0.75rem 1rem" }}>Items Dispensed</th>
+                    <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>Standard Audit</th>
+                    <th style={{ padding: "0.75rem 1rem", textAlign: "center" }}>Patient Due</th>
+                    <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((txn) => {
+                    const isExpanded = expandedReceiptId === txn.id;
+                    const formattedDate = new Intl.DateTimeFormat("en-PH", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }).format(new Date(txn.completedAt));
+
+                    return (
+                      <Fragment key={txn.id}>
+                        <tr
+                          style={{
+                            borderBottom: "1px solid var(--border)",
+                            background: isExpanded ? "var(--accent)" : "transparent",
+                            transition: "background 0.15s ease",
+                          }}
+                        >
+                          <td style={{ padding: "0.875rem 1rem", fontWeight: 600 }}>
+                            <span style={{ fontFamily: "monospace", color: "var(--primary)" }}>
+                              {txn.receiptNumber}
+                            </span>
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
+                            {formattedDate}
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem", fontWeight: 500 }}>
+                            {txn.patientName}
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
+                              {txn.items.slice(0, 3).map((item, idx) => (
+                                <span
+                                  key={idx}
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    padding: "0.15rem 0.45rem",
+                                    borderRadius: "0.25rem",
+                                    background: "var(--muted)",
+                                    border: "1px solid var(--border)",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {item.name} &times; {item.quantity}
+                                </span>
+                              ))}
+                              {txn.items.length > 3 && (
+                                <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", alignSelf: "center" }}>
+                                  +{txn.items.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem", textAlign: "right", fontWeight: 600 }}>
+                            {formatCentavos(txn.standardTotalInCentavos)}
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem", textAlign: "center" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "0.2rem 0.5rem",
+                                borderRadius: "9999px",
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                background: "var(--status-success-bg)",
+                                color: "var(--status-success)",
+                                border: "1px solid var(--status-success-border)",
+                              }}
+                            >
+                              ₱0.00 (NBB)
+                            </span>
+                          </td>
+                          <td style={{ padding: "0.875rem 1rem", textAlign: "right", whiteSpace: "nowrap" }}>
+                            <div style={{ display: "inline-flex", gap: "0.375rem" }}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => printHistoricalReceipt(txn)}
+                                title="Reprint small receipt slip"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "0.375rem",
+                                  padding: "0.3rem 0.6rem",
+                                  fontSize: "0.75rem",
+                                }}
+                              >
+                                <Printer size={13} /> Reprint
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setExpandedReceiptId(isExpanded ? null : txn.id)}
+                                title={isExpanded ? "Collapse details" : "Expand details"}
+                                style={{
+                                  padding: "0.3rem 0.5rem",
+                                  fontSize: "0.75rem",
+                                }}
+                              >
+                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {isExpanded && (
+                          <tr style={{ background: "var(--muted)", borderBottom: "1px solid var(--border)" }}>
+                            <td colSpan={7} style={{ padding: "1rem 1.5rem" }}>
+                              <div
+                                style={{
+                                  background: "var(--card)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "0.5rem",
+                                  padding: "1rem",
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                                  <h4 style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600 }}>
+                                    Receipt Details &middot; {txn.receiptNumber}
+                                  </h4>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => printHistoricalReceipt(txn)}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
+                                  >
+                                    <Printer size={14} /> Print Small Slip
+                                  </Button>
+                                </div>
+
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem", marginBottom: "0.75rem", fontSize: "0.8125rem" }}>
+                                  <div><span style={{ color: "var(--muted-foreground)" }}>Patient: </span><strong>{txn.patientName}</strong></div>
+                                  <div><span style={{ color: "var(--muted-foreground)" }}>Invoice Ref: </span><code>{txn.invoiceId}</code></div>
+                                  <div><span style={{ color: "var(--muted-foreground)" }}>Coverage: </span><span>PhilHealth NBB Guarantee</span></div>
+                                  <div><span style={{ color: "var(--muted-foreground)" }}>Date: </span><span>{formattedDate}</span></div>
+                                </div>
+
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--muted-foreground)", textAlign: "left" }}>
+                                      <th style={{ padding: "0.375rem 0" }}>Item Description</th>
+                                      <th style={{ padding: "0.375rem", textAlign: "center" }}>Qty</th>
+                                      <th style={{ padding: "0.375rem", textAlign: "right" }}>Unit Price</th>
+                                      <th style={{ padding: "0.375rem 0", textAlign: "right" }}>Line Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {txn.items.map((it, idx) => (
+                                      <tr key={idx} style={{ borderBottom: "1px solid var(--border)" }}>
+                                        <td style={{ padding: "0.375rem 0" }}>{it.name}</td>
+                                        <td style={{ padding: "0.375rem", textAlign: "center" }}>{it.quantity}</td>
+                                        <td style={{ padding: "0.375rem", textAlign: "right" }}>{formatCentavos(it.standardUnitPriceInCentavos)}</td>
+                                        <td style={{ padding: "0.375rem 0", textAlign: "right", fontWeight: 600 }}>{formatCentavos(it.standardLineTotalInCentavos)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr>
+                                      <td colSpan={3} style={{ paddingTop: "0.5rem", textAlign: "right", fontWeight: 600 }}>Standard Audit Total:</td>
+                                      <td style={{ paddingTop: "0.5rem", textAlign: "right", fontWeight: 700 }}>{formatCentavos(txn.standardTotalInCentavos)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td colSpan={3} style={{ textAlign: "right", color: "var(--status-success)", fontWeight: 600 }}>PhilHealth NBB Subsidy:</td>
+                                      <td style={{ textAlign: "right", color: "var(--status-success)", fontWeight: 700 }}>-{formatCentavos(txn.standardTotalInCentavos)}</td>
+                                    </tr>
+                                    <tr style={{ borderTop: "1px dashed var(--border)" }}>
+                                      <td colSpan={3} style={{ paddingTop: "0.375rem", textAlign: "right", fontWeight: 800 }}>Patient Balance Due:</td>
+                                      <td style={{ paddingTop: "0.375rem", textAlign: "right", fontWeight: 800, color: "var(--status-success)" }}>₱0.00</td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

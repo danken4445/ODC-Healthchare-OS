@@ -169,3 +169,83 @@ test("createNbbPharmacyPosSale invokes create_nbb_pharmacy_pos_sale and verifies
   assert.equal(result.data?.patient_balance_due_in_centavos, 0);
   assert.equal(result.data?.standard_total_in_centavos, 1500);
 });
+
+test("listNbbPharmacyPosReceipts queries pos_sales, joins line items and invoices, and returns formatted history", async () => {
+  const mockSales = [
+    {
+      id: "sale-1",
+      billing_event_id: "event-1",
+      receipt_number: "RCT-20261006-00001",
+      customer_name: "Patient Juan",
+      status: "completed",
+      completed_at: "2026-10-06T10:00:00Z",
+      created_at: "2026-10-06T10:00:00Z",
+      standard_total_in_centavos: 25000,
+    },
+  ];
+
+  const mockInvoices = [
+    {
+      id: "inv-1",
+      billing_event_id: "event-1",
+      invoice_number: "INV-2026-0001",
+      standard_total_in_centavos: 25000,
+      patient_balance_due_in_centavos: 0,
+    },
+  ];
+
+  const mockLineItems = [
+    {
+      id: "line-1",
+      billing_event_id: "event-1",
+      description: "PARACETAMOL 500mg",
+      quantity: 10,
+      standard_unit_price_in_centavos: 2500,
+      standard_line_total_in_centavos: 25000,
+    },
+  ];
+
+  const client = asClient({
+    from: (table: string) => {
+      if (table === "pos_sales") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => Promise.resolve({ data: mockSales, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "invoices") {
+        return {
+          select: () => ({
+            in: () => Promise.resolve({ data: mockInvoices, error: null }),
+          }),
+        };
+      }
+      if (table === "billing_line_items") {
+        return {
+          select: () => ({
+            in: () => Promise.resolve({ data: mockLineItems, error: null }),
+          }),
+        };
+      }
+      return { select: () => Promise.resolve({ data: [], error: null }) };
+    },
+  });
+
+  const res = await (await import("../src/index.ts")).listNbbPharmacyPosReceipts(client, validOrgId);
+  assert.equal(res.error, null);
+  assert.equal(res.data?.length, 1);
+  const item = res.data![0];
+  assert.equal(item.receiptNumber, "RCT-20261006-00001");
+  assert.equal(item.patientName, "Patient Juan");
+  assert.equal(item.standardTotalInCentavos, 25000);
+  assert.equal(item.patientBalanceDueCentavos, 0);
+  assert.equal(item.items.length, 1);
+  assert.equal(item.items[0].name, "PARACETAMOL 500mg");
+  assert.equal(item.items[0].quantity, 10);
+});
+
