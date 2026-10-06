@@ -1,0 +1,41 @@
+{
+  "name": "@odyssey/desktop-provider",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Odyssey Healthcare OS - Doctor & Provider Portal Desktop Shell",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build:win": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ph.odyssey.healthcare.provider",
+    "productName": "Odyssey Doctor Portal",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "assets/odc-logo.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Odyssey Doctor Portal",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
