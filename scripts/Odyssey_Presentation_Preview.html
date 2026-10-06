@@ -1,0 +1,562 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Odyssey Healthcare OS - Presentation Deck</title>
+  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #E2E8F0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+    }
+    .slide-wrapper {
+      position: relative;
+      width: 1200px;
+      height: 675px; /* 16:9 ratio */
+      background: #F8F9FA;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(22, 34, 47, 0.12);
+      padding: 44px 60px 28px 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .slide-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .category-kicker {
+      font-size: 13px;
+      font-weight: 700;
+      color: #F15A24;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .slide-headline {
+      font-size: 38px;
+      font-weight: 700;
+      color: #16222F;
+      line-height: 1.15;
+    }
+    .slide-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      margin: 18px 0;
+    }
+    .slide-footer {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    .footer-brand {
+      font-weight: 700;
+      color: #F15A24;
+      letter-spacing: 1px;
+    }
+    .footer-brand span {
+      font-weight: 600;
+      color: #5A6B78;
+    }
+    .footer-num {
+      color: #5A6B78;
+      font-weight: 600;
+    }
+    .speaker-notes-box {
+      width: 1200px;
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 14px 20px;
+      margin-top: -24px;
+      font-size: 14px;
+      color: #5A6B78;
+      line-height: 1.5;
+    }
+    .speaker-notes-box strong {
+      color: #F15A24;
+    }
+
+    /* Slide 1 Custom */
+    .slide1-card {
+      width: 100%;
+      height: 100%;
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      padding: 40px 60px;
+      gap: 50px;
+    }
+    .logo-frame {
+      width: 260px;
+      height: 260px;
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(22, 34, 47, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      padding: 10px;
+    }
+    .logo-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .slide1-text {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .tagline-text {
+      font-size: 24px;
+      color: #5A6B78;
+      font-weight: 400;
+    }
+    .hero-pill {
+      align-self: flex-start;
+      padding: 8px 20px;
+      background: #FFF4ED;
+      border: 1px solid #F15A24;
+      border-radius: 20px;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #F15A24;
+      margin-top: 6px;
+    }
+
+    /* Slide 2 Custom */
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+      width: 100%;
+      height: 100%;
+    }
+    .role-card {
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 36px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      justify-content: center;
+      gap: 20px;
+    }
+    .role-icon {
+      width: 120px;
+      height: 120px;
+    }
+    .role-badge {
+      display: inline-block;
+      padding: 6px 20px;
+      background: #FFF4ED;
+      border: 1px solid #F15A24;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #F15A24;
+      letter-spacing: 0.5px;
+    }
+    .role-phrase {
+      font-size: 20px;
+      font-weight: 700;
+      color: #16222F;
+      line-height: 1.35;
+    }
+
+    /* Slide 3 Custom */
+    .encounter-layout {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 36px;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+    }
+    .anatomy-card {
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 14px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .anatomy-card img {
+      max-height: 94%;
+      max-width: 94%;
+      object-fit: contain;
+    }
+    .encounter-phrases {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      justify-content: center;
+    }
+    .phrase-card {
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 22px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .phrase-card.active-card {
+      border: 2px solid #F15A24;
+    }
+    .phrase-kicker {
+      align-self: flex-start;
+      padding: 4px 14px;
+      background: #FFF4ED;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #F15A24;
+    }
+    .phrase-text {
+      font-size: 21px;
+      font-weight: 700;
+      color: #16222F;
+    }
+
+    /* Slide 4 Custom */
+    .ops-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+      height: 100%;
+      justify-content: center;
+    }
+    .flow-card-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .flow-card-row img {
+      width: 100%;
+      height: auto;
+    }
+    .ops-phrases-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .ops-card {
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 14px;
+    }
+    .ops-card .ops-kicker {
+      padding: 4px 14px;
+      background: #FFF4ED;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #F15A24;
+      letter-spacing: 0.5px;
+    }
+    .ops-card .ops-phrase {
+      font-size: 19px;
+      font-weight: 700;
+      color: #16222F;
+      line-height: 1.35;
+    }
+
+    /* Slide 5 Custom: Side by side Timeline + Choropleth Map */
+    .slide5-layout {
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      gap: 32px;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+    }
+    .slide5-left {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      justify-content: center;
+    }
+    .milestone-card {
+      background: #FFFFFF;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .milestone-card.active-milestone {
+      border: 2px solid #F15A24;
+    }
+    .milestone-phase {
+      padding: 6px 14px;
+      background: #FFF4ED;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #F15A24;
+      flex-shrink: 0;
+    }
+    .milestone-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #16222F;
+    }
+    .closing-card {
+      background: #FFFFFF;
+      border: 2px solid #F15A24;
+      border-radius: 14px;
+      padding: 20px 24px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .closing-card::before {
+      content: '';
+      position: absolute;
+      left: 14px;
+      top: 16px;
+      bottom: 16px;
+      width: 4px;
+      background: #F15A24;
+      border-radius: 2px;
+    }
+    .closing-content {
+      padding-left: 14px;
+    }
+    .closing-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      color: #F15A24;
+      letter-spacing: 1.5px;
+    }
+    .closing-phrase {
+      font-size: 21px;
+      font-weight: 700;
+      color: #16222F;
+    }
+    .choropleth-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .choropleth-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SLIDE 1 -->
+  <div id="slide1" class="slide-wrapper">
+    <div></div>
+    <div class="slide-content">
+      <div class="slide1-card">
+        <div class="logo-frame">
+          <img class="slide1-logo" src="presentation_assets/odc_logo_3d.png" alt="ODC Odyssey Logo">
+        </div>
+        <div class="slide1-text">
+          <div class="category-kicker">PHILIPPINES FEDERATED HEALTH NETWORK</div>
+          <h1 class="slide-headline" style="font-size: 48px;">Odyssey Healthcare OS</h1>
+          <div class="tagline-text">One operating system for connected care.</div>
+          <div class="hero-pill">Production-ready hospital core</div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-brand">ODC • ODYSSEY</div>
+      <div class="footer-num">01 / 05</div>
+    </div>
+  </div>
+  <div class="speaker-notes-box">
+    <strong>Speaker Notes:</strong> Odyssey Healthcare OS is a production-grade hospital operating system designed for the Philippine healthcare landscape. It unifies clinical, administrative, and financial operations from day one.
+  </div>
+
+  <!-- SLIDE 2 -->
+  <div id="slide2" class="slide-wrapper">
+    <div class="slide-header">
+      <div class="category-kicker">Unified Ecosystem</div>
+      <h2 class="slide-headline">Built for every role</h2>
+    </div>
+    <div class="slide-content">
+      <div class="role-grid">
+        <div class="role-card">
+          <img class="role-icon" src="presentation_assets/icon_patient.png" alt="Patients">
+          <div class="role-badge">PATIENTS</div>
+          <div class="role-phrase">booking, portal, teleconsult, QR payments</div>
+        </div>
+        <div class="role-card">
+          <img class="role-icon" src="presentation_assets/icon_provider.png" alt="Providers">
+          <div class="role-badge">PROVIDERS</div>
+          <div class="role-phrase">queue, SOAP notes, prescriptions, referrals</div>
+        </div>
+        <div class="role-card">
+          <img class="role-icon" src="presentation_assets/icon_admin.png" alt="Admins">
+          <div class="role-badge">ADMINS</div>
+          <div class="role-phrase">analytics, billing, inventory, HMO claims</div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-brand">ODC • ODYSSEY <span>• HEALTHCARE OS</span></div>
+      <div class="footer-num">02 / 05</div>
+    </div>
+  </div>
+  <div class="speaker-notes-box">
+    <strong>Speaker Notes:</strong> Odyssey unifies patient self-service, physician clinical workflows, and administrative operations into a single platform. This eliminates fragmented software silos and duplicate data entry across the facility.
+  </div>
+
+  <!-- SLIDE 3 -->
+  <div id="slide3" class="slide-wrapper">
+    <div class="slide-header">
+      <div class="category-kicker">Clinical Workflows</div>
+      <h2 class="slide-headline">Care that starts with the body</h2>
+    </div>
+    <div class="slide-content">
+      <div class="encounter-layout">
+        <div class="anatomy-card">
+          <img src="presentation_assets/musculoskeletal_figure.png" alt="Musculoskeletal Figure">
+        </div>
+        <div class="encounter-phrases">
+          <div class="phrase-card active-card">
+            <div class="phrase-kicker">01 • VISUAL CHARTING</div>
+            <div class="phrase-text">Tap a region, see history, add diagnosis</div>
+          </div>
+          <div class="phrase-card">
+            <div class="phrase-kicker">02 • RAPID DOCUMENTATION</div>
+            <div class="phrase-text">Simple Mode for fast SOAP notes</div>
+          </div>
+          <div class="phrase-card">
+            <div class="phrase-kicker">03 • CONSULTATION AUDIT</div>
+            <div class="phrase-text">Auto-tracked encounter time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-brand">ODC • ODYSSEY <span>• HEALTHCARE OS</span></div>
+      <div class="footer-num">03 / 05</div>
+    </div>
+  </div>
+  <div class="speaker-notes-box">
+    <strong>Speaker Notes:</strong> Clinicians can visually chart encounters by selecting anatomical regions directly on a digital body map. Odyssey surfaces relevant patient history instantly and accelerates documentation with fast SOAP templates.
+  </div>
+
+  <!-- SLIDE 4 -->
+  <div id="slide4" class="slide-wrapper">
+    <div class="slide-header">
+      <div class="category-kicker">Operations & Finance</div>
+      <h2 class="slide-headline">Every item accounted for</h2>
+    </div>
+    <div class="slide-content">
+      <div class="ops-layout">
+        <div class="flow-card-row">
+          <img src="presentation_assets/flow_diagram.png" alt="Inventory and Billing Flow Diagram">
+        </div>
+        <div class="ops-phrases-row">
+          <div class="ops-card">
+            <div class="ops-kicker">DEPARTMENTAL STOCK</div>
+            <div class="ops-phrase">Real-time stock per department</div>
+          </div>
+          <div class="ops-card">
+            <div class="ops-kicker">BATCH DISPENSING</div>
+            <div class="ops-phrase">Expiry alerts</div>
+          </div>
+          <div class="ops-card">
+            <div class="ops-kicker">UNIVERSAL HEALTHCARE</div>
+            <div class="ops-phrase">PhilHealth-ready, even for free-service hospitals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-brand">ODC • ODYSSEY <span>• HEALTHCARE OS</span></div>
+      <div class="footer-num">04 / 05</div>
+    </div>
+  </div>
+  <div class="speaker-notes-box">
+    <strong>Speaker Notes:</strong> When clinical staff scan or tag supplies at the bedside, inventory is automatically relieved by earliest expiration date. Charges immediately populate the patient's Statement of Account (SOA) and PhilHealth claims, preventing revenue leakage.
+  </div>
+
+  <!-- SLIDE 5: Roadmap & Choropleth Disease Trend -->
+  <div id="slide5" class="slide-wrapper">
+    <div class="slide-header">
+      <div class="category-kicker">Strategic Roadmap & Surveillance</div>
+      <h2 class="slide-headline">From hospital to national network</h2>
+    </div>
+    <div class="slide-content">
+      <div class="slide5-layout">
+        <div class="slide5-left">
+          <div class="milestone-card">
+            <div class="milestone-phase">PHASE 1</div>
+            <div class="milestone-title">Single hospital, production-ready</div>
+          </div>
+          <div class="milestone-card active-milestone">
+            <div class="milestone-phase">PHASE 2</div>
+            <div class="milestone-title">RHUs and clinics join</div>
+          </div>
+          <div class="milestone-card">
+            <div class="milestone-phase">PHASE 3</div>
+            <div class="milestone-title">Secure shared patient records nationwide</div>
+          </div>
+          <div class="closing-card">
+            <div class="closing-content">
+              <div class="closing-kicker">THE ODYSSEY OUTCOME</div>
+              <div class="closing-phrase">Less duplicate testing. More accessible care.</div>
+            </div>
+          </div>
+        </div>
+        <div class="choropleth-container">
+          <img src="presentation_assets/choropleth_map.png" alt="Philippine Disease Trend Choropleth Map">
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <div class="footer-brand">ODC • ODYSSEY <span>• HEALTHCARE OS</span></div>
+      <div class="footer-num">05 / 05</div>
+    </div>
+  </div>
+  <div class="speaker-notes-box">
+    <strong>Speaker Notes:</strong> Starting as a standalone hospital core, Odyssey expands into a federated network uniting rural health units and clinics. Real-time choropleth mapping delivers automated DOH-PIDSR disease surveillance across all 17 regions, securing shared patient records nationwide.
+  </div>
+
+</body>
+</html>
+  

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Odyssey Healthcare OS - Public Healthcare & No Balance Billing (NBB) System Flow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --primary: #F15A24;
+      --primary-light: #FFF4ED;
+      --primary-dark: #D93800;
+      --dark: #16222F;
+      --dark-light: #2A3B4D;
+      --bg: #F8F9FA;
+      --card-bg: #FFFFFF;
+      --border: #E2E8F0;
+      --text-muted: #5A6B78;
+      --green: #059669;
+      --green-light: #ECFDF5;
+      --blue: #2563EB;
+      --blue-light: #EFF6FF;
+      --purple: #7C3AED;
+      --purple-light: #F5F3FF;
+      --amber: #D97706;
+      --amber-light: #FEF3C7;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--dark);
+      padding: 40px 24px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .flow-header {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 40px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(22, 34, 47, 0.04);
+    }
+
+    .brand-kicker {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .flow-title {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--dark);
+      letter-spacing: -0.5px;
+    }
+
+    .flow-subtitle {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .header-badges {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary-light);
+      border: 1px solid rgba(241, 90, 36, 0.25);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .header-badge-green {
+      background: var(--green-light);
+      border-color: rgba(5, 150, 105, 0.25);
+      color: var(--green);
+    }
+
+    .header-badge .dot {
+      width: 8px;
+      height: 8px;
+      background: currentColor;
+      border-radius: 50%;
+    }
+
+    /* Policy Alert Banner */
+    .policy-banner {
+      background: linear-gradient(135deg, #FFF4ED 0%, #FFFFFF 100%);
+      border: 1.5px solid #F15A24;
+      border-radius: 16px;
+      padding: 20px 28px;
+      margin-bottom: 28px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .policy-icon {
+      width: 48px;
+      height: 48px;
+      background: #F15A24;
+      color: white;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .policy-text h4 {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+
+    .policy-text p {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .policy-text code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(241, 90, 36, 0.1);
+      color: var(--primary-dark);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Stage Steps Grid */
+    .stages-summary {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 1100px) {
+      .stages-summary {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stage-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      position: relative;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(22, 34, 47, 0.03);
+    }
+
+    .stage-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(22, 34, 47, 0.08);
+      border-color: var(--primary);
+    }
+
+    .stage-num {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .card-1 .stage-num { background: var(--primary-light); color: var(--primary); }
+    .card-2 .stage-num { background: var(--amber-light); color: var(--amber); }
+    .card-3 .stage-num { background: var(--green-light); color: var(--green); }
+    .card-4 .stage-num { background: var(--blue-light); color: var(--blue); }
+    .card-5 .stage-num { background: var(--purple-light); color: var(--purple); }
+
+    .stage-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .stage-card p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Main Diagram Container */
+    .diagram-panel {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 4px 20px rgba(22, 34, 47, 0.04);
+      margin-bottom: 32px;
+    }
+
+    .diagram-panel h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .diagram-canvas {
+      width: 100%;
+      overflow-x: auto;
+      padding: 10px 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mermaid {
+      width: 100%;
+      font-family: 'Plus Jakarta Sans', sans-serif !important;
+    }
+
+    /* Technical Specifications Grid */
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 1000px) {
+      .specs-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .spec-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 24px;
+      box-shadow: 0 2px 10px rgba(22, 34, 47, 0.03);
+    }
+
+    .spec-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    .spec-table th, .spec-table td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .spec-table th {
+      font-weight: 700;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .spec-table code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: #F1F5F9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #0F172A;
+    }
+
+    .state-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .state-active { background: #ECFDF5; color: #059669; }
+    .state-prog { background: #EFF6FF; color: #2563EB; }
+    .state-pending { background: #FEF3C7; color: #D97706; }
+    .state-referral { background: #F5F3FF; color: #7C3AED; }
+
+    /* Footer */
+    .flow-footer {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="flow-header">
+    <div>
+      <div class="brand-kicker">Odyssey Healthcare OS • Architecture Flow</div>
+      <h1 class="flow-title">Public Healthcare & No Balance Billing (NBB) Workflow</h1>
+      <p class="flow-subtitle">Statutory ₱0 copay intake, nurse triage, clinical documentation, Statement of Account (SOA), PhilHealth eClaims dossier, and inter-facility specialist referral.</p>
+    </div>
+    <div class="header-badges">
+      <div class="header-badge">
+        <span class="dot"></span>
+        RA 11223 Universal Health Care Act
+      </div>
+      <div class="header-badge header-badge-green">
+        <span class="dot"></span>
+        PhilHealth Circular 2017-0017 (NBB)
+      </div>
+    </div>
+  </div>
+
+  <!-- NBB Policy Core Principle -->
+  <div class="policy-banner">
+    <div class="policy-icon">₱0</div>
+    <div class="policy-text">
+      <h4>Dual-Track Accounting Under No Balance Billing</h4>
+      <p>Under statutory NBB rules, patients are never billed (<strong>₱0.00 patient liability</strong>). However, standard catalog chargemaster prices <strong>must still be recorded on every line item</strong> in the subledger (<code>financial_ledger_entries</code>) to substantiate PhilHealth Case Rate 1 / Case Rate 2 reimbursement claims and COA audit compliance.</p>
+    </div>
+  </div>
+
+  <!-- Stage Cards Overview -->
+  <div class="stages-summary">
+    <div class="stage-card card-1">
+      <span class="stage-num">STAGE 01</span>
+      <h3>Public Intake & NBB Waiver</h3>
+      <p>Facility set to <code>is_government_no_billing</code>. Pay-in-full rule waived; instant <code>booked</code> confirmation with ₱0 invoice.</p>
+    </div>
+
+    <div class="stage-card card-2">
+      <span class="stage-num">STAGE 02</span>
+      <h3>Arrival & Nurse Triage</h3>
+      <p>Lobby QR check-in, per-doctor queue sequence (e.g. <code>RHU-001</code>), baseline vitals, and DOH-PIDSR pre-screen.</p>
+    </div>
+
+    <div class="stage-card card-3">
+      <span class="stage-num">STAGE 03</span>
+      <h3>Doctor Encounter & PMR</h3>
+      <p>Visual body mapping, structured SOAP notes, ICD-10 coding, and Philippine National Formulary (PNF) e-prescriptions.</p>
+    </div>
+
+    <div class="stage-card card-4">
+      <span class="stage-num">STAGE 04</span>
+      <h3>NBB SOA & eClaims Dossier</h3>
+      <p>FEFO pharmacy stock relief, Statement of Account with ₱0 patient due, and automated assembly of CF1, CF2, and CF4 dossiers.</p>
+    </div>
+
+    <div class="stage-card card-5">
+      <span class="stage-num">STAGE 05</span>
+      <h3>Inter-Facility Referral</h3>
+      <p>Digital PMR referral packet with cryptographic verification QR, continuous NBB portability, and zero duplicate testing.</p>
+    </div>
+  </div>
+
+  <!-- Interactive Flowchart Diagram -->
+  <div class="diagram-panel">
+    <h2>
+      <span>End-to-End Public & NBB Interaction Flowchart</span>
+      <span style="font-size: 13px; font-weight: 500; color: var(--text-muted);">From Public Intake to Tertiary Referral</span>
+    </h2>
+    <div class="diagram-canvas">
+      <div class="mermaid">
+flowchart TD
+    %% Styling Classes
+    classDef publicGov fill:#FFF4ED,stroke:#F15A24,stroke-width:2px,color:#16222F;
+    classDef triageNode fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#16222F;
+    classDef clinicalNode fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#16222F;
+    classDef nbbLedger fill:#EFF6FF,stroke:#2563EB,stroke-width:2px,color:#16222F;
+    classDef specialistNode fill:#F5F3FF,stroke:#7C3AED,stroke-width:2px,color:#16222F;
+    classDef decisionNode fill:#FFFFFF,stroke:#64748B,stroke-width:2px,stroke-dasharray: 4 4,color:#16222F;
+
+    %% STAGE 1: INTAKE & NBB STATUTORY CLEARANCE
+    subgraph S1 ["1. PUBLIC INTAKE & NBB CLEARANCE (₱0 UPFRONT)"]
+        A1["Patient Arrives / Registers via Portal<br/>(RHU / CHO / Public Facility)"]:::publicGov --> A2["Facility Classification Engine<br/>(is_government_no_billing = TRUE)"]:::publicGov
+        A2 --> A3["PhilHealth & UHC Status Lookup<br/>(RA 11223 UHC / Indigent / POS / Senior)"]:::publicGov
+        A3 --> A4["Select Public Doctor & Available Slot<br/>(Statutory Fixed Rate / No Doctor Surcharges)"]:::publicGov
+        A4 --> A5["execute resolve_effective_billing_mode()<br/>billing_mode: 'nbb' | payor_type: 'philhealth_nbb'"]:::nbbLedger
+        A5 --> A6["Statutory ₱0 Copay Auto-Waiver<br/>(v_total_due := 0 | v_invoice_status := 'paid')"]:::nbbLedger
+        A6 --> A7["Appointment Confirmed Immediately<br/>(status: 'booked' + QR Ticket Issued)"]:::publicGov
+    end
+
+    %% STAGE 2: PUBLIC TRIAGE & QUEUE ROUTING
+    subgraph S2 ["2. ARRIVAL, KONSULTA CHECK-IN & NURSE TRIAGE"]
+        A7 --> B1["Lobby Check-In via QR Code / Barcode<br/>(Public Facility Front Desk)"]:::triageNode
+        B1 --> B2["Per-Doctor Queue Sequencer<br/>(Assigned Prefix e.g. RHU-001)"]:::triageNode
+        B2 --> B3["Public Nurse Triage Station<br/>Log Vitals (BP, HR, RR, Temp, SpO2, BMI)"]:::triageNode
+        B3 --> B4["DOH-PIDSR Pre-Screening<br/>(Notifiable Disease Surveillance Check)"]:::triageNode
+        B4 --> B5["Patient Enters Doctor Waiting Queue<br/>(waiting_room_queue)"]:::triageNode
+    end
+
+    %% STAGE 3: PUBLIC CLINICAL ENCOUNTER
+    subgraph S3 ["3. DOCTOR ENCOUNTER & DUAL-TRACK ACCOUNTING"]
+        B5 --> C1["Doctor Calls Patient<br/>(start_appointment_encounter -> 'in_progress')"]:::clinicalNode
+        C1 --> C2["Auto-Track Encounter Duration<br/>Load Patient Medical Record (PMR)"]:::clinicalNode
+        C2 --> C3["Interactive Visual Body Mapping<br/>(Musculoskeletal & Anatomical Site Pinning)"]:::clinicalNode
+        C3 --> C4["Structured SOAP Clinical Note<br/>(Subjective, Objective, Assessment, Plan)"]:::clinicalNode
+        C4 --> C5["Assign Official ICD-10 Diagnoses<br/>(e.g., A09 Gastroenteritis, J18 Pneumonia)"]:::clinicalNode
+        C5 --> C6{"Clinical Orders Prescribed?"}:::decisionNode
+        C6 -- "Medicines" --> C7["Philippine National Formulary (PNF)<br/>E-Prescription Dispense (batch FEFO)"]:::clinicalNode
+        C6 -- "Lab / X-Ray" --> C8["Public Diagnostic Order<br/>(service_requests category: 'laboratory')"]:::clinicalNode
+        C6 -- "None" --> C9["Conclude Consultation"]:::clinicalNode
+        C7 --> C9
+        C8 --> C9
+        C9 -. "Crucial Audit Rule: Standard Chargemaster Catalog Prices<br/>tracked on every line item for PhilHealth claim" .-> D1
+    end
+
+    %% STAGE 4: NBB STATEMENT OF ACCOUNT & ECLAIMS DOSSIER
+    subgraph S4 ["4. NBB STATEMENT OF ACCOUNT (SOA) & PHILHEALTH CLAIMS"]
+        D1["execute finish_clinical_encounter()<br/>(encounter status: 'completed')"]:::clinicalNode
+        D1 --> D2["Pharmacy FEFO Inventory Deduction<br/>(DOH / LGU Batch Expiry Relieved)"]:::nbbLedger
+        D2 --> D3["Generate Statement of Account (SOA)<br/>Gross Chargemaster Amount: ₱X,XXX<br/>PhilHealth NBB Coverage: -₱X,XXX<br/><b>Patient Balance Due: ₱0.00</b>"]:::nbbLedger
+        D3 --> D4["Ledger Status: 'written_off' / 'settled_at'<br/>Zero-Balance Patient Copy Issued"]:::nbbLedger
+        D4 --> D5["Auto-Assemble PhilHealth eClaims Dossier<br/>• Claim Form 1 (CF1): Member & PIN<br/>• Claim Form 2 (CF2): Hospital & Case Rates<br/>• Claim Form 4 (CF4): Clinical SOAP & ICD-10"]:::nbbLedger
+    end
+
+    %% STAGE 5: PUBLIC-TO-SPECIALIST INTER-FACILITY REFERRAL
+    subgraph S5 ["5. INTER-FACILITY REFERRAL (RHU -> PROVINCIAL HOSPITAL)"]
+        C5 --> E1{"Tertiary Specialist Care Indicated?"}:::decisionNode
+        E1 -- "Yes (Referral Required)" --> E2["Initiate Specialist Referral<br/>(Target: Cardiology, Ortho, Surgery, etc.)"]:::clinicalNode
+        E2 --> E3["Specify Urgency & Clinical Rationale<br/>(priority: 'routine' | 'urgent' | 'stat')"]:::clinicalNode
+        E3 --> E4["Dispatch Service Request<br/>(createDiagnosticServiceRequest - category: 'referral')"]:::clinicalNode
+        E4 --> E5["Generate PMR Referral Packet (PmrPreset: 'referral_packet')<br/>• Cryptographic Verification QR Code<br/>• Full SOAP Summary & Body Map<br/>• <b>NBB Portability Flag: Continuous ₱0 Copay</b>"]:::specialistNode
+        E5 --> E6["Specialist Portal at Provincial/Apex Hospital<br/>(Surfaced under 'My Specialist Referrals')"]:::specialistNode
+        E6 --> E7["Specialist Reviews Clinical History & Accepts<br/>(updateReferralStatus -> 'accepted')"]:::specialistNode
+        E7 --> E8["Specialized Encounter Booked<br/><b>Zero Duplicate Testing • Continuous NBB Coverage</b>"]:::specialistNode
+        E8 --> E9["Specialist Findings Synced Back to RHU PMR<br/>(Federated Longitudinal Record Complete)"]:::specialistNode
+    end
+
+    E1 -- "No Referral Needed" --> D1
+      </div>
+    </div>
+  </div>
+
+  <!-- Technical System Details -->
+  <div class="specs-grid">
+    <!-- NBB Accounting Rules -->
+    <div class="spec-card">
+      <h3>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h0M2 9.5h20"/></svg>
+        NBB Financial State Rules
+      </h3>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>NBB Target Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>billing_mode</code></td>
+            <td><code>'nbb'::billing_mode</code></td>
+          </tr>
+          <tr>
+            <td><code>payor_type</code></td>
+            <td><code>'philhealth_nbb'</code></td>
+          </tr>
+          <tr>
+            <td><code>patient_liability</code></td>
+            <td><strong>₱0.00 (exempt)</strong></td>
+          </tr>
+          <tr>
+            <td><code>inventory_state</code></td>
+            <td><span class="state-pill state-active">'written_off'</span></td>
+          </tr>
+          <tr>
+            <td><code>settled_reason</code></td>
+            <td><code>'NBB write-off'</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PhilHealth eClaims Dossier -->
+    <div class="spec-card">
+      <h3>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Automated eClaims Dossier
+      </h3>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Dossier Form</th>
+            <th>Data Source in Odyssey</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Claim Form 1 (CF1)</strong></td>
+            <td>Patient Profile & PhilHealth PIN</td>
+          </tr>
+          <tr>
+            <td><strong>Claim Form 2 (CF2)</strong></td>
+            <td>Facility & Doctor Case Rate Split</td>
+          </tr>
+          <tr>
+            <td><strong>Claim Form 4 (CF4)</strong></td>
+            <td>Encounter SOAP, Vitals & ICD-10</td>
+          </tr>
+          <tr>
+            <td><strong>Verification</strong></td>
+            <td>Signed QR Code (<code>/api/pmr/verify</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Inter-Facility Referral -->
+    <div class="spec-card">
+      <h3>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        Federated Referral Continuity
+      </h3>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Federation Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>NBB Portability</strong></td>
+            <td>₱0 copay preserved at tertiary hospital</td>
+          </tr>
+          <tr>
+            <td><strong>PMR Packet</strong></td>
+            <td>Shared longitudinal EHR & body map</td>
+          </tr>
+          <tr>
+            <td><strong>Zero Duplication</strong></td>
+            <td>RHU lab results reused by specialist</td>
+          </tr>
+          <tr>
+            <td><strong>Audit Loop</strong></td>
+            <td>Findings return to referring doctor</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="flow-footer">
+    Odyssey Healthcare OS • Public Healthcare, Universal Health Care (RA 11223) & No Balance Billing Architecture
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#FFF4ED',
+      primaryTextColor: '#16222F',
+      primaryBorderColor: '#F15A24',
+      lineColor: '#5A6B78',
+      secondaryColor: '#EFF6FF',
+      tertiaryColor: '#ECFDF5',
+      fontFamily: 'Plus Jakarta Sans, sans-serif',
+      fontSize: '13px'
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 24,
+      nodeSpacing: 35,
+      rankSpacing: 45
+    }
+  });
+</script>
+
+</body>
+</html>
