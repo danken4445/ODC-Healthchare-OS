@@ -1,7 +1,7 @@
 "use client";
 
 import { createClinicAccount, setOrganizationModule } from "@odyssey/supabase-client";
-import type { OrganizationModuleKey } from "@odyssey/types";
+import { PHILIPPINE_REGIONS, type OrganizationModuleKey } from "@odyssey/types";
 import { Building2, Check, ChevronLeft, ChevronRight, Landmark, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -110,11 +110,15 @@ export default function NewClinicPage() {
               <label className="field-label">Region
                 <select className="ui-input" value={region} onChange={(event) => setRegion(event.target.value)} required>
                   <option value="" disabled>Select region</option>
-                  <option>NCR</option>
-                  <option>Central Luzon</option>
-                  <option>CALABARZON</option>
-                  <option>Central Visayas</option>
-                  <option>Davao Region</option>
+                  {(["Luzon", "Visayas", "Mindanao"] as const).map((islandGroup) => (
+                    <optgroup key={islandGroup} label={islandGroup}>
+                      {PHILIPPINE_REGIONS.filter((r) => r.islandGroup === islandGroup).map((r) => (
+                        <option key={r.psgc} value={r.name}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </label>
               <label className="field-label field-span">Registered address<Input value={address} onChange={(event) => setAddress(event.target.value)} required /></label>

@@ -95,6 +95,10 @@ import {
   type FacilityClassification,
   type PosCartItem,
   type PosCheckoutResult,
+  type NbbPharmacyPosCatalogItem,
+  type NbbPosCartItem,
+  type NbbPosCheckoutInput,
+  type NbbPosCheckoutResult,
   type ClaimSummary,
   type AppointmentDeliveryMode,
   type DoctorPayoutSummary,
@@ -4045,6 +4049,8 @@ export async function getOrganizationFacilityClassification(
   });
 }
 
+export const getOrganizationFacilityContext = getOrganizationFacilityClassification;
+
 export async function setOrganizationFacilityClassification(
   client: SupabaseClient<Database>,
   organizationId: string,
@@ -4708,3 +4714,107 @@ export async function getPatientDefaultTemplate(
   });
 }
 export * from "./clinical-nlp-classifier";
+
+export type {
+  NbbPharmacyPosCatalogItem,
+  NbbPosCartItem,
+  NbbPosCheckoutInput,
+  NbbPosCheckoutResult,
+};
+
+const nbbDatabaseUuidSchema = z
+  .string()
+  .regex(
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+  );
+
+export const nbbPosCartItemSchema = z.object({
+  item_id: nbbDatabaseUuidSchema,
+  quantity: z.number().int().positive(),
+});
+
+export const nbbPosCheckoutInputSchema = z.object({
+  organizationId: nbbDatabaseUuidSchema,
+  patientName: z.string().trim().min(1),
+  items: z.array(nbbPosCartItemSchema).min(1),
+});
+
+export const nbbPharmacyPosCatalogItemSchema = z.object({
+  stock_id: nbbDatabaseUuidSchema,
+  item_id: nbbDatabaseUuidSchema,
+  sku: z.string(),
+  name: z.string(),
+  unit_of_measure: z.string(),
+  available_quantity: z.coerce.number(),
+  standard_unit_price_in_centavos: z.union([
+    z.number(),
+    z.bigint(),
+    z.string().transform((v) => Number(v)),
+  ]),
+  currency: z.string(),
+});
+
+export const nbbPosCheckoutResultSchema = z.object({
+  billing_event_id: nbbDatabaseUuidSchema,
+  pos_sale_id: nbbDatabaseUuidSchema,
+  invoice_id: nbbDatabaseUuidSchema,
+  receipt_number: z.string(),
+  standard_total_in_centavos: z.union([
+    z.number(),
+    z.bigint(),
+    z.string().transform((v) => Number(v)),
+  ]),
+  patient_balance_due_in_centavos: z.union([
+    z.number(),
+    z.bigint(),
+    z.string().transform((v) => Number(v)),
+  ]),
+});
+
+export async function getNbbPharmacyPosCatalog(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<NbbPharmacyPosCatalogItem[]>> {
+  const orgResult = nbbDatabaseUuidSchema.safeParse(organizationId);
+  if (!orgResult.success) {
+    return failure(orgResult.error);
+  }
+
+  const { data, error } = await client.rpc("list_nbb_pharmacy_pos_catalog", {
+    p_organization_id: organizationId,
+  });
+
+  if (error) return failure(error);
+
+  const parsed = z.array(nbbPharmacyPosCatalogItemSchema).safeParse(data);
+  if (!parsed.success) {
+    return failure(parsed.error);
+  }
+
+  return success(parsed.data as NbbPharmacyPosCatalogItem[]);
+}
+
+export async function createNbbPharmacyPosSale(
+  client: SupabaseClient<Database>,
+  input: NbbPosCheckoutInput,
+): Promise<SupabaseResult<NbbPosCheckoutResult>> {
+  const validation = nbbPosCheckoutInputSchema.safeParse(input);
+  if (!validation.success) {
+    return failure(validation.error);
+  }
+
+  const { data, error } = await client.rpc("create_nbb_pharmacy_pos_sale", {
+    p_organization_id: validation.data.organizationId,
+    p_items: validation.data.items,
+    p_patient_name: validation.data.patientName,
+  });
+
+  if (error) return failure(error);
+
+  const parsed = nbbPosCheckoutResultSchema.safeParse(data);
+  if (!parsed.success) {
+    return failure(parsed.error);
+  }
+
+  return success(parsed.data as NbbPosCheckoutResult);
+}

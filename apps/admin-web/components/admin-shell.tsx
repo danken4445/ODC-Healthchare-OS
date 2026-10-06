@@ -26,6 +26,7 @@ import {
   DoorOpen,
   Share2,
   ShieldCheck,
+  Store,
   UserCheck,
   UserCog,
   UserPlus,
@@ -55,13 +56,13 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "OVERVIEW",
     items: [
-      { href: "/", label: "Home", icon: Home, public: true },
-      { href: "/queue", label: "Queue", icon: Users, public: true },
+      { href: "/", label: "Home", icon: Home, anyOf: ["can_manage_appointments", "can_manage_patients", "can_record_triage", "can_start_consultation", "can_manage_staff_roles", "can_view_analytics", "can_view_clinic_queue"] },
+      { href: "/queue", label: "Queue", icon: Users, anyOf: ["can_view_clinic_queue", "can_manage_appointments", "can_record_triage"] },
       { href: "/calendar", label: "Clinic calendar", icon: CalendarDays, anyOf: ["can_view_clinic_queue"] },
-      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_access_admin_portal"] },
-      { href: "/teleconsult", label: "Teleconsult", icon: Video, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments", "can_access_admin_portal"] },
-      { href: "/soap-notes", label: "SOAP Notes", icon: FileText, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients", "can_access_admin_portal"] },
-      { href: "/referrals", label: "Referrals", icon: Share2, anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients", "can_access_admin_portal"] },
+      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_manage_services", "can_manage_staff_roles", "can_manage_rooms", "can_manage_provider_schedule"] },
+      { href: "/teleconsult", label: "Teleconsult", icon: Video, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments"] },
+      { href: "/soap-notes", label: "SOAP Notes", icon: FileText, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients"] },
+      { href: "/referrals", label: "Referrals", icon: Share2, anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients"] },
     ],
   },
   {
@@ -70,7 +71,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/appointments", label: "Booking / Appointments", icon: CalendarDays, anyOf: ["can_manage_appointments"] },
       { href: "/patients", label: "Outpatients", icon: UserCheck, anyOf: ["can_manage_patients"] },
       { href: "/patients/register", label: "Register walk-in", icon: UserPlus, anyOf: ["can_manage_patients"] },
-      { href: "/prescriptions", label: "Prescriptions", icon: Pill, anyOf: ["can_start_consultation", "can_manage_patients", "can_access_admin_portal"] },
+      { href: "/prescriptions", label: "Prescriptions", icon: Pill, anyOf: ["can_start_consultation", "can_manage_patients", "can_view_inventory", "can_manage_inventory", "can_manage_pos"] },
       { href: "/laboratory-services", label: "Diagnostics / Mini-LIS", icon: FlaskConical, anyOf: ["can_manage_laboratory_services"] },
       { href: "/inventory", label: "Inventory", icon: Boxes, anyOf: ["can_view_inventory", "can_manage_inventory", "can_tag_inventory_usage"] },
       { href: "/payouts", label: "Payouts", icon: HandCoins, anyOf: ["can_view_payouts", "can_manage_payouts"] },
@@ -79,7 +80,8 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "BILLING & ADMIN",
     items: [
-      { href: "/billing", label: "Billing / POS", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing", "can_manage_pos"] },
+      { href: "/pos", label: "Pharmacy POS", icon: Store, anyOf: ["can_manage_pos"] },
+      { href: "/billing", label: "Billing", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing"] },
       { href: "/billing/claims", label: "HMO Claims", icon: ClipboardCheck, anyOf: ["can_view_claims", "can_manage_claims"] },
       { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services", "can_manage_professional_fees"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
@@ -88,7 +90,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/rooms", label: "Clinic rooms", icon: DoorOpen, anyOf: ["can_manage_rooms"] },
       { href: "/settings/branding", label: "White-Labeling", icon: Palette, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },
       { href: "/settings/features", label: "Security", icon: Lock, allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
-      { href: "/support", label: "Support", icon: HelpCircle, public: true },
+      { href: "/support", label: "Support", icon: HelpCircle, anyOf: ["can_manage_staff_roles", "can_manage_clinic_branding", "can_view_audit_log"] },
     ],
   },
   {

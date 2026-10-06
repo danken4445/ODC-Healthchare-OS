@@ -499,6 +499,8 @@ export type Database = {
           quantity: number
           source_id: string | null
           source_type: string
+          standard_line_total_in_centavos: number | null
+          standard_unit_price_in_centavos: number | null
           tagged_at: string | null
           tagged_by: string | null
           unit_cost: number
@@ -523,6 +525,8 @@ export type Database = {
           quantity?: number
           source_id?: string | null
           source_type: string
+          standard_line_total_in_centavos?: number | null
+          standard_unit_price_in_centavos?: number | null
           tagged_at?: string | null
           tagged_by?: string | null
           unit_cost?: number
@@ -547,6 +551,8 @@ export type Database = {
           quantity?: number
           source_id?: string | null
           source_type?: string
+          standard_line_total_in_centavos?: number | null
+          standard_unit_price_in_centavos?: number | null
           tagged_at?: string | null
           tagged_by?: string | null
           unit_cost?: number
@@ -2565,8 +2571,10 @@ export type Database = {
           issued_at: string | null
           organization_id: string
           paid_at: string | null
+          patient_balance_due_in_centavos: number | null
           patient_id: string | null
           qr_payment_token: string | null
+          standard_total_in_centavos: number | null
           status: Database["public"]["Enums"]["invoice_status"]
           subtotal: number
           tax_amount: number
@@ -2585,8 +2593,10 @@ export type Database = {
           issued_at?: string | null
           organization_id: string
           paid_at?: string | null
+          patient_balance_due_in_centavos?: number | null
           patient_id?: string | null
           qr_payment_token?: string | null
+          standard_total_in_centavos?: number | null
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
           tax_amount?: number
@@ -2605,8 +2615,10 @@ export type Database = {
           issued_at?: string | null
           organization_id?: string
           paid_at?: string | null
+          patient_balance_due_in_centavos?: number | null
           patient_id?: string | null
           qr_payment_token?: string | null
+          standard_total_in_centavos?: number | null
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
           tax_amount?: number
@@ -3566,6 +3578,7 @@ export type Database = {
           id: string
           organization_id: string
           receipt_number: string
+          standard_total_in_centavos: number | null
           status: Database["public"]["Enums"]["pos_sale_status"]
           updated_at: string
         }
@@ -3578,6 +3591,7 @@ export type Database = {
           id?: string
           organization_id: string
           receipt_number: string
+          standard_total_in_centavos?: number | null
           status?: Database["public"]["Enums"]["pos_sale_status"]
           updated_at?: string
         }
@@ -3590,6 +3604,7 @@ export type Database = {
           id?: string
           organization_id?: string
           receipt_number?: string
+          standard_total_in_centavos?: number | null
           status?: Database["public"]["Enums"]["pos_sale_status"]
           updated_at?: string
         }
@@ -4515,6 +4530,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_nbb_pharmacy_pos_sale: {
+        Args: {
+          p_organization_id: string
+          p_items: Json
+          p_patient_name: string
+        }
+        Returns: Json
+      }
+      list_nbb_pharmacy_pos_catalog: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: {
+          stock_id: string
+          item_id: string
+          sku: string
+          name: string
+          unit_of_measure: string
+          available_quantity: number
+          standard_unit_price_in_centavos: number
+          currency: string
+        }[]
+      }
       access_pmr_share_link: {
         Args: {
           p_share_token: string

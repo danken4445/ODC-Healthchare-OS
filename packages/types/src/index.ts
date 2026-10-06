@@ -1422,3 +1422,63 @@ export interface PractitionerProfileSummary {
   prcNumber?: string;
   ptrNumber?: string;
 }
+
+export interface PhilippineRegionOption {
+  psgc: number;
+  code: string;
+  name: string;
+  designation: string;
+  islandGroup: "Luzon" | "Visayas" | "Mindanao";
+}
+
+export const PHILIPPINE_REGIONS: readonly PhilippineRegionOption[] = [
+  { psgc: 1300000000, code: "NCR", name: "National Capital Region (NCR)", designation: "National Capital Region", islandGroup: "Luzon" },
+  { psgc: 1400000000, code: "CAR", name: "Cordillera Administrative Region (CAR)", designation: "Cordillera Administrative Region", islandGroup: "Luzon" },
+  { psgc: 100000000, code: "Region I", name: "Region I (Ilocos Region)", designation: "Ilocos Region", islandGroup: "Luzon" },
+  { psgc: 200000000, code: "Region II", name: "Region II (Cagayan Valley)", designation: "Cagayan Valley", islandGroup: "Luzon" },
+  { psgc: 300000000, code: "Region III", name: "Region III (Central Luzon)", designation: "Central Luzon", islandGroup: "Luzon" },
+  { psgc: 400000000, code: "Region IV-A", name: "Region IV-A (CALABARZON)", designation: "CALABARZON", islandGroup: "Luzon" },
+  { psgc: 1700000000, code: "MIMAROPA", name: "MIMAROPA Region (Region IV-B)", designation: "MIMAROPA Region", islandGroup: "Luzon" },
+  { psgc: 500000000, code: "Region V", name: "Region V (Bicol Region)", designation: "Bicol Region", islandGroup: "Luzon" },
+  { psgc: 600000000, code: "Region VI", name: "Region VI (Western Visayas)", designation: "Western Visayas", islandGroup: "Visayas" },
+  { psgc: 700000000, code: "Region VII", name: "Region VII (Central Visayas)", designation: "Central Visayas", islandGroup: "Visayas" },
+  { psgc: 1800000000, code: "NIR", name: "Negros Island Region (NIR)", designation: "Negros Island Region", islandGroup: "Visayas" },
+  { psgc: 800000000, code: "Region VIII", name: "Region VIII (Eastern Visayas)", designation: "Eastern Visayas", islandGroup: "Visayas" },
+  { psgc: 900000000, code: "Region IX", name: "Region IX (Zamboanga Peninsula)", designation: "Zamboanga Peninsula", islandGroup: "Mindanao" },
+  { psgc: 1000000000, code: "Region X", name: "Region X (Northern Mindanao)", designation: "Northern Mindanao", islandGroup: "Mindanao" },
+  { psgc: 1100000000, code: "Region XI", name: "Region XI (Davao Region)", designation: "Davao Region", islandGroup: "Mindanao" },
+  { psgc: 1200000000, code: "Region XII", name: "Region XII (SOCCSKSARGEN)", designation: "SOCCSKSARGEN", islandGroup: "Mindanao" },
+  { psgc: 1600000000, code: "Region XIII", name: "Region XIII (Caraga)", designation: "Caraga", islandGroup: "Mindanao" },
+  { psgc: 1900000000, code: "BARMM", name: "Bangsamoro Autonomous Region in Muslim Mindanao (BARMM)", designation: "Bangsamoro Autonomous Region In Muslim Mindanao", islandGroup: "Mindanao" },
+] as const;
+
+export interface NbbPharmacyPosCatalogItem {
+  stock_id: string;
+  item_id: string;
+  sku: string;
+  name: string;
+  unit_of_measure: string;
+  available_quantity: number;
+  standard_unit_price_in_centavos: number | bigint;
+  currency: string;
+}
+
+export interface NbbPosCartItem {
+  item_id: string;
+  quantity: number;
+}
+
+export interface NbbPosCheckoutInput {
+  organizationId: string;
+  patientName: string;
+  items: NbbPosCartItem[];
+}
+
+export interface NbbPosCheckoutResult {
+  billing_event_id: string;
+  pos_sale_id: string;
+  invoice_id: string;
+  receipt_number: string;
+  standard_total_in_centavos: number | bigint;
+  patient_balance_due_in_centavos: number | bigint;
+}
