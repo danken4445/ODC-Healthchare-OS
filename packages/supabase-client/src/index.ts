@@ -62,6 +62,9 @@ import {
   type DepartmentInput,
   type DepartmentSummary,
   type InventoryEncounterOption,
+  type InventoryBatchSummary,
+  type InventoryExpirySettings,
+  type InventoryExpiryStatus,
   type InventoryItemInput,
   type InventoryItemPricingInput,
   type InventoryItemSummary,
@@ -69,6 +72,8 @@ import {
   type InventoryUsageInput,
   type InventoryViewMode,
   type InventoryWorkspace,
+  type ReceiveInventoryBatchInput,
+  type ReceiveInventoryStockInput,
   type Json,
   type DiagnosticServiceRequestInput,
   type DiagnosticReportInput,
@@ -282,15 +287,17 @@ const documentReferenceSummaryColumns =
 const departmentSummaryColumns =
   "id, organization_id, code, name, description, active";
 const inventoryItemSummaryColumns =
-  "id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active";
+  "id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active, is_perishable, near_expiry_days_override";
 const departmentStockSummaryColumns =
   "id, organization_id, item_id, department_id, quantity, reorder_level, updated_at";
+const inventoryBatchSummaryColumns =
+  "id, organization_id, stock_id, item_id, department_id, lot_number, expiry_date, quantity, usable_quantity, days_until_expiry, expiry_status, legacy_unassigned_expiry, received_at, created_at, updated_at, item_name, item_sku, department_name";
 const inventoryHoldSummaryColumns =
   "id, stock_id, encounter_id, quantity, status, held_at";
 const inventoryUsageSummaryColumns =
   "id, organization_id, stock_id, item_id, department_id, encounter_id, patient_id, quantity, unit_cost, unit_price, currency, tagged_by, used_at";
 const inventoryMovementSummaryColumns =
-  "id, organization_id, stock_id, item_id, department_id, movement_type, quantity_delta, reason, usage_id, transfer_group_id, recorded_by, occurred_at";
+  "id, organization_id, stock_id, item_id, department_id, movement_type, quantity_delta, reason, usage_id, transfer_group_id, recorded_by, occurred_at, batch_id";
 const serviceRequestSummaryColumns =
   "id, organization_id, patient_id, encounter_id, requester_practitioner_id, status, category, priority, code, code_display, performer_practitioner_role_id, note, created_at, updated_at";
 const diagnosticReportSummaryColumns =
@@ -1321,7 +1328,7 @@ export async function getInventoryWorkspace(
     }
   })();
 
-  const [departments, items, stock, holds, usages, billingStatuses] =
+  const [departments, items, stock, batches, holds, usages, billingStatuses, expirySettingsResult, posSettingsResult] =
     await Promise.all([
       client
         .from("departments")
@@ -1337,6 +1344,11 @@ export async function getInventoryWorkspace(
         .from("department_stock")
         .select(departmentStockSummaryColumns)
         .eq("organization_id", organizationId),
+      client
+        .from("inventory_batch_statuses")
+        .select(inventoryBatchSummaryColumns)
+        .eq("organization_id", organizationId)
+        .order("received_at", { ascending: false }),
       client
         .from("inventory_holds")
         .select(inventoryHoldSummaryColumns)
@@ -1354,6 +1366,16 @@ export async function getInventoryWorkspace(
           p_organization_id: organizationId,
         } as never,
       ),
+      client
+        .from("inventory_expiry_settings")
+        .select("organization_id, near_expiry_days, updated_at")
+        .eq("organization_id", organizationId)
+        .maybeSingle(),
+      client
+        .from("inventory_pos_settings")
+        .select("organization_id, pharmacy_department_id")
+        .eq("organization_id", organizationId)
+        .maybeSingle(),
       staffNamesPromise,
     ]);
   const baseError = [departments, items, stock, holds, usages].find(
@@ -1409,14 +1431,27 @@ export async function getInventoryWorkspace(
     billingStatus: billingStatusByUsageId.get(u.id) ?? "unbilled",
   }));
 
+  const mergedExpirySettings: InventoryWorkspace["expirySettings"] = {
+    organization_id: organizationId,
+    near_expiry_days: expirySettingsResult.data?.near_expiry_days ?? 90,
+    pharmacy_department_id: posSettingsResult.data?.pharmacy_department_id ?? null,
+    updated_at: expirySettingsResult.data?.updated_at ?? undefined,
+  };
+
   return success({
     departments: (departments.data ??
       []) as unknown as InventoryWorkspace["departments"],
     items: (items.data ?? []) as unknown as InventoryWorkspace["items"],
     stock: (stock.data ?? []) as unknown as InventoryWorkspace["stock"],
+    batches: ((batches.data ?? []) as unknown as InventoryBatchSummary[]).map((b) => ({
+      ...b,
+      quantity: Number(b.quantity),
+      usable_quantity: Number(b.usable_quantity),
+    })),
     holds: (holds.data ?? []) as unknown as InventoryHoldSummary[],
     usages: usageRows,
     movements,
+    expirySettings: mergedExpirySettings,
   });
 }
 
@@ -1559,6 +1594,8 @@ export async function createInventoryItem(
       selling_price: input.sellingPrice,
       unit_price: input.sellingPrice,
       currency: input.currency ?? "PHP",
+      is_perishable: input.isPerishable ?? false,
+      near_expiry_days_override: input.nearExpiryDaysOverride ?? null,
     })
     .select(inventoryItemSummaryColumns)
     .single();
@@ -1571,19 +1608,69 @@ export async function updateInventoryItemPricing(
   client: SupabaseClient<Database>,
   input: InventoryItemPricingInput,
 ): Promise<SupabaseResult<InventoryItemSummary>> {
+  const updatePayload: Database["public"]["Tables"]["inventory_items"]["Update"] = {
+    unit_cost: input.unitCost,
+    selling_price: input.sellingPrice,
+    unit_price: input.sellingPrice,
+  };
+  if (input.isPerishable !== undefined) {
+    updatePayload.is_perishable = input.isPerishable;
+  }
+  if (input.nearExpiryDaysOverride !== undefined) {
+    updatePayload.near_expiry_days_override = input.nearExpiryDaysOverride;
+  }
+
   const { data, error } = await client
     .from("inventory_items")
-    .update({
-      unit_cost: input.unitCost,
-      selling_price: input.sellingPrice,
-      unit_price: input.sellingPrice,
-    })
+    .update(updatePayload)
     .eq("id", input.itemId)
     .select(inventoryItemSummaryColumns)
     .single();
   return error
     ? failure(error)
     : success(data as unknown as InventoryItemSummary);
+}
+
+export async function setInventoryItemPerishable(
+  client: SupabaseClient<Database>,
+  itemId: string,
+  isPerishable: boolean,
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("set_inventory_item_perishable", {
+    p_item_id: itemId,
+    p_is_perishable: isPerishable,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function saveInventoryExpirySettings(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    nearExpiryDays?: number;
+    pharmacyDepartmentId?: string | null;
+  },
+): Promise<SupabaseResult<void>> {
+  const { error } = await client.rpc("save_inventory_expiry_settings", {
+    p_organization_id: input.organizationId,
+    p_near_expiry_days: input.nearExpiryDays ?? 90,
+    p_pharmacy_department_id: input.pharmacyDepartmentId ?? undefined,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function receiveInventoryStock(
+  client: SupabaseClient<Database>,
+  input: ReceiveInventoryStockInput,
+): Promise<SupabaseResult<string>> {
+  const { data, error } = await client.rpc("receive_inventory_stock", {
+    p_item_id: input.itemId,
+    p_department_id: input.departmentId,
+    p_batches: input.batches as unknown as Json,
+    p_reason: input.reason,
+    p_movement_type: input.movementType ?? "receipt",
+  });
+  return error ? failure(error) : success(data);
 }
 
 export async function adjustDepartmentStock(

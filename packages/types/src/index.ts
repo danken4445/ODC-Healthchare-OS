@@ -635,6 +635,8 @@ export type InventoryItemSummary = Pick<
   | "unit_price"
   | "currency"
   | "active"
+  | "is_perishable"
+  | "near_expiry_days_override"
 >;
 
 export type DepartmentStockSummary = Pick<
@@ -647,6 +649,40 @@ export type DepartmentStockSummary = Pick<
   | "reorder_level"
   | "updated_at"
 >;
+
+export type InventoryExpiryStatus =
+  | "ok"
+  | "near_expiry"
+  | "expired"
+  | "legacy_unassigned";
+
+export interface InventoryBatchSummary {
+  id: string;
+  organization_id: string;
+  stock_id: string;
+  item_id: string;
+  department_id: string;
+  lot_number: string | null;
+  expiry_date: string | null;
+  quantity: number;
+  usable_quantity: number;
+  days_until_expiry: number | null;
+  expiry_status: InventoryExpiryStatus;
+  legacy_unassigned_expiry: boolean;
+  received_at: string;
+  created_at: string;
+  updated_at: string;
+  item_name?: string;
+  item_sku?: string;
+  department_name?: string;
+}
+
+export interface InventoryExpirySettings {
+  organization_id: string;
+  near_expiry_days: number;
+  pharmacy_department_id?: string | null;
+  updated_at?: string;
+}
 
 export type InventoryUsageSummary = Pick<
   InventoryUsageRow,
@@ -693,6 +729,7 @@ export type InventoryStockMovementSummary = Pick<
   | "recorded_by"
   | "occurred_at"
 > & {
+  batch_id?: string | null;
   actorName?: string | null;
 };
 
@@ -700,9 +737,11 @@ export interface InventoryWorkspace {
   departments: DepartmentSummary[];
   items: InventoryItemSummary[];
   stock: DepartmentStockSummary[];
+  batches: InventoryBatchSummary[];
   holds: InventoryHoldSummary[];
   usages: InventoryUsageSummary[];
   movements: InventoryStockMovementSummary[];
+  expirySettings?: InventoryExpirySettings | null;
 }
 
 export type InventoryViewMode = "visual" | "simple";
@@ -715,12 +754,16 @@ export interface InventoryItemInput {
   unitCost: number;
   sellingPrice: number;
   currency?: string;
+  isPerishable?: boolean;
+  nearExpiryDaysOverride?: number | null;
 }
 
 export interface InventoryItemPricingInput {
   itemId: string;
   unitCost: number;
   sellingPrice: number;
+  isPerishable?: boolean;
+  nearExpiryDaysOverride?: number | null;
 }
 
 export interface DepartmentInput {
@@ -729,12 +772,26 @@ export interface DepartmentInput {
   description?: string;
 }
 
+export interface ReceiveInventoryBatchInput {
+  quantity: number;
+  expiry_date?: string | null;
+  lot_number?: string | null;
+}
+
+export interface ReceiveInventoryStockInput {
+  itemId: string;
+  departmentId: string;
+  batches: ReceiveInventoryBatchInput[];
+  reason: string;
+  movementType?: "opening" | "receipt" | "adjustment";
+}
+
 export interface StockAdjustmentInput {
   itemId: string;
   departmentId: string;
   quantityDelta: number;
   reason: string;
-  movementType: "opening" | "receipt" | "adjustment";
+  movementType: "opening" | "receipt" | "adjustment" | "disposal";
 }
 
 export interface StockTransferInput {

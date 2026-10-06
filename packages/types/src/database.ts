@@ -1395,6 +1395,116 @@ export type Database = {
           },
         ]
       }
+      disease_surveillance_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          organization_id: string
+          purpose: string
+          resource_ref: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          organization_id: string
+          purpose: string
+          resource_ref?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          organization_id?: string
+          purpose?: string
+          resource_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disease_surveillance_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      disease_surveillance_rollups: {
+        Row: {
+          age_bracket: string
+          barangay: string | null
+          case_count: number
+          created_at: string
+          disease_name: string
+          doh_category: string
+          epi_week: number
+          epi_year: number
+          gender: string | null
+          icd10_code: string
+          id: string
+          is_suppressed: boolean
+          municipality: string | null
+          organization_id: string
+          psgc_code: string | null
+        }
+        Insert: {
+          age_bracket: string
+          barangay?: string | null
+          case_count: number
+          created_at?: string
+          disease_name: string
+          doh_category: string
+          epi_week: number
+          epi_year: number
+          gender?: string | null
+          icd10_code: string
+          id?: string
+          is_suppressed?: boolean
+          municipality?: string | null
+          organization_id: string
+          psgc_code?: string | null
+        }
+        Update: {
+          age_bracket?: string
+          barangay?: string | null
+          case_count?: number
+          created_at?: string
+          disease_name?: string
+          doh_category?: string
+          epi_week?: number
+          epi_year?: number
+          gender?: string | null
+          icd10_code?: string
+          id?: string
+          is_suppressed?: boolean
+          municipality?: string | null
+          organization_id?: string
+          psgc_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disease_surveillance_rollups_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disease_surveillance_rollups_psgc_code_fkey"
+            columns: ["psgc_code"]
+            isOneToOne: false
+            referencedRelation: "geo_barangays"
+            referencedColumns: ["psgc_code"]
+          },
+        ]
+      }
       doctor_payouts: {
         Row: {
           assigned_practitioner_role_id: string
@@ -1907,6 +2017,68 @@ export type Database = {
           },
         ]
       }
+      geo_barangays: {
+        Row: {
+          barangay_name: string
+          geom: unknown
+          geom_simplified: unknown
+          municipality_code: string
+          municipality_name: string
+          province_name: string
+          psgc_code: string
+          region_name: string
+        }
+        Insert: {
+          barangay_name: string
+          geom: unknown
+          geom_simplified: unknown
+          municipality_code: string
+          municipality_name: string
+          province_name: string
+          psgc_code: string
+          region_name: string
+        }
+        Update: {
+          barangay_name?: string
+          geom?: unknown
+          geom_simplified?: unknown
+          municipality_code?: string
+          municipality_name?: string
+          province_name?: string
+          psgc_code?: string
+          region_name?: string
+        }
+        Relationships: []
+      }
+      geo_population_denominators: {
+        Row: {
+          census_year: number
+          population: number
+          psgc_code: string
+          source: string
+        }
+        Insert: {
+          census_year: number
+          population: number
+          psgc_code: string
+          source: string
+        }
+        Update: {
+          census_year?: number
+          population?: number
+          psgc_code?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "geo_population_denominators_psgc_code_fkey"
+            columns: ["psgc_code"]
+            isOneToOne: false
+            referencedRelation: "geo_barangays"
+            referencedColumns: ["psgc_code"]
+          },
+        ]
+      }
       hello_world: {
         Row: {
           created_at: string
@@ -2022,6 +2194,80 @@ export type Database = {
           },
         ]
       }
+      inventory_batches: {
+        Row: {
+          created_at: string
+          department_id: string
+          expiry_date: string | null
+          id: string
+          item_id: string
+          legacy_unassigned_expiry: boolean
+          lot_number: string | null
+          organization_id: string
+          quantity: number
+          received_at: string
+          stock_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          expiry_date?: string | null
+          id?: string
+          item_id: string
+          legacy_unassigned_expiry?: boolean
+          lot_number?: string | null
+          organization_id: string
+          quantity: number
+          received_at?: string
+          stock_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          expiry_date?: string | null
+          id?: string
+          item_id?: string
+          legacy_unassigned_expiry?: boolean
+          lot_number?: string | null
+          organization_id?: string
+          quantity?: number
+          received_at?: string
+          stock_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_batches_department_id_organization_id_fkey"
+            columns: ["department_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_item_id_organization_id_fkey"
+            columns: ["item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_stock_id_organization_id_fkey"
+            columns: ["stock_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "department_stock"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       inventory_categories: {
         Row: {
           active: boolean
@@ -2065,6 +2311,32 @@ export type Database = {
             foreignKeyName: "inventory_categories_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_expiry_settings: {
+        Row: {
+          near_expiry_days: number
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          near_expiry_days?: number
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          near_expiry_days?: number
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_expiry_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -2184,7 +2456,9 @@ export type Database = {
           currency: string
           description: string | null
           id: string
+          is_perishable: boolean
           name: string
+          near_expiry_days_override: number | null
           organization_id: string
           selling_price: number
           sku: string
@@ -2199,7 +2473,9 @@ export type Database = {
           currency?: string
           description?: string | null
           id?: string
+          is_perishable?: boolean
           name: string
+          near_expiry_days_override?: number | null
           organization_id: string
           selling_price?: number
           sku: string
@@ -2214,7 +2490,9 @@ export type Database = {
           currency?: string
           description?: string | null
           id?: string
+          is_perishable?: boolean
           name?: string
+          near_expiry_days_override?: number | null
           organization_id?: string
           selling_price?: number
           sku?: string
@@ -2233,8 +2511,42 @@ export type Database = {
           },
         ]
       }
+      inventory_pos_settings: {
+        Row: {
+          organization_id: string
+          pharmacy_department_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          pharmacy_department_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          organization_id?: string
+          pharmacy_department_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_pos_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_pos_settings_pharmacy_department_id_fkey"
+            columns: ["pharmacy_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_stock_movements: {
         Row: {
+          batch_id: string | null
           created_at: string
           department_id: string
           id: string
@@ -2250,6 +2562,7 @@ export type Database = {
           usage_id: string | null
         }
         Insert: {
+          batch_id?: string | null
           created_at?: string
           department_id: string
           id?: string
@@ -2265,6 +2578,7 @@ export type Database = {
           usage_id?: string | null
         }
         Update: {
+          batch_id?: string | null
           created_at?: string
           department_id?: string
           id?: string
@@ -2280,6 +2594,20 @@ export type Database = {
           usage_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_stock_movements_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batch_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_stock_movements_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_stock_movements_department_id_organization_id_fkey"
             columns: ["department_id", "organization_id"]
@@ -2310,6 +2638,62 @@ export type Database = {
           },
           {
             foreignKeyName: "inventory_stock_movements_usage_id_fkey"
+            columns: ["usage_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_usages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_usage_batch_consumptions: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          organization_id: string
+          quantity: number
+          usage_id: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          organization_id: string
+          quantity: number
+          usage_id: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+          quantity?: number
+          usage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_usage_batch_consumptions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batch_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_usage_batch_consumptions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_usage_batch_consumptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_usage_batch_consumptions_usage_id_fkey"
             columns: ["usage_id"]
             isOneToOne: false
             referencedRelation: "inventory_usages"
@@ -4527,32 +4911,82 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      disease_surveillance_rollups_safe: {
+        Row: {
+          age_bracket: string | null
+          barangay: string | null
+          case_count: number | null
+          created_at: string | null
+          disease_name: string | null
+          doh_category: string | null
+          epi_week: number | null
+          epi_year: number | null
+          gender: string | null
+          icd10_code: string | null
+          id: string | null
+          is_suppressed: boolean | null
+          municipality: string | null
+          organization_id: string | null
+          psgc_code: string | null
+        }
+        Relationships: []
+      }
+      inventory_batch_statuses: {
+        Row: {
+          created_at: string | null
+          days_until_expiry: number | null
+          department_id: string | null
+          department_name: string | null
+          expiry_date: string | null
+          expiry_status: string | null
+          id: string | null
+          is_perishable: boolean | null
+          item_id: string | null
+          item_name: string | null
+          item_sku: string | null
+          legacy_unassigned_expiry: boolean | null
+          lot_number: string | null
+          organization_id: string | null
+          quantity: number | null
+          received_at: string | null
+          stock_id: string | null
+          unit_of_measure: string | null
+          updated_at: string | null
+          usable_quantity: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_batches_department_id_organization_id_fkey"
+            columns: ["department_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_item_id_organization_id_fkey"
+            columns: ["item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_stock_id_organization_id_fkey"
+            columns: ["stock_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "department_stock"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
     }
     Functions: {
-      create_nbb_pharmacy_pos_sale: {
-        Args: {
-          p_organization_id: string
-          p_items: Json
-          p_patient_name: string
-        }
-        Returns: Json
-      }
-      list_nbb_pharmacy_pos_catalog: {
-        Args: {
-          p_organization_id: string
-        }
-        Returns: {
-          stock_id: string
-          item_id: string
-          sku: string
-          name: string
-          unit_of_measure: string
-          available_quantity: number
-          standard_unit_price_in_centavos: number
-          currency: string
-        }[]
-      }
       access_pmr_share_link: {
         Args: {
           p_share_token: string
@@ -4639,6 +5073,19 @@ export type Database = {
         }
         Returns: string
       }
+      allocate_perishable_stock_fefo: {
+        Args: {
+          p_stock_id: string
+          p_quantity: number
+          p_allow_expired?: boolean
+        }
+        Returns: {
+          allocated_batch_id: string
+          allocated_lot_number: string
+          allocated_expiry_date: string
+          allocated_quantity: number
+        }[]
+      }
       archive_clinical_document_template: {
         Args: {
           p_organization_id: string
@@ -4722,6 +5169,12 @@ export type Database = {
           currency: string
         }[]
       }
+      calculate_epi_week: {
+        Args: {
+          p_at: string
+        }
+        Returns: number
+      }
       can_access_organization: {
         Args: {
           target_organization_id: string
@@ -4754,6 +5207,12 @@ export type Database = {
           p_block_slot?: boolean
         }
         Returns: undefined
+      }
+      categorize_age_bracket: {
+        Args: {
+          p_birth_date: string
+        }
+        Returns: string
       }
       claim_walk_in_patient: {
         Args: {
@@ -4823,6 +5282,14 @@ export type Database = {
             }
             Returns: string
           }
+      create_nbb_pharmacy_pos_sale: {
+        Args: {
+          p_organization_id: string
+          p_items: Json
+          p_patient_name: string
+        }
+        Returns: Json
+      }
       create_payment_attempt: {
         Args: {
           p_invoice_id: string
@@ -4900,6 +5367,15 @@ export type Database = {
           p_organization_id?: string
         }
         Returns: number
+      }
+      export_doh_pidsr_cases: {
+        Args: {
+          p_organization_id: string
+          p_purpose: string
+          p_epi_year: number
+          p_epi_week: number
+        }
+        Returns: Json
       }
       finalize_billing_event: {
         Args: {
@@ -5314,6 +5790,26 @@ export type Database = {
           photo_url: string
         }[]
       }
+      get_barangay_choropleth: {
+        Args: {
+          p_organization_id: string
+          p_icd10_code: string
+          p_epi_year: number
+          p_epi_week: number
+        }
+        Returns: {
+          psgc_code: string
+          barangay_name: string
+          municipality_name: string
+          province_name: string
+          region_name: string
+          geometry: Json
+          population: number
+          case_count: number
+          is_suppressed: boolean
+          rate_per_10k: number
+        }[]
+      }
       get_billable_encounters: {
         Args: {
           p_organization_id: string
@@ -5513,6 +6009,39 @@ export type Database = {
           class_values: Json
         }[]
       }
+      get_patient_default_template: {
+        Args: {
+          p_organization_id: string
+          p_type: string
+          p_condition_code?: string
+        }
+        Returns: {
+          id: string
+          organization_id: string
+          category: string
+          name: string
+          condition_code: string
+          condition_display: string
+          structured_body: Json
+          version: number
+        }[]
+      }
+      get_patient_document_template: {
+        Args: {
+          p_template_id: string
+          p_template_version?: number
+        }
+        Returns: {
+          id: string
+          organization_id: string
+          category: string
+          name: string
+          condition_code: string
+          condition_display: string
+          structured_body: Json
+          version: number
+        }[]
+      }
       get_patient_invoices: {
         Args: {
           p_organization_id: string
@@ -5648,6 +6177,10 @@ export type Database = {
           pin: string
           error: string
         }[]
+      }
+      inventory_manila_today: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       is_active_practitioner_coverage: {
         Args: {
@@ -5906,6 +6439,21 @@ export type Database = {
           current_fee_effective_from: string
         }[]
       }
+      list_nbb_pharmacy_pos_catalog: {
+        Args: {
+          p_organization_id: string
+        }
+        Returns: {
+          stock_id: string
+          item_id: string
+          sku: string
+          name: string
+          unit_of_measure: string
+          available_quantity: number
+          standard_unit_price_in_centavos: number
+          currency: string
+        }[]
+      }
       list_patient_audit_trail: {
         Args: {
           p_organization_id: string
@@ -6015,6 +6563,26 @@ export type Database = {
         }
         Returns: undefined
       }
+      read_disease_surveillance_rollups_safe: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          organization_id: string
+          epi_year: number
+          epi_week: number
+          icd10_code: string
+          disease_name: string
+          doh_category: string
+          age_bracket: string
+          gender: string
+          municipality: string
+          barangay: string
+          case_count: number
+          is_suppressed: boolean
+          created_at: string
+          psgc_code: string
+        }[]
+      }
       reassign_appointment: {
         Args: {
           p_appointment_id: string
@@ -6023,11 +6591,31 @@ export type Database = {
         }
         Returns: string
       }
+      receive_inventory_stock: {
+        Args: {
+          p_item_id: string
+          p_department_id: string
+          p_batches: Json
+          p_reason: string
+          p_movement_type?: string
+        }
+        Returns: string
+      }
       record_diagnostic_report: {
         Args: {
           p_service_request_id: string
           p_conclusion: string
           p_results: Json
+        }
+        Returns: string
+      }
+      record_disease_surveillance_audit: {
+        Args: {
+          p_organization_id: string
+          p_action: string
+          p_purpose: string
+          p_resource_ref?: string
+          p_metadata?: Json
         }
         Returns: string
       }
@@ -6086,6 +6674,14 @@ export type Database = {
           p_supersedes_id?: string
         }
         Returns: string
+      }
+      refresh_disease_surveillance_rollups: {
+        Args: {
+          p_organization_id: string
+          p_start_date: string
+          p_end_date: string
+        }
+        Returns: undefined
       }
       refresh_doctor_payout: {
         Args: {
@@ -6195,6 +6791,14 @@ export type Database = {
           p_active: boolean
         }
         Returns: string
+      }
+      save_inventory_expiry_settings: {
+        Args: {
+          p_organization_id: string
+          p_near_expiry_days?: number
+          p_pharmacy_department_id?: string
+        }
+        Returns: undefined
       }
       save_laboratory_service: {
         Args: {
@@ -6341,6 +6945,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_inventory_item_perishable: {
+        Args: {
+          p_item_id: string
+          p_is_perishable: boolean
+        }
+        Returns: undefined
+      }
       set_limit: {
         Args: {
           "": number
@@ -6466,15 +7077,24 @@ export type Database = {
         }
         Returns: string
       }
-      tag_inventory_usage: {
-        Args: {
-          p_encounter_id: string
-          p_stock_id: string
-          p_quantity: number
-          p_department_id: string | null
-        }
-        Returns: string
-      }
+      tag_inventory_usage:
+        | {
+            Args: {
+              p_encounter_id: string
+              p_stock_id: string
+              p_quantity: number
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_encounter_id: string
+              p_stock_id: string
+              p_quantity: number
+              p_department_id: string
+            }
+            Returns: string
+          }
       transfer_department_stock: {
         Args: {
           p_item_id: string
@@ -6744,3 +7364,4 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
