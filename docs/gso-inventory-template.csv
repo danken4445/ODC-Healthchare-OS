@@ -1,0 +1,7 @@
+item_code,article,category,unit_of_measure,quantity,unit_cost,lot_number,expiry_date,po_number,ris_number,supplier_name
+MED-AMOX-500,Amoxicillin 500mg Capsule,Drugs and Medicines,capsule,1000,3.50,LOT-AMX-2026-01,2027-08-31,PO-2026-0891,RIS-2026-0012,Metro Pharma Corp
+MED-PARA-500,Paracetamol 500mg Tablet,Drugs and Medicines,tablet,2500,1.25,LOT-PAR-2026-04,,PO-2026-0891,RIS-2026-0012,Metro Pharma Corp
+SUP-COT-100,Cotton Balls Absorbent 100s,Medical Supplies,pack,150,45.00,,,PO-2026-0892,RIS-2026-0013,HealthCare Essentials Inc
+SUP-GLV-75,Sterile Surgical Gloves 7.5,Medical Supplies,pair,500,28.00,LOT-GLV-8821,2028-11-30,PO-2026-0892,RIS-2026-0013,HealthCare Essentials Inc
+SUP-SYR-05,Disposable Syringe 5ml with Needle,Medical Supplies,piece,800,8.50,LOT-SYR-3310,2028-06-30,PO-2026-0893,RIS-2026-0014,Universal Medical Corp
+EQP-THRM-DG,Digital Clinical Thermometer,Medical Equipment,piece,50,185.00,,,PO-2026-0894,RIS-2026-0015,MedTech Solutions
