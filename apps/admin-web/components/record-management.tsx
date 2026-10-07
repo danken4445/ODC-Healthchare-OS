@@ -3,9 +3,11 @@
 import {
   adjudicateClaim,
   assignStaffDepartment,
+  assignStaffRole,
   bookAppointmentSlot,
   createClinicAccount,
   createPosSale,
+  deleteClinicRoleDefinition,
   finalizeBillingEvent,
   generateBillingEvent,
   getAvailableAppointmentSlots,
@@ -14,6 +16,7 @@ import {
   getGovernancePatients,
   getStaffAdministration,
   recordPayment,
+  resetClinicRolePermissions,
   saveAdminClinicService,
   saveClinicRoleDefinition,
   saveCompanyCoverage,
@@ -36,7 +39,7 @@ import type {
   OrganizationModuleKey,
   PaymentMethod,
 } from "@odyssey/types";
-import { Edit3, ExternalLink, Plus, Power, ReceiptText } from "lucide-react";
+import { Edit3, ExternalLink, Plus, Power, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
@@ -124,7 +127,7 @@ function useCanManage(dataset: AdminDataset) {
 }
 
 function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps) {
-  const { assignedDepartmentId, client, isSuperadmin, organization } = useAdminData();
+  const { assignedDepartmentId, client, isItAdmin, isSuperadmin, organization } = useAdminData();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -160,11 +163,17 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
         getStaffAdministration(client, organization.id),
       ]);
       if (roleResult.error) setError(roleResult.error.message);
-      else setRoles(roleResult.data);
+      else {
+        let roleList = roleResult.data;
+        if (isItAdmin) {
+          roleList = roleList.filter((r) => r.code !== "admin" && r.code !== "owner");
+        }
+        setRoles(roleList);
+      }
       if (staffResult.error) setError(staffResult.error.message);
       else {
         let depts = staffResult.data.departments.filter((department) => department.active);
-        if (assignedDepartmentId && !isSuperadmin) {
+        if (assignedDepartmentId && !isSuperadmin && !isItAdmin) {
           depts = depts.filter((d) => d.id === assignedDepartmentId);
         }
         setDepartments(depts.map((department) => ({ id: department.id, label: department.name })));
@@ -182,7 +191,7 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
       }
     }
     setLoadingOptions(false);
-  }, [assignedDepartmentId, client, dataset, isSuperadmin, organization]);
+  }, [assignedDepartmentId, client, dataset, isItAdmin, isSuperadmin, organization]);
 
   useEffect(() => {
     if (open) void loadOptions();
@@ -219,21 +228,38 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
         active: Boolean(form.get("active")),
       });
     } else if (dataset === "staff" && !editing) {
-      const targetDeptId = (assignedDepartmentId && !isSuperadmin) ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
+      const isDeptLocked = Boolean(assignedDepartmentId && !isSuperadmin && !isItAdmin);
+      const targetDeptId = isDeptLocked ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
+      const selectedRoleCode = String(form.get("roleCode") ?? "front_desk");
+      if (isItAdmin && (selectedRoleCode === "admin" || selectedRoleCode === "owner")) {
+        setError("IT administrators cannot create admin or owner accounts.");
+        setSaving(false);
+        return;
+      }
       const accountResult = await createClinicAccount(client, {
         organizationId: organization.id,
         displayName: String(form.get("displayName") ?? "").trim(),
         email: String(form.get("email") ?? "").trim(),
         password: String(form.get("password") ?? ""),
-        roleCode: String(form.get("roleCode") ?? "front_desk"),
+        roleCode: selectedRoleCode,
       });
       result = accountResult;
       if (!accountResult.error && accountResult.data && targetDeptId) {
         result = await assignStaffDepartment(client, { organizationId: organization.id, userId: accountResult.data.id, departmentId: targetDeptId });
       }
     } else if (dataset === "staff" && editing) {
-      const targetDeptId = (assignedDepartmentId && !isSuperadmin) ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
+      const isDeptLocked = Boolean(assignedDepartmentId && !isSuperadmin && !isItAdmin);
+      const targetDeptId = isDeptLocked ? assignedDepartmentId : (String(form.get("departmentId") || "") || null);
+      const targetRoleCode = String(form.get("roleCode") || "");
+      if (isItAdmin && (targetRoleCode === "admin" || targetRoleCode === "owner")) {
+        setError("IT administrators cannot assign admin or owner roles.");
+        setSaving(false);
+        return;
+      }
       result = await assignStaffDepartment(client, { organizationId: organization.id, userId: value(row, "id"), departmentId: targetDeptId });
+      if (!result.error && targetRoleCode && targetRoleCode !== value(row, "roleCode")) {
+        result = await assignStaffRole(client, { organizationId: organization.id, userId: value(row, "id"), roleCode: targetRoleCode });
+      }
     } else if (dataset === "appointments") {
       result = await bookAppointmentSlot(client, String(form.get("slotId")), String(form.get("patientId")), String(form.get("deliveryMode")) as AppointmentDeliveryMode, organization.id);
     } else if (dataset === "billing") {
@@ -304,14 +330,21 @@ function RecordEditorDialog({ dataset, label, onChanged, row }: ManagementProps)
           </div> : null}
 
           {dataset === "staff" ? <div className="form-grid">
-            {!editing ? <><Field label="Full name"><Input name="displayName" required /></Field><Field label="Work email"><Input name="email" type="email" required /></Field><Field label="Temporary password"><Input name="password" type="password" minLength={8} required /></Field><Field label="Role"><Select name="roleCode" defaultValue="front_desk">{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</Select></Field></> : <div className="confirmation-summary field-span"><span>Staff member</span><strong>{value(row, "name")}</strong></div>}
+            {!editing ? <><Field label="Full name"><Input name="displayName" required /></Field><Field label="Work email"><Input name="email" type="email" required /></Field><Field label="Temporary password"><Input name="password" type="password" minLength={8} required /></Field><Field label="Role"><Select name="roleCode" defaultValue="front_desk">{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</Select></Field></> : <div className="confirmation-summary field-span"><span>Staff member</span><strong>{value(row, "name")}</strong> <small style={{ color: "var(--color-text-secondary, #64748b)" }}>{value(row, "email")}</small></div>}
+            {editing ? (
+              <Field label="Role" span>
+                <Select name="roleCode" defaultValue={value(row, "roleCode") || "front_desk"}>
+                  {roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}
+                </Select>
+              </Field>
+            ) : null}
             <Field label="Department" span>
               <Select
                 name="departmentId"
-                defaultValue={value(row, "departmentId") || (assignedDepartmentId ?? "")}
-                disabled={Boolean(assignedDepartmentId && !isSuperadmin)}
+                defaultValue={value(row, "departmentId") || (assignedDepartmentId && !isSuperadmin && !isItAdmin ? assignedDepartmentId : "")}
+                disabled={Boolean(assignedDepartmentId && !isSuperadmin && !isItAdmin)}
               >
-                {!(assignedDepartmentId && !isSuperadmin) && <option value="">Not assigned</option>}
+                {!(assignedDepartmentId && !isSuperadmin && !isItAdmin) && <option value="">Not assigned</option>}
                 {departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.label}
@@ -547,7 +580,7 @@ export function RoleDialog({
   onOpenChange?: (open: boolean) => void;
   trigger?: boolean;
 }) {
-  const { client, organization } = useAdminData();
+  const { client, isItAdmin, organization } = useAdminData();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
@@ -564,9 +597,15 @@ export function RoleDialog({
     setSaving(true);
     setError(null);
     const isCustom = role ? Boolean(role.isCustom) : true;
+    const roleCode = role ? String(role.code ?? "") : String(form.get("code") ?? "").trim().toLowerCase();
+    if (isItAdmin && (roleCode === "admin" || roleCode === "owner")) {
+      setError("IT administrators cannot modify admin or owner role permissions.");
+      setSaving(false);
+      return;
+    }
     const result = await saveClinicRoleDefinition(client, {
       organizationId: organization.id,
-      code: role ? String(role.code ?? "") : "",
+      code: roleCode,
       name: !isCustom && role ? String(role.name) : String(form.get("name") ?? "").trim(),
       permissions,
     });
@@ -587,7 +626,11 @@ export function RoleDialog({
             <input
               type="checkbox"
               name={permission.value}
-              defaultChecked={rolePermissions.includes(permission.value)}
+              defaultChecked={
+                role
+                  ? rolePermissions.includes(permission.value)
+                  : permission.value === "can_view_inventory" || permission.value === "can_access_admin_portal"
+              }
             />
             <span>
               <strong>{permission.label}</strong>
@@ -623,17 +666,147 @@ export function RoleDialog({
               disabled={!isCustom}
               minLength={2}
               maxLength={80}
+              placeholder="e.g. IT Administrator, Reception Lead, Triage Nurse"
               required
             />
           </Field>
+          {!role ? (
+            <Field label="Role code (optional)">
+              <Input
+                name="code"
+                pattern="^[a-z][a-z0-9_]{1,39}$"
+                placeholder="e.g. it_lead (leave empty to auto-generate)"
+              />
+            </Field>
+          ) : null}
           {permissionGroup("Portal access", portalPermissions)}
           {permissionGroup("Feature permissions", featurePermissions)}
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <div className="dialog-actions">
+            {!isCustom && role ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={async () => {
+                  if (!organization || !role) return;
+                  setSaving(true);
+                  setError(null);
+                  const resetResult = await resetClinicRolePermissions(client, {
+                    organizationId: organization.id,
+                    code: String(role.code),
+                  });
+                  setSaving(false);
+                  if (resetResult.error) return setError(resetResult.error.message);
+                  setOpen(false);
+                  onChanged();
+                }}
+              >
+                <RotateCcw aria-hidden="true" size={14} />
+                Reset to defaults
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save role access"}</Button>
           </div>
         </form>
+      </Dialog>
+    </>
+  );
+}
+
+export function DeleteRoleDialog({
+  onChanged,
+  role,
+}: {
+  onChanged: () => void;
+  role: DataRow;
+}) {
+  const { client, organization } = useAdminData();
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const assignedCount = Number(role.assigned ?? 0);
+  const roleName = String(role.name ?? "Role");
+  const roleCode = String(role.code ?? "");
+
+  async function handleDelete() {
+    if (!organization) return;
+    setDeleting(true);
+    setError(null);
+    const result = await deleteClinicRoleDefinition(client, {
+      organizationId: organization.id,
+      code: roleCode,
+    });
+    setDeleting(false);
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+    setOpen(false);
+    onChanged();
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        title={`Delete ${roleName}`}
+      >
+        <Trash2 aria-hidden="true" size={14} />
+        Delete
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete custom role "${roleName}"`}
+        description={
+          assignedCount > 0
+            ? "This custom role cannot be deleted while staff accounts are assigned to it."
+            : "Are you sure you want to delete this custom role? This cannot be undone."
+        }
+      >
+        <div className="dialog-body">
+          {assignedCount > 0 ? (
+            <div className="confirmation-summary field-span" role="alert">
+              <span>Active staff assignments</span>
+              <strong>{assignedCount} staff member(s) assigned</strong>
+              <p style={{ marginTop: "0.5rem", color: "var(--color-text-secondary, #64748b)", fontSize: "0.875rem" }}>
+                To delete this role, please go to the <strong>Staff</strong> tab and edit the assigned staff member(s) to reassign them to another role first.
+              </p>
+            </div>
+          ) : (
+            <div className="confirmation-summary field-span">
+              <span>Role code</span>
+              <strong>{roleCode}</strong>
+              <p style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
+                All clinic-specific permissions configured for this custom role will be permanently removed.
+              </p>
+            </div>
+          )}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <div className="dialog-actions">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              {assignedCount > 0 ? "Close" : "Cancel"}
+            </Button>
+            {assignedCount === 0 ? (
+              <Button
+                type="button"
+                style={{ backgroundColor: "#dc2626", borderColor: "#dc2626", color: "#ffffff" }}
+                disabled={deleting}
+                onClick={() => void handleDelete()}
+              >
+                {deleting ? "Deleting…" : "Delete role"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </Dialog>
     </>
   );
@@ -653,7 +826,7 @@ export function CreateRecordAction({ actionHref, dataset, label, onChanged }: Ma
 
 export function RecordRowActions({ dataset, onChanged, row }: ManagementProps) {
   const router = useRouter();
-  const { client, organization } = useAdminData();
+  const { client, isItAdmin, organization } = useAdminData();
   const canManage = useCanManage(dataset);
   if (dataset === "clinics") return <div className="record-actions"><Button size="sm" variant="outline" onClick={() => router.push(`/superadmin/clinics/${value(row, "code")}`)}>Open</Button>{canManage ? <RecordEditorDialog dataset="clinics" label="clinic" onChanged={onChanged} row={row} /> : null}</div>;
   if (!canManage) return null;
@@ -684,18 +857,37 @@ export function RecordRowActions({ dataset, onChanged, row }: ManagementProps) {
     );
   }
   if (dataset === "roles" && row) {
+    const roleCode = String(row?.code ?? "");
+    if (isItAdmin && (roleCode === "admin" || roleCode === "owner")) return null;
+    const isCustom = Boolean(row.isCustom);
     return (
       <div className="record-actions">
         <RoleDialog onChanged={onChanged} role={row} />
+        {isCustom ? <DeleteRoleDialog onChanged={onChanged} role={row} /> : null}
       </div>
     );
   }
-  if (dataset === "services" || dataset === "templates" || dataset === "companies" || dataset === "staff") return <div className="record-actions"><RecordEditorDialog dataset={dataset} label={dataset === "staff" ? "staff assignment" : dataset.slice(0, -1)} onChanged={onChanged} row={row} />{dataset === "staff" ? <Button size="sm" variant="outline" onClick={async () => { if (!organization) return; await setClinicUserActive(client, organization.id, value(row, "id"), !Boolean(row?.active)); onChanged(); }}><Power aria-hidden="true" size={14} />{row?.active ? "Disable" : "Enable"}</Button> : null}</div>;
+  if (dataset === "staff" && row) {
+    const roleCode = value(row, "roleCode");
+    if (isItAdmin && (roleCode === "admin" || roleCode === "owner")) return null;
+    return (
+      <div className="record-actions">
+        <RecordEditorDialog dataset="staff" label="staff assignment" onChanged={onChanged} row={row} />
+        <Button size="sm" variant="outline" onClick={async () => { if (!organization) return; await setClinicUserActive(client, organization.id, value(row, "id"), !Boolean(row?.active)); onChanged(); }}>
+          <Power aria-hidden="true" size={14} />{row?.active ? "Disable" : "Enable"}
+        </Button>
+      </div>
+    );
+  }
+  if (dataset === "services" || dataset === "templates" || dataset === "companies") return <div className="record-actions"><RecordEditorDialog dataset={dataset} label={dataset.slice(0, -1)} onChanged={onChanged} row={row} /></div>;
   if (dataset === "features") return <Button size="sm" variant="outline" onClick={async () => { if (!organization) return; await setOrganizationModule(client, organization.id, value(row, "key") as OrganizationModuleKey, !Boolean(row?.enabled)); onChanged(); }}><Power aria-hidden="true" size={14} />{row?.enabled ? "Disable" : "Enable"}</Button>;
   if (dataset === "patients") return <PatientStatusAction onChanged={onChanged} row={row} />;
   if (dataset === "appointments") return <AppointmentActions onChanged={onChanged} row={row} />;
   if (dataset === "billing" && Number(row?.balance ?? 0) > 0) return <PaymentDialog onChanged={onChanged} row={row} />;
   if (dataset === "claims") return <ClaimActions onChanged={onChanged} row={row} />;
-  if (dataset === "admins" && row?.organizationId) return <Button size="sm" variant="outline" onClick={async () => { await setClinicUserActive(client, value(row, "organizationId"), value(row, "id"), !Boolean(row.active)); onChanged(); }}><Power aria-hidden="true" size={14} />{row.active ? "Disable" : "Enable"}</Button>;
+  if (dataset === "admins" && row?.organizationId) {
+    if (isItAdmin) return null;
+    return <Button size="sm" variant="outline" onClick={async () => { await setClinicUserActive(client, value(row, "organizationId"), value(row, "id"), !Boolean(row.active)); onChanged(); }}><Power aria-hidden="true" size={14} />{row.active ? "Disable" : "Enable"}</Button>;
+  }
   return null;
 }

@@ -20,6 +20,7 @@ interface AdminDataContextValue {
   client: Client;
   email: string | null;
   error: string | null;
+  isItAdmin: boolean;
   isScopedDepartment: boolean;
   isSuperadmin: boolean;
   loading: boolean;
@@ -30,6 +31,7 @@ interface AdminDataContextValue {
   permissionsLoading: boolean;
   readCache: <T>(key: string, maxAgeMs?: number) => T | undefined;
   refreshAccess: () => Promise<void>;
+  roleCodes: string[];
   rootSupplyDepartmentId: string | null;
   selectOrganization: (organizationId: string) => void;
   signIn: (email: string, password: string) => Promise<string | null>;
@@ -47,6 +49,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [roleCodes, setRoleCodes] = useState<string[]>([]);
+  const [currentOrgRoleCodes, setCurrentOrgRoleCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState<PublicClinicSummary[]>([]);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -82,6 +86,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     if (userResult.error || !userResult.data.user) {
       setEmail(null);
       setIsSuperadmin(false);
+      setRoleCodes([]);
+      setCurrentOrgRoleCodes([]);
       setOrganizations([]);
       setOrganizationId(null);
       setError("Sign in with an authorized administrative account to load database records.");
@@ -93,6 +99,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     const accessResult = await getPortalAccess(client, "admin");
     if (accessResult.error) {
       setError(accessResult.error.message);
+      setRoleCodes([]);
+      setCurrentOrgRoleCodes([]);
       setPermissionsLoading(false);
       setLoading(false);
       return;
@@ -101,6 +109,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       await signOut(client);
       setEmail(null);
       setIsSuperadmin(false);
+      setRoleCodes([]);
+      setCurrentOrgRoleCodes([]);
       setOrganizations([]);
       setOrganizationId(null);
       setError("This account is not authorized for the administration portal.");
@@ -109,6 +119,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       return;
     }
     setIsSuperadmin(accessResult.data.isSuperadmin);
+    setRoleCodes(accessResult.data.roleCodes ?? []);
     const organizationResult = accessResult.data.isSuperadmin
       ? await client.from("organizations").select("id, name, telecom, address").order("name")
       : await getAccessibleOrganizations(client, accessResult.data.organizationIds);
@@ -138,6 +149,29 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     setRootSupplyDepartmentId(null);
     setOrganizationId(nextId);
   }, [organizations]);
+
+  useEffect(() => {
+    let current = true;
+    if (loading || !organizationId || !email) {
+      setCurrentOrgRoleCodes([]);
+      return () => { current = false; };
+    }
+    void (async () => {
+      const { data: userData } = await client.auth.getUser();
+      if (!userData?.user?.id || !current) return;
+      const { data: userRoles } = await client
+        .from("user_roles")
+        .select("roles(name)")
+        .eq("organization_id", organizationId)
+        .eq("user_id", userData.user.id);
+      if (!current) return;
+      const names = (userRoles ?? [])
+        .map((r: any) => r.roles?.name)
+        .filter(Boolean) as string[];
+      setCurrentOrgRoleCodes(names);
+    })();
+    return () => { current = false; };
+  }, [client, email, loading, organizationId]);
 
   useEffect(() => {
     let current = true;
@@ -182,13 +216,19 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     return () => { current = false; };
   }, [client, email, error, isSuperadmin, loading, organizationId]);
 
+  const isItAdmin = useMemo(() => {
+    if (isSuperadmin) return false;
+    const allRoles = new Set([...roleCodes, ...currentOrgRoleCodes]);
+    return allRoles.has("it_admin") && !allRoles.has("admin") && !allRoles.has("owner");
+  }, [isSuperadmin, roleCodes, currentOrgRoleCodes]);
+
   const isScopedDepartment = useMemo(() => {
+    if (isSuperadmin || isItAdmin) return false;
     return Boolean(
       assignedDepartmentId &&
-      !isSuperadmin &&
       (!rootSupplyDepartmentId || assignedDepartmentId !== rootSupplyDepartmentId)
     );
-  }, [assignedDepartmentId, isSuperadmin, rootSupplyDepartmentId]);
+  }, [assignedDepartmentId, isSuperadmin, isItAdmin, rootSupplyDepartmentId]);
 
   const handleSignIn = useCallback(async (accountEmail: string, password: string) => {
     const result = await signInWithPassword(client, accountEmail, password);
@@ -210,6 +250,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         client,
         email,
         error,
+        isItAdmin,
         isScopedDepartment,
         isSuperadmin,
         loading,
@@ -220,6 +261,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         permissionsLoading,
         readCache,
         refreshAccess,
+        roleCodes,
         rootSupplyDepartmentId,
         selectOrganization,
         signIn: handleSignIn,

@@ -53,7 +53,7 @@ export function ClinicDetailScreen({ clinicId }: { clinicId: string }) {
         setError(failure?.message ?? "The organization record could not be loaded.");
       } else {
         setClinic(clinicResult.data as unknown as ClinicRecord);
-        setAdmins(staffResult.data.staff.filter((member) => ["owner", "admin"].includes(member.roleCode)));
+        setAdmins(staffResult.data.staff.filter((member) => ["owner", "admin", "it_admin"].includes(member.roleCode)));
         setModules(moduleResult.data);
         setError(null);
       }

@@ -227,6 +227,7 @@ export default function InventoryPage() {
   const {
     client,
     email: signedInAs,
+    isItAdmin,
     isSuperadmin,
     organization,
     permissions,
@@ -297,12 +298,12 @@ export default function InventoryPage() {
   }, [assignedDept, inventoryDepartmentId, rootSupplyDepartmentId]);
 
   const isScopedDepartment = useMemo(() => {
-    if (!inventoryDepartmentId || isSuperadmin) return false;
+    if (!inventoryDepartmentId || isSuperadmin || canManage || isItAdmin) return false;
     if (isAssignedToRootSupply) return false;
     return Boolean(
       !rootSupplyDepartmentId || inventoryDepartmentId !== rootSupplyDepartmentId
     );
-  }, [inventoryDepartmentId, isAssignedToRootSupply, isSuperadmin, rootSupplyDepartmentId]);
+  }, [inventoryDepartmentId, isAssignedToRootSupply, isSuperadmin, canManage, isItAdmin, rootSupplyDepartmentId]);
 
   const isAssignedToPharmacy = useMemo(() => {
     const deptName = assignedDept?.name.toLowerCase() ?? "";
@@ -879,6 +880,8 @@ export default function InventoryPage() {
       const isScoped = Boolean(
         staffDeptId &&
         !isSuperadmin &&
+        !manage &&
+        !isItAdmin &&
         (!rootDeptId || staffDeptId !== rootDeptId),
       );
       const [inventoryResult, encounterResult] = await Promise.all([
@@ -910,7 +913,7 @@ export default function InventoryPage() {
         );
       }
     },
-    [canManage, client, isSuperadmin, organizationId],
+    [canManage, client, isItAdmin, isSuperadmin, organizationId],
   );
 
   /* ─── Effects ─────────────────────────────────────────────── */
@@ -941,11 +944,16 @@ export default function InventoryPage() {
       const isScoped = Boolean(
         staffDeptId &&
         !isSuperadmin &&
+        !canManage &&
+        !isItAdmin &&
         (!rootDeptId || staffDeptId !== rootDeptId),
       );
       if (isScoped && staffDeptId) {
         setStockFilterDept(staffDeptId);
         setBatchFilterDept(staffDeptId);
+      } else {
+        setStockFilterDept("all");
+        setBatchFilterDept("all");
       }
 
       setStatus("Inventory workspace ready.");
@@ -954,7 +962,7 @@ export default function InventoryPage() {
     return () => {
       current = false;
     };
-  }, [canManage, client, loadInventory, organizationId, signedInAs]);
+  }, [canManage, client, isItAdmin, isSuperadmin, loadInventory, organizationId, signedInAs]);
 
   useEffect(() => {
     if (!signedInAs || !organizationId) return;

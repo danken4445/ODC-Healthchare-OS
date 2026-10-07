@@ -39,9 +39,11 @@ const date = (value: string | null | undefined, withTime = false) =>
       ).format(new Date(value))
     : "—";
 const label = (value: string | null | undefined) =>
-  (value ?? "unknown")
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+  value === "it_admin"
+    ? "IT Administrator"
+    : (value ?? "unknown")
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
 const identifier = (id: string) => id.split("-")[0]?.toUpperCase() ?? id;
 const metadataText = (metadata: Json, key: string) =>
   typeof metadata === "object" &&
@@ -69,6 +71,7 @@ export function useAdminRecords(
     assignedDepartmentId,
     client,
     error: accessError,
+    isItAdmin,
     isSuperadmin,
     loading: accessLoading,
     organization,
@@ -112,7 +115,7 @@ export function useAdminRecords(
         });
         return;
       }
-      const cacheKey = `records:${dataset}:${organizationId ?? "platform"}:${isSuperadmin ? "superadmin" : "clinic"}:${assignedDepartmentId ?? "nodept"}:${revision}`;
+      const cacheKey = `records:${dataset}:${organizationId ?? "platform"}:${isSuperadmin ? "superadmin" : isItAdmin ? "itadmin" : "clinic"}:${assignedDepartmentId ?? "nodept"}:${revision}`;
       const cached = readCache<AdminRecordsState>(cacheKey);
       if (cached) {
         setState(cached);
@@ -359,9 +362,14 @@ export function useAdminRecords(
             result.data.departments.map((item) => [item.id, item.name]),
           );
           let staffMembers = result.data.staff;
-          if (assignedDepartmentId && !isSuperadmin) {
+          if (assignedDepartmentId && !isSuperadmin && !isItAdmin) {
             staffMembers = staffMembers.filter(
               (member) => member.departmentId === assignedDepartmentId,
+            );
+          }
+          if (isItAdmin) {
+            staffMembers = staffMembers.filter(
+              (member) => member.roleCode !== "admin" && member.roleCode !== "owner",
             );
           }
           data = staffMembers.map((member) => ({
@@ -382,7 +390,7 @@ export function useAdminRecords(
             {
               label: "Staff accounts",
               value: data.length.toLocaleString(),
-              detail: assignedDepartmentId && !isSuperadmin
+              detail: assignedDepartmentId && !isSuperadmin && !isItAdmin
                 ? `Assigned to ${departments.get(assignedDepartmentId) ?? "your department"}`
                 : "Assigned to this clinic",
             },
@@ -395,8 +403,8 @@ export function useAdminRecords(
             },
             {
               label: "Departments",
-              value: (assignedDepartmentId && !isSuperadmin ? 1 : result.data.departments.filter((item) => item.active).length).toLocaleString(),
-              detail: assignedDepartmentId && !isSuperadmin ? "Scoped department" : "Active departments",
+              value: (assignedDepartmentId && !isSuperadmin && !isItAdmin ? 1 : result.data.departments.filter((item) => item.active).length).toLocaleString(),
+              detail: assignedDepartmentId && !isSuperadmin && !isItAdmin ? "Scoped department" : "Active departments",
             },
           ];
         } else if (dataset === "departments") {
@@ -406,10 +414,13 @@ export function useAdminRecords(
           ]);
           if (deptResult.error) throw new Error(deptResult.error.message);
           let deptList = deptResult.data;
-          if (assignedDepartmentId && !isSuperadmin) {
+          if (assignedDepartmentId && !isSuperadmin && !isItAdmin) {
             deptList = deptList.filter((dept) => dept.id === assignedDepartmentId);
           }
-          const staffList = staffResult.data?.staff ?? [];
+          let staffList = staffResult.data?.staff ?? [];
+          if (isItAdmin) {
+            staffList = staffList.filter((m) => m.roleCode !== "admin" && m.roleCode !== "owner");
+          }
           data = deptList.map((dept) => ({
             id: dept.id,
             name: dept.name,
@@ -426,7 +437,7 @@ export function useAdminRecords(
             {
               label: "Departments",
               value: data.length.toLocaleString(),
-              detail: assignedDepartmentId && !isSuperadmin
+              detail: assignedDepartmentId && !isSuperadmin && !isItAdmin
                 ? "Your assigned department"
                 : "Total clinic departments",
             },
@@ -440,7 +451,7 @@ export function useAdminRecords(
             {
               label: "Assigned staff",
               value: staffList
-                .filter((m) => assignedDepartmentId && !isSuperadmin ? m.departmentId === assignedDepartmentId : Boolean(m.departmentId))
+                .filter((m) => assignedDepartmentId && !isSuperadmin && !isItAdmin ? m.departmentId === assignedDepartmentId : Boolean(m.departmentId))
                 .length.toLocaleString(),
               detail: "Members with department context",
             },
@@ -451,8 +462,15 @@ export function useAdminRecords(
             getStaffAdministration(client, organizationId!),
           ]);
           if (roleResult.error) throw new Error(roleResult.error.message);
-          const staffList = staffResult.data?.staff ?? [];
-          data = roleResult.data.map((role) => ({
+          let roleList = roleResult.data;
+          if (isItAdmin) {
+            roleList = roleList.filter((r) => r.code !== "admin" && r.code !== "owner");
+          }
+          let staffList = staffResult.data?.staff ?? [];
+          if (isItAdmin) {
+            staffList = staffList.filter((m) => m.roleCode !== "admin" && m.roleCode !== "owner");
+          }
+          data = roleList.map((role) => ({
             id: role.code,
             code: role.code,
             name: role.name,
@@ -484,14 +502,14 @@ export function useAdminRecords(
             },
             {
               label: "Built-in roles",
-              value: roleResult.data
+              value: roleList
                 .filter((r) => !r.isCustom)
                 .length.toLocaleString(),
               detail: "Platform standard roles",
             },
             {
               label: "Custom roles",
-              value: roleResult.data
+              value: roleList
                 .filter((r) => r.isCustom)
                 .length.toLocaleString(),
               detail: "Clinic-defined roles",
@@ -617,7 +635,7 @@ export function useAdminRecords(
               (result, index) =>
                 result.data?.staff
                   .filter((member) =>
-                    ["admin", "owner"].includes(member.roleCode),
+                    ["admin", "owner", "it_admin"].includes(member.roleCode),
                   )
                   .map((member) => ({
                     id: member.userId,
@@ -638,7 +656,7 @@ export function useAdminRecords(
             );
             if (result.error) throw new Error(result.error.message);
             data = result.data.staff
-              .filter((member) => ["admin", "owner"].includes(member.roleCode))
+              .filter((member) => ["admin", "owner", "it_admin"].includes(member.roleCode))
               .map((member) => ({
                 name: member.displayName,
                 account: member.email ?? member.userId,
