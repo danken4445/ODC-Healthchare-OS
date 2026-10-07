@@ -116,6 +116,13 @@ import {
   type NbbPosCheckoutResult,
   type NbbReceiptTransaction,
   type NbbReceiptTransactionItem,
+  type CreatePharmacyPrescriptionTranscriptionInput,
+  type PharmacyPrescriptionAvailability,
+  type PharmacyPrescriptionCompletionInput,
+  type PharmacyPrescriptionCompletionResult,
+  type PharmacyPrescriptionLineInput,
+  type PharmacyPrescriptionOrderSummary,
+  type PharmacyPrescriptionReviewInput,
   type ClaimSummary,
   type AppointmentDeliveryMode,
   type DoctorPayoutSummary,
@@ -1253,6 +1260,50 @@ export async function saveClinicRoleDefinition(
     p_code: input.code,
     p_name: input.name,
     p_permissions: input.permissions,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function deleteClinicRoleDefinition(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    code: string;
+  },
+): Promise<SupabaseResult<void>> {
+  const { error } = await (client as any).rpc("delete_clinic_role_definition", {
+    p_organization_id: input.organizationId,
+    p_code: input.code,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function resetClinicRolePermissions(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    code: string;
+  },
+): Promise<SupabaseResult<void>> {
+  const { error } = await (client as any).rpc("reset_clinic_role_permissions", {
+    p_organization_id: input.organizationId,
+    p_code: input.code,
+  });
+  return error ? failure(error) : success(undefined);
+}
+
+export async function assignStaffRole(
+  client: SupabaseClient<Database>,
+  input: {
+    organizationId: string;
+    userId: string;
+    roleCode: string;
+  },
+): Promise<SupabaseResult<void>> {
+  const { error } = await (client as any).rpc("assign_staff_role", {
+    p_organization_id: input.organizationId,
+    p_user_id: input.userId,
+    p_role_code: input.roleCode,
   });
   return error ? failure(error) : success(undefined);
 }
@@ -5405,6 +5456,13 @@ export type {
   NbbPosCartItem,
   NbbPosCheckoutInput,
   NbbPosCheckoutResult,
+  CreatePharmacyPrescriptionTranscriptionInput,
+  PharmacyPrescriptionAvailability,
+  PharmacyPrescriptionCompletionInput,
+  PharmacyPrescriptionCompletionResult,
+  PharmacyPrescriptionLineInput,
+  PharmacyPrescriptionOrderSummary,
+  PharmacyPrescriptionReviewInput,
 };
 
 const nbbDatabaseUuidSchema = z

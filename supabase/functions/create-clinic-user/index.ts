@@ -15,6 +15,7 @@ const builtInRoles = [
   "specialist",
   "front_desk",
   "inventory_staff",
+  "it_admin",
 ] as const;
 
 type CreateClinicUserRequest = {
@@ -99,6 +100,32 @@ Deno.serve(async (request) => {
     );
 
   const roleCode = body.role_code;
+
+  if (roleCode === "admin" || roleCode === "owner") {
+    const { data: isSuperadmin } = await caller.rpc("is_superadmin");
+    const { data: callerUserRoles } = await admin
+      .from("user_roles")
+      .select("roles!inner(name)")
+      .eq("organization_id", body.organization_id)
+      .eq("user_id", callerIdentity.user.id);
+
+    const callerRoleNames = (callerUserRoles ?? []).map(
+      (row: any) => row.roles?.name,
+    );
+    const isCallerAdminOrOwner = Boolean(
+      isSuperadmin ||
+      callerRoleNames.includes("admin") ||
+      callerRoleNames.includes("owner"),
+    );
+
+    if (!isCallerAdminOrOwner) {
+      return response(
+        { error: "IT administrators cannot create admin or owner accounts." },
+        403,
+      );
+    }
+  }
+
   const isBuiltInRole = builtInRoles.includes(
     roleCode as (typeof builtInRoles)[number],
   );
@@ -136,14 +163,16 @@ Deno.serve(async (request) => {
   }
 
   let assignmentError: { message: string } | null = null;
-  if (roleCode === "admin") {
+  if (roleCode === "admin" || roleCode === "it_admin") {
     const { data: role, error: roleError } = await admin
       .from("roles")
       .select("id")
-      .eq("name", "admin")
+      .eq("name", roleCode)
       .single();
     if (roleError || !role)
-      assignmentError = { message: "Admin role is unavailable." };
+      assignmentError = {
+        message: `${roleCode === "it_admin" ? "IT Admin" : "Admin"} role is unavailable.`,
+      };
     else {
       const { error } = await admin.from("user_roles").insert({
         organization_id: body.organization_id,
@@ -151,7 +180,9 @@ Deno.serve(async (request) => {
         user_id: created.user.id,
       });
       if (error)
-        assignmentError = { message: "Could not assign the admin role." };
+        assignmentError = {
+          message: `Could not assign the ${roleCode === "it_admin" ? "IT Admin" : "admin"} role.`,
+        };
     }
   } else {
     const { data: practitioner, error: practitionerError } = await admin
