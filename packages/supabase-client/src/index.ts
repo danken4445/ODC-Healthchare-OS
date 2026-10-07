@@ -297,7 +297,7 @@ const medicationRequestSummaryColumns =
 const documentReferenceSummaryColumns =
   "id, organization_id, patient_id, encounter_id, author_practitioner_id, status, type_code, type_display, date_at, description, content_title, template_id, template_version";
 const departmentSummaryColumns =
-  "id, organization_id, code, name, description, active";
+  "id, organization_id, code, name, description, active, is_root_supply";
 const inventoryItemSummaryColumns =
   "id, organization_id, sku, name, description, unit_of_measure, unit_cost, selling_price, unit_price, currency, active, is_perishable, near_expiry_days_override";
 const departmentStockSummaryColumns =
@@ -1284,6 +1284,7 @@ export async function getStaffAdministration(
       name: department.name,
       description: null,
       active: department.active,
+      is_root_supply: Boolean((department as { is_root_supply?: boolean }).is_root_supply),
     })),
     staff: (staffResult.data ?? []).map((member) => ({
       userId: member.user_id,
@@ -1400,9 +1401,6 @@ export async function getInventoryWorkspace(
     .select(departmentSummaryColumns)
     .eq("organization_id", organizationId)
     .order("name");
-  if (departmentId) {
-    departmentsQuery = departmentsQuery.eq("id", departmentId);
-  }
 
   let holdsQuery = client
     .from("inventory_holds")
@@ -1565,10 +1563,15 @@ export async function createDepartment(
       code: "",
       name: input.name.trim(),
       description: input.description?.trim() || null,
+      is_root_supply: Boolean(input.isRootSupply),
     })
     .select(departmentSummaryColumns)
     .single();
-  return error ? failure(error) : success(data as unknown as DepartmentSummary);
+  if (error) return failure(error);
+  if (input.isRootSupply && data?.id) {
+    await setRootSupplyDepartment(client, input.organizationId, data.id);
+  }
+  return success(data as unknown as DepartmentSummary);
 }
 
 /** Lists clinic departments for the staff administration workspace. */
@@ -1601,6 +1604,7 @@ export async function saveStaffDepartment(
     name: string;
     description?: string;
     active: boolean;
+    isRootSupply?: boolean;
   },
 ): Promise<SupabaseResult<string>> {
   const { data, error } = await client.rpc(
@@ -1613,38 +1617,73 @@ export async function saveStaffDepartment(
       p_active: input.active,
     } as never,
   );
-  if (!error && data) return success(data as string);
+  let savedId: string | undefined =
+    typeof data === "string" ? data : (data as unknown as string) || undefined;
 
   // Fallback to table update/insert if the RPC is unavailable
-  if (input.id) {
-    const updateResult = await client
-      .from("departments")
-      .update({
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        active: input.active,
-      })
-      .eq("id", input.id)
-      .eq("organization_id", input.organizationId)
-      .select("id")
-      .single();
-    if (updateResult.error) return failure(error ?? updateResult.error);
-    return success(updateResult.data.id);
-  } else {
-    const insertResult = await client
-      .from("departments")
-      .insert({
-        organization_id: input.organizationId,
-        code: "",
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        active: input.active,
-      })
-      .select("id")
-      .single();
-    if (insertResult.error) return failure(error ?? insertResult.error);
-    return success(insertResult.data.id);
+  if (error || !savedId) {
+    if (input.id) {
+      const updateResult = await client
+        .from("departments")
+        .update({
+          name: input.name.trim(),
+          description: input.description?.trim() || null,
+          active: input.active,
+          ...(input.isRootSupply !== undefined ? { is_root_supply: input.isRootSupply } : {}),
+        })
+        .eq("id", input.id)
+        .eq("organization_id", input.organizationId)
+        .select("id")
+        .single();
+      if (updateResult.error) return failure(error ?? updateResult.error);
+      savedId = updateResult.data.id;
+    } else {
+      const insertResult = await client
+        .from("departments")
+        .insert({
+          organization_id: input.organizationId,
+          code: "",
+          name: input.name.trim(),
+          description: input.description?.trim() || null,
+          active: input.active,
+          is_root_supply: Boolean(input.isRootSupply),
+        })
+        .select("id")
+        .single();
+      if (insertResult.error) return failure(error ?? insertResult.error);
+      savedId = insertResult.data.id;
+    }
   }
+
+  // Handle Root Supply designation
+  if (savedId) {
+    if (input.isRootSupply === true) {
+      const rootRes = await setRootSupplyDepartment(
+        client,
+        input.organizationId,
+        savedId,
+      );
+      if (rootRes.error) {
+        await client
+          .from("departments")
+          .update({ is_root_supply: true })
+          .eq("id", savedId)
+          .eq("organization_id", input.organizationId);
+      }
+    } else if (input.isRootSupply === false && input.id) {
+      await client
+        .from("departments")
+        .update({ is_root_supply: false })
+        .eq("id", savedId)
+        .eq("organization_id", input.organizationId);
+    }
+  }
+
+  if (!savedId) {
+    return failure(new Error("Unable to determine saved department identifier"));
+  }
+
+  return success(savedId);
 }
 
 export async function createInventoryItem(
@@ -1817,7 +1856,8 @@ export async function submitInventoryRequisition(
     p_is_emergency: input.isEmergency ?? false,
     p_emergency_justification: input.emergencyJustification ?? undefined,
     p_simulated_date: input.simulatedDate ?? undefined,
-  });
+    p_supply_department_id: input.supplyDepartmentId ?? undefined,
+  } as any);
   return error ? failure(error) : success(data);
 }
 

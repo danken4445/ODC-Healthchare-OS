@@ -621,7 +621,7 @@ export interface MedicalCertificateInput {
 
 export type DepartmentSummary = Pick<
   DepartmentRow,
-  "id" | "organization_id" | "code" | "name" | "description" | "active"
+  "id" | "organization_id" | "code" | "name" | "description" | "active" | "is_root_supply"
 >;
 
 export type InventoryItemSummary = Pick<
@@ -772,6 +772,7 @@ export interface DepartmentInput {
   organizationId: string;
   name: string;
   description?: string;
+  isRootSupply?: boolean;
 }
 
 export interface ReceiveInventoryBatchInput {
@@ -866,6 +867,7 @@ export interface SubmitRequisitionLineItem {
 export interface SubmitInventoryRequisitionInput {
   organizationId: string;
   requestingDepartmentId: string;
+  supplyDepartmentId?: string;
   items: SubmitRequisitionLineItem[];
   notes?: string;
   isEmergency?: boolean;
