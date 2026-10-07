@@ -20,6 +20,7 @@ import {
   Lock,
   LogOut,
   Menu,
+  Network,
   Palette,
   Pill,
   ReceiptText,
@@ -27,6 +28,7 @@ import {
   Share2,
   ShieldCheck,
   Store,
+  User,
   UserCheck,
   UserCog,
   UserPlus,
@@ -59,7 +61,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/", label: "Home", icon: Home, anyOf: ["can_manage_appointments", "can_manage_patients", "can_record_triage", "can_start_consultation", "can_manage_staff_roles", "can_view_analytics", "can_view_clinic_queue"] },
       { href: "/queue", label: "Queue", icon: Users, anyOf: ["can_view_clinic_queue", "can_manage_appointments", "can_record_triage"] },
       { href: "/calendar", label: "Clinic calendar", icon: CalendarDays, anyOf: ["can_view_clinic_queue"] },
-      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_manage_services", "can_manage_staff_roles", "can_manage_rooms", "can_manage_provider_schedule"] },
+      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_manage_services", "can_manage_rooms", "can_manage_provider_schedule"] },
       { href: "/teleconsult", label: "Teleconsult", icon: Video, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments"] },
       { href: "/soap-notes", label: "SOAP Notes", icon: FileText, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients"] },
       { href: "/referrals", label: "Referrals", icon: Share2, anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients"] },
@@ -71,21 +73,22 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/appointments", label: "Booking / Appointments", icon: CalendarDays, anyOf: ["can_manage_appointments"] },
       { href: "/patients", label: "Outpatients", icon: UserCheck, anyOf: ["can_manage_patients"] },
       { href: "/patients/register", label: "Register walk-in", icon: UserPlus, anyOf: ["can_manage_patients"] },
-      { href: "/prescriptions", label: "Prescriptions", icon: Pill, anyOf: ["can_start_consultation", "can_manage_patients", "can_view_inventory", "can_manage_inventory", "can_manage_pos"] },
+      { href: "/prescriptions", label: "Prescriptions", icon: Pill, anyOf: ["can_start_consultation", "can_manage_patients", "can_manage_pos"] },
       { href: "/laboratory-services", label: "Diagnostics / Mini-LIS", icon: FlaskConical, anyOf: ["can_manage_laboratory_services"] },
-      { href: "/inventory", label: "Inventory", icon: Boxes, anyOf: ["can_view_inventory", "can_manage_inventory", "can_tag_inventory_usage"] },
+      { href: "/inventory", label: "Inventory", icon: Boxes, allowAuthenticated: true, anyOf: ["can_view_inventory", "can_manage_inventory", "can_tag_inventory_usage"] },
       { href: "/payouts", label: "Payouts", icon: HandCoins, anyOf: ["can_view_payouts", "can_manage_payouts"] },
     ],
   },
   {
     label: "BILLING & ADMIN",
     items: [
-      { href: "/pos", label: "Pharmacy POS", icon: Store, anyOf: ["can_manage_pos"] },
+      { href: "/pos", label: "Pharmacy POS", icon: Store, anyOf: ["can_manage_pos", "can_dispense_pharmacy_prescriptions"] },
       { href: "/billing", label: "Billing", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing"] },
       { href: "/billing/claims", label: "HMO Claims", icon: ClipboardCheck, anyOf: ["can_view_claims", "can_manage_claims"] },
       { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services", "can_manage_professional_fees"] },
       { href: "/staff", label: "Staff accounts", icon: Users, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
+      { href: "/departments", label: "Departments", icon: Network, allowSuperadmin: true, anyOf: ["can_manage_staff_roles", "can_manage_inventory"] },
       { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
       { href: "/settings/queue", label: "Queue settings", icon: Users, anyOf: ["can_manage_appointments"] },
       { href: "/rooms", label: "Clinic rooms", icon: DoorOpen, anyOf: ["can_manage_rooms"] },
@@ -98,6 +101,12 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     label: "ANALYTICS & GOVERNANCE",
     items: [
       { href: "/analytics/disease-trends", label: "Disease trends", icon: Activity, anyOf: ["can_view_analytics"] },
+    ],
+  },
+  {
+    label: "ACCOUNT",
+    items: [
+      { href: "/user", label: "User profile", icon: User, allowAuthenticated: true },
     ],
   },
   {
@@ -240,9 +249,26 @@ function AdminShellContent({ children }: { children: ReactNode }) {
           )}
         </nav>
 
-        {/* Pinned Logout at bottom of sidebar per Section 1 tokens */}
+        {/* Pinned User & Logout at bottom of sidebar per Section 1 tokens */}
         {email && (
           <div className="sidebar__footer">
+            <Link
+              href="/user"
+              className={`sidebar__user-link ${
+                pathname === "/user" ? "sidebar__user-link--active" : ""
+              }`}
+              onClick={() => setOpen(false)}
+              title="Edit Profile"
+              aria-label="Edit Profile"
+            >
+              <div className="sidebar__user-avatar" aria-hidden="true">
+                <User size={15} />
+              </div>
+              <div className="sidebar__user-info">
+                <span className="sidebar__user-name">{email.split("@")[0]}</span>
+                <span className="sidebar__user-role">Edit profile</span>
+              </div>
+            </Link>
             <button
               className="sidebar__logout-button"
               type="button"
@@ -269,6 +295,17 @@ function AdminShellContent({ children }: { children: ReactNode }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <AppointmentNotificationControl />
+            {email && (
+              <Link
+                href="/user"
+                className="mobile-header__user"
+                onClick={() => setOpen(false)}
+                aria-label="Edit Profile"
+                title="Edit Profile"
+              >
+                <User aria-hidden="true" size={16} />
+              </Link>
+            )}
             {email && (
               <button
                 className="mobile-header__logout"
