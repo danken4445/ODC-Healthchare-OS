@@ -323,6 +323,8 @@ export type ClinicRolePermission =
   | "can_view_clinic_queue"
   | "can_manage_rooms"
   | "can_reassign_appointments"
+  | "can_encode_pharmacy_prescriptions"
+  | "can_dispense_pharmacy_prescriptions"
   | "can_export_epidemiology_records";
 
 export interface ClinicRoleDefinition {

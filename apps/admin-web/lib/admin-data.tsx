@@ -20,6 +20,8 @@ export const permissionOptions: Array<{
   { value: "can_view_inventory", label: "View inventory", hint: "Open stock visibility screens." },
   { value: "can_manage_inventory", label: "Manage inventory", hint: "Adjust stock and departments." },
   { value: "can_tag_inventory_usage", label: "Tag consumables", hint: "Record consumables against encounters." },
+  { value: "can_encode_pharmacy_prescriptions", label: "Encode pharmacy prescriptions", hint: "Transcribe physical prescriptions and view Pharmacy availability." },
+  { value: "can_dispense_pharmacy_prescriptions", label: "Dispense pharmacy prescriptions", hint: "Review and complete Pharmacy prescription queue items." },
   { value: "can_order_diagnostics", label: "Order diagnostics", hint: "Place lab orders and specialist referrals." },
   { value: "can_view_diagnostics", label: "View diagnostics", hint: "Review diagnostic requests and reports." },
   { value: "can_view_lab_worklist", label: "Lab worklist", hint: "See active laboratory orders." },
