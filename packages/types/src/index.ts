@@ -1711,3 +1711,112 @@ export interface NbbReceiptTransaction {
   patientBalanceDueCentavos: number;
   items: NbbReceiptTransactionItem[];
 }
+
+export type PharmacyPrescriptionOrderStatus =
+  | "draft"
+  | "submitted"
+  | "under_pharmacist_review"
+  | "ready_to_dispense"
+  | "partially_dispensed"
+  | "completed"
+  | "cancelled"
+  | "rejected";
+
+export type PharmacyPrescriptionOrderLineStatus =
+  | "entered"
+  | "available"
+  | "unavailable"
+  | "pharmacist_verified"
+  | "partially_dispensed"
+  | "dispensed"
+  | "cancelled"
+  | "external_referral";
+
+export interface PharmacyPrescriptionLineInput {
+  originalMedication: string;
+  itemId?: string | null;
+  dosageInstruction?: string | null;
+  quantity: number;
+  unitOfMeasure?: string | null;
+  notes?: string | null;
+}
+
+export interface CreatePharmacyPrescriptionTranscriptionInput {
+  organizationId: string;
+  patientId: string;
+  encounterId: string;
+  prescriptionReference: string;
+  prescriberName: string;
+  priority?: "routine" | "urgent" | "emergency";
+  items: PharmacyPrescriptionLineInput[];
+}
+
+export interface PharmacyPrescriptionAvailability {
+  item_id: string | null;
+  requested_quantity: number;
+  available_quantity: number;
+  status: "available" | "unavailable";
+}
+
+export interface PharmacyPrescriptionOrderLine {
+  id: string;
+  organization_id: string;
+  order_id: string;
+  item_id: string | null;
+  original_medication: string;
+  dosage_instruction: string | null;
+  requested_quantity: number;
+  dispensed_quantity: number;
+  unit_of_measure: string | null;
+  status: PharmacyPrescriptionOrderLineStatus;
+  notes: string | null;
+  pharmacist_reason: string | null;
+  unit_price_in_centavos: number | bigint | null;
+  line_total_in_centavos: number | bigint | null;
+  usage_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PharmacyPrescriptionOrderSummary {
+  id: string;
+  organization_id: string;
+  patient_id: string;
+  encounter_id: string;
+  physical_prescription_reference: string | null;
+  prescriber_name: string | null;
+  priority: "routine" | "urgent" | "emergency";
+  status: PharmacyPrescriptionOrderStatus;
+  submitted_by: string;
+  submitted_at: string;
+  reviewed_at: string | null;
+  completed_at: string | null;
+  lines: PharmacyPrescriptionOrderLine[];
+}
+
+export interface PharmacyPrescriptionReviewInput {
+  orderId: string;
+  reason?: string | null;
+  lines: Array<{
+    lineId: string;
+    itemId: string;
+    requestedQuantity?: number;
+    unitOfMeasure?: string | null;
+  }>;
+}
+
+export interface PharmacyPrescriptionCompletionInput {
+  orderId: string;
+  outcomes: Array<{
+    lineId: string;
+    action: "dispense" | "cancel" | "external_referral";
+    quantity?: number;
+    reason?: string;
+  }>;
+}
+
+export interface PharmacyPrescriptionCompletionResult {
+  order_id: string;
+  status: PharmacyPrescriptionOrderStatus;
+  completed: boolean;
+}
