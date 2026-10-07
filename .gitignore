@@ -14,3 +14,5 @@ supabase/.temp/
 *.tsbuildinfo
 *.pptx
 *.log
+out/
+.agents/

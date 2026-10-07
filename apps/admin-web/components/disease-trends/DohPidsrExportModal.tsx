@@ -3,6 +3,7 @@
 import { Download, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { useAdminData } from "../admin-data-context";
+import { exportAndEncryptDohPidsr } from "../../lib/doh-pidsr-export";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 
@@ -21,12 +22,13 @@ export function DohPidsrExportModal({ epiYear, epiWeek }: { epiYear: number; epi
     if (purpose.trim().length < 10) { setError("State the statutory reporting purpose (at least 10 characters)."); return; }
     setSubmitting(true);
     try {
-      const { data: session } = await client.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error("Your session has expired. Sign in again before releasing a report.");
-      const response = await fetch("/api/disease-surveillance/doh-pidsr-export", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ organizationId: organization.id, purpose: purpose.trim(), epiYear, epiWeek }) });
-      if (!response.ok) { const result = await response.json().catch(() => null) as { error?: string } | null; throw new Error(result?.error ?? "DOH export could not be created."); }
-      const file = await response.blob();
+      const file = await exportAndEncryptDohPidsr({
+        client: client as never,
+        organizationId: organization.id,
+        purpose: purpose.trim(),
+        epiYear,
+        epiWeek,
+      });
       const url = URL.createObjectURL(file);
       const anchor = document.createElement("a"); anchor.href = url; anchor.download = `doh-pidsr-${epiYear}-w${String(epiWeek).padStart(2, "0")}.enc`; anchor.click(); URL.revokeObjectURL(url);
       setOpen(false); setPurpose("");
