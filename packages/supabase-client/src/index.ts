@@ -5660,3 +5660,220 @@ export async function listNbbPharmacyPosReceipts(
   }
 }
 
+const pharmacyPrescriptionUuidSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F-]{36}$/, "Expected a UUID-shaped identifier");
+
+const pharmacyPrescriptionLineInputSchema = z.object({
+  originalMedication: z.string().trim().min(1),
+  itemId: pharmacyPrescriptionUuidSchema.nullable().optional(),
+  dosageInstruction: z.string().nullable().optional(),
+  quantity: z.number().positive(),
+  unitOfMeasure: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const pharmacyPrescriptionTranscriptionInputSchema = z.object({
+  organizationId: pharmacyPrescriptionUuidSchema,
+  patientId: pharmacyPrescriptionUuidSchema,
+  encounterId: pharmacyPrescriptionUuidSchema,
+  prescriptionReference: z.string().trim().min(1),
+  prescriberName: z.string().trim().min(1),
+  priority: z.enum(["routine", "urgent", "emergency"]).optional(),
+  items: z.array(pharmacyPrescriptionLineInputSchema).min(1),
+});
+
+function pharmacyPrescriptionLineFromJson(value: unknown): PharmacyPrescriptionOrderSummary["lines"][number] {
+  const row = (value ?? {}) as Record<string, unknown>;
+  return {
+    id: String(row.id ?? ""),
+    organization_id: String(row.organization_id ?? ""),
+    order_id: String(row.order_id ?? ""),
+    item_id: row.item_id ? String(row.item_id) : null,
+    original_medication: String(row.original_medication ?? ""),
+    dosage_instruction: row.dosage_instruction ? String(row.dosage_instruction) : null,
+    requested_quantity: Number(row.requested_quantity ?? 0),
+    dispensed_quantity: Number(row.dispensed_quantity ?? 0),
+    unit_of_measure: row.unit_of_measure ? String(row.unit_of_measure) : null,
+    status: String(row.status ?? "entered") as PharmacyPrescriptionOrderSummary["lines"][number]["status"],
+    notes: row.notes ? String(row.notes) : null,
+    pharmacist_reason: row.pharmacist_reason ? String(row.pharmacist_reason) : null,
+    unit_price_in_centavos: row.unit_price_in_centavos == null ? null : Number(row.unit_price_in_centavos),
+    line_total_in_centavos: row.line_total_in_centavos == null ? null : Number(row.line_total_in_centavos),
+    usage_id: row.usage_id ? String(row.usage_id) : null,
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  };
+}
+
+function pharmacyPrescriptionOrderFromJson(value: unknown): PharmacyPrescriptionOrderSummary {
+  const row = (value ?? {}) as Record<string, unknown>;
+  return {
+    id: String(row.id ?? ""),
+    organization_id: String(row.organization_id ?? ""),
+    patient_id: String(row.patient_id ?? ""),
+    encounter_id: String(row.encounter_id ?? ""),
+    physical_prescription_reference: row.physical_prescription_reference ? String(row.physical_prescription_reference) : null,
+    prescriber_name: row.prescriber_name ? String(row.prescriber_name) : null,
+    priority: String(row.priority ?? "routine") as PharmacyPrescriptionOrderSummary["priority"],
+    status: String(row.status ?? "submitted") as PharmacyPrescriptionOrderSummary["status"],
+    submitted_by: String(row.submitted_by ?? ""),
+    submitted_at: String(row.submitted_at ?? ""),
+    reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
+    completed_at: row.completed_at ? String(row.completed_at) : null,
+    lines: Array.isArray(row.lines) ? row.lines.map(pharmacyPrescriptionLineFromJson) : [],
+  };
+}
+
+export async function createPharmacyPrescriptionTranscription(
+  client: SupabaseClient<Database>,
+  input: CreatePharmacyPrescriptionTranscriptionInput,
+): Promise<SupabaseResult<string>> {
+  const validation = pharmacyPrescriptionTranscriptionInputSchema.safeParse(input);
+  if (!validation.success) return failure(validation.error);
+  const { data, error } = await client.rpc(
+    "create_pharmacy_prescription_transcription" as never,
+    {
+      p_organization_id: validation.data.organizationId,
+      p_patient_id: validation.data.patientId,
+      p_encounter_id: validation.data.encounterId,
+      p_prescription_reference: validation.data.prescriptionReference,
+      p_prescriber_name: validation.data.prescriberName,
+      p_items: validation.data.items.map((line) => ({
+        original_medication: line.originalMedication,
+        item_id: line.itemId ?? null,
+        dosage_instruction: line.dosageInstruction ?? null,
+        quantity: line.quantity,
+        unit_of_measure: line.unitOfMeasure ?? null,
+        notes: line.notes ?? null,
+      })),
+      p_priority: validation.data.priority ?? "routine",
+    } as never,
+  );
+  if (error) return failure(error);
+  const parsed = pharmacyPrescriptionUuidSchema.safeParse(data);
+  return parsed.success ? success(parsed.data) : failure(parsed.error);
+}
+
+export async function getPharmacyPrescriptionAvailability(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  items: PharmacyPrescriptionLineInput[],
+): Promise<SupabaseResult<PharmacyPrescriptionAvailability[]>> {
+  const orgResult = pharmacyPrescriptionUuidSchema.safeParse(organizationId);
+  const linesResult = z.array(pharmacyPrescriptionLineInputSchema).safeParse(items);
+  if (!orgResult.success) return failure(orgResult.error);
+  if (!linesResult.success) return failure(linesResult.error);
+  const { data, error } = await client.rpc(
+    "get_pharmacy_prescription_availability" as never,
+    {
+      p_organization_id: organizationId,
+      p_items: linesResult.data.map((line) => ({ item_id: line.itemId ?? null, quantity: line.quantity })),
+    } as never,
+  );
+  if (error) return failure(error);
+  const response = data as unknown;
+  if (!Array.isArray(response)) return failure({ message: "Invalid Pharmacy availability response." });
+  return success(response.map((value: unknown) => {
+    const row = (value ?? {}) as Record<string, unknown>;
+    return {
+      item_id: row.item_id ? String(row.item_id) : null,
+      requested_quantity: Number(row.requested_quantity ?? 0),
+      available_quantity: Number(row.available_quantity ?? 0),
+      status: String(row.status ?? "unavailable") as "available" | "unavailable",
+    };
+  }));
+}
+
+export async function listPharmacyPrescriptionQueue(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  status?: PharmacyPrescriptionOrderSummary["status"] | null,
+): Promise<SupabaseResult<PharmacyPrescriptionOrderSummary[]>> {
+  const orgResult = pharmacyPrescriptionUuidSchema.safeParse(organizationId);
+  if (!orgResult.success) return failure(orgResult.error);
+  const { data, error } = await client.rpc(
+    "list_pharmacy_prescription_queue" as never,
+    { p_organization_id: organizationId, p_status: status ?? null } as never,
+  );
+  if (error) return failure(error);
+  const response = data as unknown;
+  if (!Array.isArray(response)) return failure({ message: "Invalid Pharmacy queue response." });
+  return success(response.map(pharmacyPrescriptionOrderFromJson));
+}
+
+export async function reviewPharmacyPrescriptionOrder(
+  client: SupabaseClient<Database>,
+  input: PharmacyPrescriptionReviewInput,
+): Promise<SupabaseResult<void>> {
+  const orderResult = pharmacyPrescriptionUuidSchema.safeParse(input.orderId);
+  if (!orderResult.success) return failure(orderResult.error);
+  const { data: _data, error } = await client.rpc(
+    "review_pharmacy_prescription_order" as never,
+    {
+      p_order_id: input.orderId,
+      p_updates: input.lines.map((line) => ({
+        line_id: line.lineId,
+        item_id: line.itemId,
+        requested_quantity: line.requestedQuantity,
+        unit_of_measure: line.unitOfMeasure,
+      })),
+      p_reason: input.reason ?? null,
+    } as never,
+  );
+  return error ? failure(error) : success(undefined);
+}
+
+export async function completePharmacyPrescriptionOrder(
+  client: SupabaseClient<Database>,
+  input: PharmacyPrescriptionCompletionInput,
+): Promise<SupabaseResult<PharmacyPrescriptionCompletionResult>> {
+  const orderResult = pharmacyPrescriptionUuidSchema.safeParse(input.orderId);
+  if (!orderResult.success) return failure(orderResult.error);
+  const { data, error } = await client.rpc(
+    "complete_pharmacy_prescription_order" as never,
+    {
+      p_order_id: input.orderId,
+      p_outcomes: input.outcomes,
+    } as never,
+  );
+  if (error) return failure(error);
+  const row = (data ?? {}) as Record<string, unknown>;
+  const idResult = pharmacyPrescriptionUuidSchema.safeParse(row.order_id);
+  if (!idResult.success) return failure(idResult.error);
+  return success({
+    order_id: idResult.data,
+    status: String(row.status ?? "under_pharmacist_review") as PharmacyPrescriptionCompletionResult["status"],
+    completed: Boolean(row.completed),
+  });
+}
+
+export interface PharmacyPrescriptionQueueEvent {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  table: "pharmacy_prescription_orders" | "pharmacy_prescription_order_lines" | "pharmacy_prescription_order_events";
+}
+
+export function subscribeToPharmacyPrescriptionQueue(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  onChange: (event: PharmacyPrescriptionQueueEvent) => void,
+  onStatus?: (status: string) => void,
+): () => void {
+  const channel = client.channel(`pharmacy-prescription-queue:${organizationId}`);
+  for (const table of [
+    "pharmacy_prescription_orders",
+    "pharmacy_prescription_order_lines",
+    "pharmacy_prescription_order_events",
+  ] as const) {
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table, filter: `organization_id=eq.${organizationId}` },
+      (payload: any) => onChange({ eventType: payload.eventType, table }),
+    );
+  }
+  channel.subscribe((status) => onStatus?.(status));
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
