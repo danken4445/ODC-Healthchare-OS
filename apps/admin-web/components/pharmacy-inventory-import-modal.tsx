@@ -125,10 +125,14 @@ export function PharmacyInventoryImportModal({
   // Filter & Search state
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
-  const [stockFilter, setStockFilter] = useState<"ALL" | "WITH_STOCK" | "ZERO_STOCK">("WITH_STOCK");
+  const [stockFilter, setStockFilter] = useState<"ALL" | "WITH_STOCK" | "ZERO_STOCK">("ALL");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
 
   // Options & Import state
-  const [includeZeroStock, setIncludeZeroStock] = useState<boolean>(false);
+  const [includeZeroStock, setIncludeZeroStock] = useState<boolean>(true);
   const [defaultQtyIfZero, setDefaultQtyIfZero] = useState<number>(0);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [importProgress, setImportProgress] = useState<{
@@ -140,6 +144,7 @@ export function PharmacyInventoryImportModal({
   const [importSummary, setImportSummary] = useState<{
     importedCount: number;
     catalogCreatedCount: number;
+    batchesReceivedCount?: number;
     departmentName: string;
     errors: string[];
   } | null>(null);
@@ -234,12 +239,9 @@ export function PharmacyInventoryImportModal({
       setSelectedSheet(parsed.sheetName || "INVENTORY");
       setParseResult(parsed);
       setEditableItems(parsed.items);
-      // Auto-set filter based on whether items have stock
-      if (parsed.withStockCount > 0) {
-        setStockFilter("WITH_STOCK");
-      } else {
-        setStockFilter("ALL");
-      }
+      // Show all items by default so the user sees the complete inventory and catalog
+      setStockFilter("ALL");
+      setCurrentPage(1);
     } catch (err: any) {
       setError(`Failed to parse file "${name}": ${err.message || String(err)}`);
     } finally {
@@ -286,7 +288,17 @@ export function PharmacyInventoryImportModal({
     setFileName(null);
     setImportSummary(null);
     setError(null);
+    setCurrentPage(1);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      handleReset();
+    }
+  }, [isOpen]);
 
   // Filtered preview items
   const filteredItems = useMemo(() => {
@@ -314,6 +326,20 @@ export function PharmacyInventoryImportModal({
       return true;
     });
   }, [editableItems, stockFilter, selectedCategory, searchQuery]);
+
+  // Reset pagination when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, stockFilter, pageSize]);
+
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredItems.length);
+  const paginatedItems = useMemo(() => {
+    if (pageSize >= 1000) return filteredItems;
+    return filteredItems.slice(startIndex, endIndex);
+  }, [filteredItems, startIndex, endIndex, pageSize]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -398,6 +424,7 @@ export function PharmacyInventoryImportModal({
         setImportSummary({
           importedCount: res.data.importedCount,
           catalogCreatedCount: res.data.catalogCreatedCount,
+          batchesReceivedCount: res.data.batchesReceivedCount,
           departmentName: res.data.departmentName,
           errors: res.data.errors,
         });
@@ -423,7 +450,7 @@ export function PharmacyInventoryImportModal({
       <div
         className="gso-modal-card"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "66rem" }}
+        style={{ maxWidth: "76rem" }}
       >
         {/* ── Modal Header ────────────────────────────────────────────── */}
         <div className="gso-modal-header">
@@ -453,11 +480,25 @@ export function PharmacyInventoryImportModal({
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             {/* Step indicator */}
             <div className="gso-stepper-pill">
-              <span className={`gso-stepper-step ${!parseResult ? "active" : ""}`}>
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={isImporting || (!parseResult && !importSummary)}
+                className={`gso-stepper-step ${!parseResult && !importSummary ? "active" : ""}`}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: (parseResult || importSummary) && !isImporting ? "pointer" : "default",
+                  padding: "0.15rem 0.4rem",
+                  color: !parseResult && !importSummary ? "#059669" : "#64748b",
+                  fontWeight: !parseResult && !importSummary ? 700 : 500,
+                }}
+                title={parseResult || importSummary ? "Click to upload a different file" : "Source file"}
+              >
                 1. Source
-              </span>
-              <ArrowRight size={12} style={{ color: "#94a3b8", margin: "0 0.25rem" }} />
-              <span className={`gso-stepper-step ${parseResult ? "active" : ""}`}>
+              </button>
+              <ArrowRight size={12} style={{ color: "#94a3b8", margin: "0 0.15rem" }} />
+              <span className={`gso-stepper-step ${parseResult && !importSummary ? "active" : ""}`}>
                 2. Review ({editableItems.length})
               </span>
             </div>
@@ -592,19 +633,23 @@ export function PharmacyInventoryImportModal({
             </div>
           )}
 
+          {/* Hidden File Input (always mounted so any upload button triggers it) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+              // Reset value so re-uploading the same file triggers onChange
+              e.target.value = "";
+            }}
+          />
+
           {/* ── STEP 1: Upload Dropzone ─────────────────────────────────── */}
           {!parseResult && !importSummary && (
             <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                }}
-              />
 
               <div
                 onDragOver={(e) => {
@@ -716,22 +761,43 @@ export function PharmacyInventoryImportModal({
                   </span>
                 </div>
 
-                {/* Multi-Sheet Selector Tabs */}
-                {parseResult.sheetsAvailable.length > 1 && (
-                  <div className="gso-tab-group">
-                    {parseResult.sheetsAvailable.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => handleSheetChange(s)}
-                        className={`gso-tab-btn ${selectedSheet === s ? "active" : ""}`}
-                        style={{ fontSize: "0.72rem", padding: "0.3rem 0.6rem" }}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="gso-preset-btn"
+                    style={{
+                      padding: "0.25rem 0.55rem",
+                      fontSize: "0.72rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      background: "#ffffff",
+                      cursor: "pointer",
+                    }}
+                    title="Upload a different spreadsheet or CSV"
+                  >
+                    <Upload size={12} />
+                    Upload Different File
+                  </button>
+
+                  {/* Multi-Sheet Selector Tabs */}
+                  {parseResult.sheetsAvailable.length > 1 && (
+                    <div className="gso-tab-group">
+                      {parseResult.sheetsAvailable.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handleSheetChange(s)}
+                          className={`gso-tab-btn ${selectedSheet === s ? "active" : ""}`}
+                          style={{ fontSize: "0.72rem", padding: "0.3rem 0.6rem" }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Statistics Grid */}
@@ -840,30 +906,32 @@ export function PharmacyInventoryImportModal({
               </div>
 
               {/* High-Density Preview Table */}
-              <div className="gso-table-wrap" style={{ maxHeight: "320px" }}>
+              <div className="gso-table-wrap" style={{ maxHeight: "360px" }}>
                 <table className="gso-table">
                   <thead>
                     <tr>
-                      <th style={{ width: "16%" }}>Category</th>
-                      <th style={{ width: "32%" }}>Drug / Item Description</th>
-                      <th style={{ width: "14%" }}>Brand Name</th>
-                      <th style={{ width: "12%" }}>Batch / Lot #</th>
-                      <th style={{ width: "12%" }}>Expiry Date</th>
-                      <th style={{ width: "9%", textAlign: "right" }}>Intake Qty</th>
+                      <th style={{ width: "12%" }}>Category</th>
+                      <th style={{ width: "24%" }}>Drug / Item Description</th>
+                      <th style={{ width: "11%" }}>Brand Name</th>
+                      <th style={{ width: "10%" }}>Cost (DPRI)</th>
+                      <th style={{ width: "10%" }}>Selling (BizBox)</th>
+                      <th style={{ width: "10%" }}>Batch / Lot #</th>
+                      <th style={{ width: "10%" }}>Expiry Date</th>
+                      <th style={{ width: "8%", textAlign: "right" }}>Intake Qty</th>
                       <th style={{ width: "5%", textAlign: "center" }}>Act</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredItems.length === 0 ? (
+                    {paginatedItems.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
-                          No items match the active category or search filter.
+                        <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
+                          No items match the active category, stock, or search filter.
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item, idx) => {
+                      paginatedItems.map((item, idx) => {
                         const globalIndex = editableItems.findIndex(
-                          (i) => i.sku === item.sku && i.lotNumber === item.lotNumber
+                          (i) => i.sku === item.sku && i.lotNumber === item.lotNumber && i.itemName === item.itemName
                         );
                         const catColor = CATEGORY_COLORS[item.category] || DEFAULT_CATEGORY_COLOR;
 
@@ -895,6 +963,21 @@ export function PharmacyInventoryImportModal({
                                   {item.dosageForm}
                                 </div>
                               )}
+                              {item.matchStatus && item.matchStatus !== "Matched" && (
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    fontSize: "0.62rem",
+                                    color: "#b45309",
+                                    background: "#fef3c7",
+                                    padding: "0.05rem 0.35rem",
+                                    borderRadius: "0.25rem",
+                                    marginTop: "0.15rem",
+                                  }}
+                                >
+                                  {item.matchStatus}
+                                </span>
+                              )}
                             </td>
                             <td>
                               {item.brandName ? (
@@ -911,6 +994,24 @@ export function PharmacyInventoryImportModal({
                                   }}
                                 >
                                   {item.brandName}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: "0.72rem" }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              {item.unitCost ? (
+                                <span style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#475569" }}>
+                                  ₱{item.unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: "0.72rem" }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              {item.sellingPrice ? (
+                                <span style={{ fontFamily: "monospace", fontSize: "0.72rem", fontWeight: 700, color: "#059669" }}>
+                                  ₱{item.sellingPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               ) : (
                                 <span style={{ color: "#94a3b8", fontSize: "0.72rem" }}>—</span>
@@ -1000,6 +1101,76 @@ export function PharmacyInventoryImportModal({
                 </table>
               </div>
 
+              {/* Table Pagination Bar */}
+              {filteredItems.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.55rem 0.85rem",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "0.5rem",
+                    fontSize: "0.74rem",
+                    color: "#475569",
+                    flexWrap: "wrap",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <span>
+                      Showing <strong>{startIndex + 1}–{endIndex}</strong> of <strong>{filteredItems.length}</strong> items
+                    </span>
+                    <span style={{ color: "#cbd5e1" }}>|</span>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      <span>Rows per page:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        style={{
+                          padding: "0.15rem 0.4rem",
+                          borderRadius: "0.3rem",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "0.72rem",
+                          background: "#ffffff",
+                          color: "#0f172a",
+                        }}
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={1000}>Show All</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      className="gso-preset-btn"
+                      style={{ padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ padding: "0 0.35rem", fontWeight: 700, color: "#0f172a" }}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="gso-preset-btn"
+                      style={{ padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Options & Table Footer */}
               <div
                 style={{
@@ -1023,13 +1194,25 @@ export function PharmacyInventoryImportModal({
                     style={{ accentColor: "#059669" }}
                   />
                   <span>
-                    Include catalog items with 0 stock (pre-populates Pharmacy Master Catalog for future replenishment)
+                    Include catalog items with 0 stock (registers all {editableItems.length} items in Master Catalog with pricing for replenishment & billing)
                   </span>
                 </label>
 
-                <span style={{ color: "#64748b" }}>
-                  Showing <strong>{filteredItems.length}</strong> of <strong>{editableItems.length}</strong> items
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <span
+                    style={{
+                      color: "#065f46",
+                      fontWeight: 650,
+                      fontSize: "0.72rem",
+                      background: "#ecfdf5",
+                      padding: "0.2rem 0.55rem",
+                      borderRadius: "0.35rem",
+                      border: "1px solid #a7f3d0",
+                    }}
+                  >
+                    ✓ Committing intake processes all {(includeZeroStock ? editableItems : editableItems.filter((i) => i.effectiveQuantity > 0)).length} reviewed items across all pages
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1087,13 +1270,14 @@ export function PharmacyInventoryImportModal({
               <h4 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#14532d" }}>
                 Pharmacy Stock Ingestion Complete
               </h4>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "#166534", maxWidth: "32rem", lineHeight: 1.5 }}>
-                Successfully received <strong>{importSummary.importedCount}</strong> item batches into{" "}
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#166534", maxWidth: "34rem", lineHeight: 1.5 }}>
+                Successfully ingested <strong>{importSummary.importedCount}</strong> items:{" "}
+                <strong>{importSummary.batchesReceivedCount ?? stats.withStockCount}</strong> with on-hand stock batches received into{" "}
                 <strong>{importSummary.departmentName}</strong> stockroom.
               </p>
               {importSummary.catalogCreatedCount > 0 && (
                 <p style={{ margin: 0, fontSize: "0.76rem", color: "#475569" }}>
-                  ({importSummary.catalogCreatedCount} new drug & supply items were registered in the Master Catalog)
+                  ({importSummary.catalogCreatedCount} items were registered or updated in the Master Catalog with pricing)
                 </p>
               )}
 
@@ -1120,10 +1304,18 @@ export function PharmacyInventoryImportModal({
                 </div>
               )}
 
-              <div style={{ marginTop: "1rem" }}>
+              <div style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+                <Button
+                  variant="secondary"
+                  onClick={handleReset}
+                  className="gap-1.5 text-xs font-semibold"
+                >
+                  <Upload size={14} />
+                  Upload Another Spreadsheet / CSV
+                </Button>
                 <Button
                   onClick={onClose}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 text-xs"
                 >
                   Close & View Pharmacy Stock
                 </Button>
@@ -1134,14 +1326,14 @@ export function PharmacyInventoryImportModal({
 
         {/* ── Modal Footer ────────────────────────────────────────────── */}
         <div className="gso-modal-footer">
-          {parseResult && !importSummary ? (
+          {parseResult || importSummary ? (
             <Button
               variant="secondary"
               size="sm"
               onClick={handleReset}
               disabled={isImporting}
             >
-              <ArrowLeft size={14} style={{ marginRight: "0.35rem" }} />
+              <Upload size={14} style={{ marginRight: "0.35rem" }} />
               Upload Different File
             </Button>
           ) : (

@@ -35,6 +35,7 @@ import {
   TabPanel,
 } from "@odyssey/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertOctagon,
@@ -81,6 +82,7 @@ import {
   X,
 } from "lucide-react";
 import { useAdminData } from "../../components/admin-data-context";
+import { signOutAndRedirect } from "../../lib/logout-redirect";
 import { AdminSignIn } from "../../components/admin-sign-in";
 import { GsoCsvImportModal } from "../../components/gso-csv-import-modal";
 import { PharmacyInventoryImportModal } from "../../components/pharmacy-inventory-import-modal";
@@ -220,6 +222,7 @@ const mainNavTabs = [
 /* ─── Page Component ──────────────────────────────────────────── */
 
 export default function InventoryPage() {
+  const router = useRouter();
   /* Auth & Workspace context */
   const {
     client,
@@ -229,6 +232,10 @@ export default function InventoryPage() {
     permissions,
     signOut: handleSignOut,
   } = useAdminData();
+
+  async function handleInventorySignOut() {
+    await signOutAndRedirect(handleSignOut, () => router.replace("/"));
+  }
   const organizationId = organization?.id ?? "";
   const canManage = permissions.includes("can_manage_inventory");
   const canTag = permissions.includes("can_tag_inventory_usage");
@@ -1244,7 +1251,7 @@ export default function InventoryPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void handleSignOut()}
+            onClick={() => void handleInventorySignOut()}
           >
             Log out
           </Button>

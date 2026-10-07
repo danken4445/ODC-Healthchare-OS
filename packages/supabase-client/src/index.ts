@@ -2064,6 +2064,7 @@ export async function importPharmacyInventoryRows(
   SupabaseResult<{
     importedCount: number;
     catalogCreatedCount: number;
+    batchesReceivedCount: number;
     errors: string[];
     departmentId: string;
     departmentName: string;
@@ -2104,6 +2105,7 @@ export async function importPharmacyInventoryRows(
 
   let importedCount = 0;
   let catalogCreatedCount = 0;
+  let batchesReceivedCount = 0;
   const errors: string[] = [];
   const total = rows.length;
 
@@ -2132,12 +2134,20 @@ export async function importPharmacyInventoryRows(
         continue;
       }
 
+      const sellingPrice =
+        row.sellingPrice ??
+        row.bizboxPricePhp ??
+        row.affiliatedPharmacyPricePhp ??
+        row.dohSrpPhp ??
+        0;
+      const unitCost = row.unitCost ?? row.dpriPhp ?? row.dohSrpPhp ?? 0;
+
       // 1. Resolve or create catalog item
       let itemId: string | null = null;
       let itemIsPerishable = false;
       const { data: existingItem } = await client
         .from("inventory_items")
-        .select("id, is_perishable")
+        .select("id, is_perishable, unit_cost, selling_price")
         .eq("organization_id", organizationId)
         .ilike("name", genericOrItem)
         .maybeSingle();
@@ -2145,6 +2155,18 @@ export async function importPharmacyInventoryRows(
       if (existingItem) {
         itemId = existingItem.id;
         itemIsPerishable = Boolean(existingItem.is_perishable);
+        // Sync prices if provided from price list
+        if (sellingPrice > 0 || unitCost > 0) {
+          const updatePayload: Database["public"]["Tables"]["inventory_items"]["Update"] = {};
+          if (sellingPrice > 0) {
+            updatePayload.selling_price = sellingPrice;
+            updatePayload.unit_price = sellingPrice;
+          }
+          if (unitCost > 0) {
+            updatePayload.unit_cost = unitCost;
+          }
+          await client.from("inventory_items").update(updatePayload).eq("id", itemId);
+        }
       } else {
         const isMedicine = row.category ? /MEDICINE|DRUG|ANESTHESIA/i.test(row.category) : false;
         itemIsPerishable = Boolean(row.expiryDateNormalized) && isMedicine;
@@ -2156,9 +2178,9 @@ export async function importPharmacyInventoryRows(
             name: genericOrItem,
             sku: row.sku || `PHARM-${Date.now().toString(36).toUpperCase()}`,
             unit_of_measure: row.unitOfMeasure || "piece",
-            unit_cost: 0,
-            selling_price: 0,
-            unit_price: 0,
+            unit_cost: unitCost,
+            selling_price: sellingPrice,
+            unit_price: sellingPrice,
             currency: "PHP",
             is_perishable: itemIsPerishable,
           })
@@ -2208,9 +2230,11 @@ export async function importPharmacyInventoryRows(
             `Failed to receive pharmacy stock for ${genericOrItem}: ${receiveRes.error.message}`
           );
         } else {
+          batchesReceivedCount++;
           importedCount++;
         }
       } else {
+        // Registered in catalog
         importedCount++;
       }
     } catch (err: any) {
@@ -2223,6 +2247,7 @@ export async function importPharmacyInventoryRows(
   return success({
     importedCount,
     catalogCreatedCount,
+    batchesReceivedCount,
     errors,
     departmentId: deptId,
     departmentName: deptName,

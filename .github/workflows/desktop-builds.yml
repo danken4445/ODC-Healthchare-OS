@@ -13,6 +13,8 @@ on:
           - admin
           - provider
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 

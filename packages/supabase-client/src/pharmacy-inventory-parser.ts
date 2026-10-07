@@ -273,114 +273,280 @@ export function parsePharmacyInventoryWorkbook(
   let lastGenericName = "";
   let lastDosageForm = "";
 
-  for (let i = 0; i < rawRows.length; i++) {
-    const row = rawRows[i];
-    if (!row || row.length === 0 || !row.some((cell) => cell !== null && cell !== undefined && cell !== "")) {
-      continue;
+  // 1. Detect if sheet contains a structured header row (e.g. integrated inventory & pricing CSV)
+  let headerRowIndex = -1;
+  let colMap: Record<string, number> | null = null;
+
+  for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
+    const row = rawRows[r];
+    if (!row || row.length === 0) continue;
+    const normalized = row.map((c) =>
+      String(c ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s\-_]+/g, "_")
+    );
+
+    const hasItem = normalized.some((h) =>
+      ["item", "generic_name", "generic", "drug_name", "drug", "medicine", "articles"].includes(h)
+    );
+    const hasCategory = normalized.includes("category");
+    const hasDosageOrSize = normalized.some((h) =>
+      ["dosage_or_size", "dosage", "size", "dosage_form", "strength"].includes(h)
+    );
+    const hasBalance = normalized.some((h) =>
+      h.startsWith("balance") || ["quantity", "qty", "stock", "on_hand", "balance_oct_05_2026"].includes(h)
+    );
+    const hasPrice = normalized.some((h) =>
+      ["bizbox_price_php", "dpri_php", "doh_srp_php", "selling_price", "unit_price", "unit_cost"].includes(h)
+    );
+
+    // If row contains item/generic and at least one other standard column header:
+    if (hasItem && (hasCategory || hasDosageOrSize || hasBalance || hasPrice)) {
+      headerRowIndex = r;
+      colMap = {
+        category: normalized.findIndex((h) => h === "category"),
+        item: normalized.findIndex((h) =>
+          ["item", "generic_name", "generic", "drug_name", "drug", "medicine", "articles"].includes(h)
+        ),
+        dosage: normalized.findIndex((h) =>
+          ["dosage_or_size", "dosage", "dosage_form", "size", "strength", "specification"].includes(h)
+        ),
+        brand: normalized.findIndex((h) => ["brand", "brand_name"].includes(h)),
+        balance: normalized.findIndex((h) =>
+          h.startsWith("balance") || ["quantity", "qty", "stock", "on_hand", "actual_balance"].includes(h)
+        ),
+        dohSrp: normalized.findIndex((h) =>
+          ["doh_srp_php", "doh_srp", "srp", "doh_price"].includes(h)
+        ),
+        dpri: normalized.findIndex((h) =>
+          ["dpri_php", "dpri", "reference_price", "cost", "unit_cost"].includes(h)
+        ),
+        bizbox: normalized.findIndex((h) =>
+          ["bizbox_price_php", "bizbox_price", "hospital_price", "price", "selling_price"].includes(h)
+        ),
+        affiliated: normalized.findIndex((h) =>
+          ["affiliated_pharmacy_price_php", "affiliated_price", "retail_price"].includes(h)
+        ),
+        matchStatus: normalized.findIndex((h) => ["match_status", "status"].includes(h)),
+        priceListItem: normalized.findIndex((h) => ["price_list_item", "matched_item"].includes(h)),
+        sourceSheet: normalized.findIndex((h) => ["source_sheet", "sheet"].includes(h)),
+        lot: normalized.findIndex((h) =>
+          ["lot_number", "lot_no", "lot", "batch_number", "batch_no", "batch"].includes(h)
+        ),
+        expiry: normalized.findIndex((h) =>
+          ["expiry_date", "expiry", "exp_date", "expiration"].includes(h)
+        ),
+        notes: normalized.findIndex((h) => ["notes", "remarks", "comment"].includes(h)),
+      };
+      break;
     }
+  }
 
-    const col0 = String(row[0] || "").trim();
+  if (colMap && headerRowIndex !== -1) {
+    // ── Structured Header-Based Parser (Integrated inventory & price lists) ──
+    for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      if (!row || row.length === 0 || !row.some((cell) => cell !== null && cell !== undefined && cell !== "")) {
+        continue;
+      }
 
-    // Skip title lines and column headers
-    if (
-      col0.toUpperCase().includes("PHARMACY DEPARTMENT") ||
-      col0.toUpperCase().includes("WEEKLY MEDICINES") ||
-      col0.toUpperCase().includes("AS OF OCTOBER") ||
-      col0.toUpperCase().includes("AS OF ") ||
-      col0.toUpperCase().includes("LIST OF AVAILABLE")
-    ) {
-      continue;
+      const itemVal = colMap.item !== -1 && row[colMap.item] !== undefined && row[colMap.item] !== null
+        ? String(row[colMap.item]).trim()
+        : "";
+      if (!itemVal) continue;
+
+      let catVal = colMap.category !== -1 && row[colMap.category] ? String(row[colMap.category]).trim() : currentCategory;
+      if (!catVal) catVal = currentCategory;
+      const normalizedCat = catVal.toUpperCase();
+      currentCategory = normalizedCat;
+      categoriesFound.add(normalizedCat);
+
+      const dosageForm = colMap.dosage !== -1 && row[colMap.dosage] !== undefined && row[colMap.dosage] !== null
+        ? String(row[colMap.dosage]).trim()
+        : null;
+
+      const brandRaw = colMap.brand !== -1 && row[colMap.brand] !== undefined && row[colMap.brand] !== null
+        ? String(row[colMap.brand]).trim()
+        : null;
+      const cleanBrand = brandRaw && !/^(N\/A|GENERIC|NONE|-)$/i.test(brandRaw) ? brandRaw : null;
+
+      let effectiveQuantity = 0;
+      if (colMap.balance !== -1 && row[colMap.balance] !== undefined && row[colMap.balance] !== null && row[colMap.balance] !== "") {
+        const rawBal = row[colMap.balance];
+        const numBal = typeof rawBal === "number" ? rawBal : parseFloat(String(rawBal).replace(/,/g, ""));
+        if (!isNaN(numBal) && numBal > 0) {
+          effectiveQuantity = numBal;
+        }
+      }
+
+      const parsePrice = (idx: number): number | null => {
+        if (idx === -1 || row[idx] === null || row[idx] === undefined || row[idx] === "") return null;
+        const val = typeof row[idx] === "number" ? row[idx] : parseFloat(String(row[idx]).replace(/,/g, ""));
+        return !isNaN(val) && val >= 0 ? val : null;
+      };
+
+      const dohSrpPhp = parsePrice(colMap.dohSrp);
+      const dpriPhp = parsePrice(colMap.dpri);
+      const bizboxPricePhp = parsePrice(colMap.bizbox);
+      const affiliatedPharmacyPricePhp = parsePrice(colMap.affiliated);
+
+      const sellingPrice = bizboxPricePhp ?? affiliatedPharmacyPricePhp ?? dohSrpPhp ?? 0;
+      const unitCost = dpriPhp ?? dohSrpPhp ?? 0;
+
+      const rawExp = colMap.expiry !== -1 ? row[colMap.expiry] : null;
+      const expiryDateNormalized = normalizePharmacyExpiryDate(rawExp);
+      const lotNo = colMap.lot !== -1 && row[colMap.lot] !== undefined && row[colMap.lot] !== null
+        ? String(row[colMap.lot]).trim()
+        : null;
+
+      const matchStatus = colMap.matchStatus !== -1 && row[colMap.matchStatus] ? String(row[colMap.matchStatus]).trim() : null;
+      const priceListItem = colMap.priceListItem !== -1 && row[colMap.priceListItem] ? String(row[colMap.priceListItem]).trim() : null;
+      const rawNotes = colMap.notes !== -1 && row[colMap.notes] ? String(row[colMap.notes]).trim() : null;
+
+      const unitOfMeasure = inferPharmacyUnitOfMeasure(dosageForm, itemVal, normalizedCat);
+      const itemName = dosageForm ? `${itemVal} (${dosageForm})` : itemVal;
+
+      items.push({
+        category: normalizedCat,
+        genericName: itemVal,
+        dosageForm: dosageForm || null,
+        brandName: cleanBrand,
+        itemName,
+        unitOfMeasure,
+        expiryDateRaw: rawExp !== null && rawExp !== undefined ? String(rawExp).trim() : null,
+        expiryDateNormalized,
+        lotNumber: lotNo && !/^(N\/A|NONE|-)$/i.test(lotNo) ? lotNo : null,
+        dateDelivered: null,
+        stocksReceived: null,
+        totalStocks: null,
+        balanceSept: null,
+        qtyDispensed: null,
+        actualBalance: effectiveQuantity,
+        effectiveQuantity,
+        sku: generatePharmacySku(normalizedCat, itemVal, dosageForm),
+        notes: rawNotes || (cleanBrand ? `Brand: ${cleanBrand}` : null),
+        dohSrpPhp,
+        dpriPhp,
+        bizboxPricePhp,
+        affiliatedPharmacyPricePhp,
+        unitCost,
+        sellingPrice,
+        matchStatus,
+        priceListItem,
+      });
     }
+  } else {
+    // ── Positional Sheet Parser (Weekly pharmacy spreadsheets without header rows) ──
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      if (!row || row.length === 0 || !row.some((cell) => cell !== null && cell !== undefined && cell !== "")) {
+        continue;
+      }
 
-    if (
-      col0.toUpperCase() === "GENERIC NAME" ||
-      col0.toUpperCase() === "ARTICLES" ||
-      col0.toUpperCase() === "DRUGS/MEDICINES" ||
-      col0.toUpperCase() === "MEDICINES" ||
-      col0.toUpperCase() === "DESCRIPTION"
-    ) {
-      continue;
-    }
+      const col0 = String(row[0] || "").trim();
 
-    // Check if this is a section header (only 1 column filled or starts section)
-    const filledCells = row.filter((c) => c !== null && c !== undefined && c !== "");
-    const isSectionHeader =
-      filledCells.length === 1 &&
-      /^(MEDICINES|DANGEROUS DRUGS|ANESTHESIA MEDICINES|FAST MOVING INTRAVENOUS FLUIDS|SUTURES|MEDICAL SUPPLIES|NEAR EXPIRY MEDICINES|SUPPLIES|FLUIDS|ANESTHETICS|OR SUPPLIES)/i.test(
-        col0.replace(/^[0-9.\s]+/, "")
-      );
+      // Skip title lines and column headers
+      if (
+        col0.toUpperCase().includes("PHARMACY DEPARTMENT") ||
+        col0.toUpperCase().includes("WEEKLY MEDICINES") ||
+        col0.toUpperCase().includes("AS OF OCTOBER") ||
+        col0.toUpperCase().includes("AS OF ") ||
+        col0.toUpperCase().includes("LIST OF AVAILABLE")
+      ) {
+        continue;
+      }
 
-    if (isSectionHeader) {
-      currentCategory = col0.replace(/^[0-9.\s]+/, "").trim();
+      if (
+        col0.toUpperCase() === "GENERIC NAME" ||
+        col0.toUpperCase() === "ARTICLES" ||
+        col0.toUpperCase() === "DRUGS/MEDICINES" ||
+        col0.toUpperCase() === "MEDICINES" ||
+        col0.toUpperCase() === "DESCRIPTION"
+      ) {
+        continue;
+      }
+
+      // Check if this is a section header (only 1 column filled or starts section)
+      const filledCells = row.filter((c) => c !== null && c !== undefined && c !== "");
+      const isSectionHeader =
+        filledCells.length === 1 &&
+        /^(MEDICINES|DANGEROUS DRUGS|ANESTHESIA MEDICINES|FAST MOVING INTRAVENOUS FLUIDS|SUTURES|MEDICAL SUPPLIES|NEAR EXPIRY MEDICINES|SUPPLIES|FLUIDS|ANESTHETICS|OR SUPPLIES)/i.test(
+          col0.replace(/^[0-9.\s]+/, "")
+        );
+
+      if (isSectionHeader) {
+        currentCategory = col0.replace(/^[0-9.\s]+/, "").trim();
+        categoriesFound.add(currentCategory);
+        continue;
+      }
+
+      // Extract columns according to sheet structure
+      let genericName = col0;
+      let dosageForm = row[1] ? String(row[1]).trim() : null;
+      let brandName = row[2] ? String(row[2]).trim() : null;
+
+      // Handle continuation lot rows (where generic name is blank but brand / expiry / lot is present)
+      if (!genericName && (brandName || row[3] || row[4] || row[6] || row[10])) {
+        genericName = lastGenericName;
+        if (!dosageForm) dosageForm = lastDosageForm;
+      } else if (genericName) {
+        lastGenericName = genericName;
+        lastDosageForm = dosageForm || "";
+      }
+
+      if (!genericName) continue;
+
+      const rawExp = row[3];
+      const lotNo = row[4] !== undefined && row[4] !== null ? String(row[4]).trim() : null;
+      const dateDelivered = normalizeDeliveryDate(row[5]);
+      const stocksReceived = typeof row[6] === "number" ? row[6] : row[6] ? parseFloat(row[6]) : null;
+      const totalStocks = typeof row[7] === "number" ? row[7] : row[7] ? parseFloat(row[7]) : null;
+      const balanceSept = typeof row[8] === "number" ? row[8] : row[8] ? parseFloat(row[8]) : null;
+      const qtyDispensed = typeof row[9] === "number" ? row[9] : row[9] ? parseFloat(row[9]) : null;
+      const actualBalance = typeof row[10] === "number" ? row[10] : row[10] ? parseFloat(row[10]) : null;
+
+      // Determine effective stock quantity to import
+      let effectiveQuantity = 0;
+      if (actualBalance !== null && !isNaN(actualBalance) && actualBalance >= 0) {
+        effectiveQuantity = actualBalance;
+      } else if (totalStocks !== null && !isNaN(totalStocks) && totalStocks >= 0) {
+        effectiveQuantity = totalStocks;
+      } else if (stocksReceived !== null && !isNaN(stocksReceived) && stocksReceived >= 0) {
+        effectiveQuantity = stocksReceived;
+      }
+
+      const expiryDateNormalized = normalizePharmacyExpiryDate(rawExp);
+      const unitOfMeasure = inferPharmacyUnitOfMeasure(dosageForm, genericName, currentCategory);
+      const cleanBrand = brandName && !/^(N\/A|GENERIC|NONE|-)$/i.test(brandName) ? brandName : null;
+
+      const itemName = dosageForm
+        ? `${genericName.trim()} (${dosageForm.trim()})`
+        : genericName.trim();
+
       categoriesFound.add(currentCategory);
-      continue;
+
+      items.push({
+        category: currentCategory,
+        genericName: genericName.trim(),
+        dosageForm: dosageForm ? dosageForm.trim() : null,
+        brandName: cleanBrand,
+        itemName,
+        unitOfMeasure,
+        expiryDateRaw: rawExp !== null && rawExp !== undefined ? String(rawExp).trim() : null,
+        expiryDateNormalized,
+        lotNumber: lotNo && !/^(N\/A|NONE|-)$/i.test(lotNo) ? lotNo : null,
+        dateDelivered,
+        stocksReceived: stocksReceived !== null && !isNaN(stocksReceived) ? stocksReceived : null,
+        totalStocks: totalStocks !== null && !isNaN(totalStocks) ? totalStocks : null,
+        balanceSept: balanceSept !== null && !isNaN(balanceSept) ? balanceSept : null,
+        qtyDispensed: qtyDispensed !== null && !isNaN(qtyDispensed) ? qtyDispensed : null,
+        actualBalance: actualBalance !== null && !isNaN(actualBalance) ? actualBalance : null,
+        effectiveQuantity,
+        sku: generatePharmacySku(currentCategory, genericName, dosageForm),
+        notes: cleanBrand ? `Brand: ${cleanBrand}` : null,
+      });
     }
-
-    // Extract columns according to sheet structure
-    let genericName = col0;
-    let dosageForm = row[1] ? String(row[1]).trim() : null;
-    let brandName = row[2] ? String(row[2]).trim() : null;
-
-    // Handle continuation lot rows (where generic name is blank but brand / expiry / lot is present)
-    if (!genericName && (brandName || row[3] || row[4] || row[6] || row[10])) {
-      genericName = lastGenericName;
-      if (!dosageForm) dosageForm = lastDosageForm;
-    } else if (genericName) {
-      lastGenericName = genericName;
-      lastDosageForm = dosageForm || "";
-    }
-
-    if (!genericName) continue;
-
-    const rawExp = row[3];
-    const lotNo = row[4] !== undefined && row[4] !== null ? String(row[4]).trim() : null;
-    const dateDelivered = normalizeDeliveryDate(row[5]);
-    const stocksReceived = typeof row[6] === "number" ? row[6] : row[6] ? parseFloat(row[6]) : null;
-    const totalStocks = typeof row[7] === "number" ? row[7] : row[7] ? parseFloat(row[7]) : null;
-    const balanceSept = typeof row[8] === "number" ? row[8] : row[8] ? parseFloat(row[8]) : null;
-    const qtyDispensed = typeof row[9] === "number" ? row[9] : row[9] ? parseFloat(row[9]) : null;
-    const actualBalance = typeof row[10] === "number" ? row[10] : row[10] ? parseFloat(row[10]) : null;
-
-    // Determine effective stock quantity to import
-    let effectiveQuantity = 0;
-    if (actualBalance !== null && !isNaN(actualBalance) && actualBalance >= 0) {
-      effectiveQuantity = actualBalance;
-    } else if (totalStocks !== null && !isNaN(totalStocks) && totalStocks >= 0) {
-      effectiveQuantity = totalStocks;
-    } else if (stocksReceived !== null && !isNaN(stocksReceived) && stocksReceived >= 0) {
-      effectiveQuantity = stocksReceived;
-    }
-
-    const expiryDateNormalized = normalizePharmacyExpiryDate(rawExp);
-    const unitOfMeasure = inferPharmacyUnitOfMeasure(dosageForm, genericName, currentCategory);
-    const cleanBrand = brandName && !/^(N\/A|GENERIC|NONE|-)$/i.test(brandName) ? brandName : null;
-
-    const itemName = dosageForm
-      ? `${genericName.trim()} (${dosageForm.trim()})`
-      : genericName.trim();
-
-    categoriesFound.add(currentCategory);
-
-    items.push({
-      category: currentCategory,
-      genericName: genericName.trim(),
-      dosageForm: dosageForm ? dosageForm.trim() : null,
-      brandName: cleanBrand,
-      itemName,
-      unitOfMeasure,
-      expiryDateRaw: rawExp !== null && rawExp !== undefined ? String(rawExp).trim() : null,
-      expiryDateNormalized,
-      lotNumber: lotNo && !/^(N\/A|NONE|-)$/i.test(lotNo) ? lotNo : null,
-      dateDelivered,
-      stocksReceived: stocksReceived !== null && !isNaN(stocksReceived) ? stocksReceived : null,
-      totalStocks: totalStocks !== null && !isNaN(totalStocks) ? totalStocks : null,
-      balanceSept: balanceSept !== null && !isNaN(balanceSept) ? balanceSept : null,
-      qtyDispensed: qtyDispensed !== null && !isNaN(qtyDispensed) ? qtyDispensed : null,
-      actualBalance: actualBalance !== null && !isNaN(actualBalance) ? actualBalance : null,
-      effectiveQuantity,
-      sku: generatePharmacySku(currentCategory, genericName, dosageForm),
-      notes: cleanBrand ? `Brand: ${cleanBrand}` : null,
-    });
   }
 
   const datedCount = items.filter((i) => Boolean(i.expiryDateNormalized)).length;

@@ -919,6 +919,14 @@ export interface PharmacyInventoryImportRow {
   effectiveQuantity: number;
   sku: string;
   notes?: string | null;
+  dohSrpPhp?: number | null;
+  dpriPhp?: number | null;
+  bizboxPricePhp?: number | null;
+  affiliatedPharmacyPricePhp?: number | null;
+  unitCost?: number | null;
+  sellingPrice?: number | null;
+  matchStatus?: string | null;
+  priceListItem?: string | null;
 }
 
 export interface PharmacyInventoryParseResult {
