@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "Odyssey Healthcare OS - Admin & POS Desktop Shell",
+  "author": "Odyssey Healthcare",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
-    "build:win": "electron-builder --win nsis"
+    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg zip",
+    "build:all": "electron-builder -mw"
   },
   "dependencies": {
     "dotenv": "^16.4.7"
@@ -18,9 +21,14 @@
   "build": {
     "appId": "ph.odyssey.healthcare.admin",
     "productName": "Odyssey Admin & POS",
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
     "win": {
       "icon": "assets/odc-logo.png",
       "target": [
@@ -29,6 +37,11 @@
           "arch": ["x64"]
         }
       ]
+    },
+    "mac": {
+      "category": "public.app-category.medical",
+      "icon": "assets/odc-logo.png",
+      "target": ["dmg", "zip"]
     },
     "nsis": {
       "oneClick": false,

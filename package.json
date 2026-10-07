@@ -12,8 +12,10 @@
     "db:types": "supabase gen types typescript --local > packages/types/src/database.ts",
     "desktop:admin:dev": "pnpm --filter @odyssey/desktop-admin dev",
     "desktop:admin:build": "pnpm --filter @odyssey/desktop-admin build:win",
+    "desktop:admin:build:mac": "pnpm --filter @odyssey/desktop-admin build:mac",
     "desktop:provider:dev": "pnpm --filter @odyssey/desktop-provider dev",
-    "desktop:provider:build": "pnpm --filter @odyssey/desktop-provider build:win"
+    "desktop:provider:build": "pnpm --filter @odyssey/desktop-provider build:win",
+    "desktop:provider:build:mac": "pnpm --filter @odyssey/desktop-provider build:mac"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

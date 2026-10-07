@@ -1,0 +1,92 @@
+name: Build Desktop Applications (Windows .exe & macOS .dmg)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_app:
+        description: 'Which app to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - admin
+          - provider
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Admin Desktop (.exe)
+        if: ${{ github.event.inputs.target_app == 'both' || github.event.inputs.target_app == 'admin' || github.event_name == 'push' }}
+        run: pnpm desktop:admin:build
+
+      - name: Build Provider Desktop (.exe)
+        if: ${{ github.event.inputs.target_app == 'both' || github.event.inputs.target_app == 'provider' || github.event_name == 'push' }}
+        run: pnpm desktop:provider:build
+
+      - name: Upload Windows Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            apps/desktop-admin/dist/*.exe
+            apps/desktop-provider/dist/*.exe
+
+  build-mac:
+    name: Build macOS (.dmg & .zip)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Admin Desktop (.dmg)
+        if: ${{ github.event.inputs.target_app == 'both' || github.event.inputs.target_app == 'admin' || github.event_name == 'push' }}
+        run: pnpm desktop:admin:build:mac
+
+      - name: Build Provider Desktop (.dmg)
+        if: ${{ github.event.inputs.target_app == 'both' || github.event.inputs.target_app == 'provider' || github.event_name == 'push' }}
+        run: pnpm desktop:provider:build:mac
+
+      - name: Upload macOS Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: |
+            apps/desktop-admin/dist/*.dmg
+            apps/desktop-admin/dist/*.zip
+            apps/desktop-provider/dist/*.dmg
+            apps/desktop-provider/dist/*.zip
