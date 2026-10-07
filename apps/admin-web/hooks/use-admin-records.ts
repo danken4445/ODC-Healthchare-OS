@@ -420,6 +420,7 @@ export function useAdminRecords(
             ).length,
             active: dept.active,
             status: dept.active ? "Active" : "Inactive",
+            is_root_supply: dept.is_root_supply ?? false,
           }));
           summaries = [
             {

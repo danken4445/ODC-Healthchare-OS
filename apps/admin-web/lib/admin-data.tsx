@@ -55,6 +55,30 @@ export const featurePermissions = permissionOptions.filter((permission) => !perm
 
 const status = (row: DataRow) => <StatusBadge label={String(row.status)} />;
 const money = (key: string) => (row: DataRow) => <span className="money">{php.format(Number(row[key] ?? 0))}</span>;
+const departmentName = (row: DataRow) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+    <span style={{ fontWeight: 600 }}>{String(row.name)}</span>
+    {row.is_root_supply ? (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          fontSize: "0.68rem",
+          fontWeight: 700,
+          padding: "0.15rem 0.5rem",
+          borderRadius: "9999px",
+          background: "#ecfdf5",
+          color: "#065f46",
+          border: "1px solid #a7f3d0",
+          letterSpacing: "0.02em",
+          textTransform: "uppercase",
+        }}
+      >
+        Root Supply
+      </span>
+    ) : null}
+  </span>
+);
 
 export interface RecordsConfig {
   actionLabel?: string;
@@ -99,7 +123,7 @@ export const staffConfig: RecordsConfig = { dataset: "staff", title: "Staff acco
 ] };
 
 export const departmentsConfig: RecordsConfig = { dataset: "departments", title: "Departments", eyebrow: "Operational structure", actionLabel: "Add department", description: "Maintain clinic departments, stock locations, and staff defaults while preserving historical inventory references.", emptyMessage: "No departments are configured for this clinic.", columns: [
-  { key: "name", label: "Department" }, { key: "code", label: "System code" }, { key: "description", label: "Description" }, { key: "staffCount", label: "Assigned staff", numeric: true }, { key: "status", label: "Status", render: status },
+  { key: "name", label: "Department", render: departmentName }, { key: "code", label: "System code" }, { key: "description", label: "Description" }, { key: "staffCount", label: "Assigned staff", numeric: true }, { key: "status", label: "Status", render: status },
 ] };
 
 export const rolesConfig: RecordsConfig = { dataset: "roles", title: "Roles and permissions", eyebrow: "Access governance", actionLabel: "Create role", description: "Built-in role codes remain stable; permission changes apply only to the selected clinic.", emptyMessage: "No roles are configured for this clinic.", columns: [

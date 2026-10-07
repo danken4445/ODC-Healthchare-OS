@@ -469,6 +469,7 @@ export function DepartmentDialog({
     event.preventDefault();
     if (!organization) return;
     const form = new FormData(event.currentTarget);
+    const isRootSupply = Boolean(form.get("is_root_supply"));
     setSaving(true);
     setError(null);
     const result = await saveStaffDepartment(client, {
@@ -477,6 +478,7 @@ export function DepartmentDialog({
       name: String(form.get("name") ?? "").trim(),
       description: String(form.get("description") ?? "").trim(),
       active: Boolean(form.get("active")),
+      isRootSupply,
     });
     setSaving(false);
     if (result.error) return setError(result.error.message);
@@ -507,6 +509,19 @@ export function DepartmentDialog({
           </Field>
           <label className="check-option">
             <input name="active" type="checkbox" defaultChecked={checked(department, "active", true)} /> Active and available for assignment
+          </label>
+          <label className="check-option" style={{ marginTop: "0.25rem" }}>
+            <input
+              name="is_root_supply"
+              type="checkbox"
+              defaultChecked={checked(department, "is_root_supply", false)}
+            />
+            <span>
+              <strong>Root Inventory / Central Supply Room</strong>
+              <small style={{ display: "block", color: "#64748b", marginTop: "0.15rem", fontWeight: 400 }}>
+                Designates this department as the organization&apos;s root intake warehouse for inbound municipal/GSO manifests and inter-department requisitions.
+              </small>
+            </span>
           </label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <div className="dialog-actions">
