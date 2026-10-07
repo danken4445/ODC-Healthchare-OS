@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
-  distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  output: "export",
+  images: {
+    unoptimized: true,
+  },
   transpilePackages: [
     "@odyssey/supabase-client",
     "@odyssey/types",
