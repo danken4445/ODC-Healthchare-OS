@@ -30,11 +30,11 @@ export default function SupportPage() {
             <div className="vesper-contact-list">
               <div className="vesper-contact-item">
                 <Mail size={16} className="vesper-text-blue" />
-                <span>support@odysseyhealth.ph</span>
+                <span>odysseyphitsolutions@gmail.com</span>
               </div>
               <div className="vesper-contact-item">
                 <Phone size={16} className="vesper-text-blue" />
-                <span>+63 (2) 8888-ODYSSEY</span>
+                <span>+639099855322</span>
               </div>
               <div className="vesper-contact-item">
                 <ShieldCheck size={16} className="vesper-text-emerald" />
