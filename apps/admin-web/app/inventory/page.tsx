@@ -271,34 +271,55 @@ export default function InventoryPage() {
     rootDeptId: rootSupplyDepartmentId,
   };
 
-  const isScopedDepartment = useMemo(() => {
-    return Boolean(
-      inventoryDepartmentId &&
-      !isSuperadmin &&
-      (!rootSupplyDepartmentId || inventoryDepartmentId !== rootSupplyDepartmentId)
+  const assignedDept = useMemo(() => {
+    return (
+      workspace.departments.find((d) => d.id === inventoryDepartmentId) ?? null
     );
-  }, [inventoryDepartmentId, isSuperadmin, rootSupplyDepartmentId]);
+  }, [inventoryDepartmentId, workspace.departments]);
 
   const isAssignedToRootSupply = useMemo(() => {
+    if (!inventoryDepartmentId) return false;
+    if (rootSupplyDepartmentId && inventoryDepartmentId === rootSupplyDepartmentId) {
+      return true;
+    }
+    if (assignedDept?.is_root_supply) return true;
+    const deptName = assignedDept?.name.toLowerCase() ?? "";
+    if (
+      !rootSupplyDepartmentId &&
+      (deptName.includes("supply") ||
+        deptName.includes("warehouse") ||
+        deptName.includes("gso") ||
+        deptName.includes("central"))
+    ) {
+      return true;
+    }
+    return false;
+  }, [assignedDept, inventoryDepartmentId, rootSupplyDepartmentId]);
+
+  const isScopedDepartment = useMemo(() => {
+    if (!inventoryDepartmentId || isSuperadmin) return false;
+    if (isAssignedToRootSupply) return false;
     return Boolean(
-      rootSupplyDepartmentId && inventoryDepartmentId === rootSupplyDepartmentId
+      !rootSupplyDepartmentId || inventoryDepartmentId !== rootSupplyDepartmentId
     );
-  }, [inventoryDepartmentId, rootSupplyDepartmentId]);
+  }, [inventoryDepartmentId, isAssignedToRootSupply, isSuperadmin, rootSupplyDepartmentId]);
 
   const isAssignedToPharmacy = useMemo(() => {
+    const deptName = assignedDept?.name.toLowerCase() ?? "";
+    const email = signedInAs?.toLowerCase() ?? "";
     return Boolean(
-      isScopedDepartment ||
-      signedInAs?.toLowerCase().includes("pharmacy") ||
-      (inventoryDepartmentId && inventoryDepartmentId !== rootSupplyDepartmentId)
+      deptName.includes("pharmacy") ||
+      email.includes("pharmacy")
     );
-  }, [inventoryDepartmentId, isScopedDepartment, rootSupplyDepartmentId, signedInAs]);
+  }, [assignedDept, signedInAs]);
 
   const canShowGsoImport = useMemo(() => {
-    // Pharmacy staff cannot receive inbound GSO bulk manifests; only Root Supply or Superadmin
+    // Pharmacy staff cannot receive inbound GSO bulk manifests; only Root Supply or Superadmin/Admin
     if (isAssignedToPharmacy) return false;
     return Boolean(
       isSuperadmin ||
       isAssignedToRootSupply ||
+      canManage ||
       (!inventoryDepartmentId && canManage)
     );
   }, [canManage, inventoryDepartmentId, isAssignedToPharmacy, isAssignedToRootSupply, isSuperadmin]);
@@ -3412,6 +3433,7 @@ export default function InventoryPage() {
                         organizationId,
                         name: String(fields.get("name") ?? ""),
                         description: String(fields.get("description") ?? ""),
+                        isRootSupply: Boolean(fields.get("is_root_supply")),
                       }),
                     "Department created as a new stock location.",
                   )
@@ -3432,6 +3454,16 @@ export default function InventoryPage() {
                     placeholder="Optional description or physical room number"
                   />
                 </Field>
+                <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer pt-1">
+                  <input
+                    name="is_root_supply"
+                    type="checkbox"
+                    className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                  />
+                  <span>
+                    Designate as Root Supply Room (Central intake warehouse for inbound municipal/GSO manifests)
+                  </span>
+                </label>
                 <Button disabled={busy} type="submit">
                   {busy ? "Creating…" : "Create Department Location"}
                 </Button>

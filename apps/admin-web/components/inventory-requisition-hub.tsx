@@ -76,6 +76,7 @@ export function InventoryRequisitionHub({
 
   const [expandedReqId, setExpandedReqId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "fulfilled">("all");
+  const [directionFilter, setDirectionFilter] = useState<"all" | "incoming" | "outgoing">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -246,18 +247,28 @@ export function InventoryRequisitionHub({
       if (statusFilter === "pending" && req.status === "fulfilled") return false;
       if (statusFilter === "fulfilled" && req.status !== "fulfilled") return false;
 
+      if (assignedDepartmentId) {
+        if (directionFilter === "incoming" && req.supply_department_id !== assignedDepartmentId) {
+          return false;
+        }
+        if (directionFilter === "outgoing" && req.requesting_department_id !== assignedDepartmentId) {
+          return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesNum = req.requisition_number.toLowerCase().includes(q);
-        const matchesDept = (req.requesting_department_name || "").toLowerCase().includes(q);
+        const matchesReqDept = (req.requesting_department_name || "").toLowerCase().includes(q);
+        const matchesSupplyDept = (req.supply_department_name || "").toLowerCase().includes(q);
         const matchesItem = req.items.some((i) =>
           (i.item_name || "").toLowerCase().includes(q)
         );
-        if (!matchesNum && !matchesDept && !matchesItem) return false;
+        if (!matchesNum && !matchesReqDept && !matchesSupplyDept && !matchesItem) return false;
       }
       return true;
     });
-  }, [requisitions, statusFilter, searchQuery]);
+  }, [requisitions, statusFilter, directionFilter, assignedDepartmentId, searchQuery]);
 
   return (
     <div className="req-hub">
@@ -275,8 +286,8 @@ export function InventoryRequisitionHub({
             <div className="req-window-header">
               <h3 className="req-window-title">
                 {isWindowOpen
-                  ? "Weekly Requisition Window is OPEN (Monday–Wednesday)"
-                  : "Routine Requisition Window is CLOSED"}
+                  ? "Central Supply Requisition Window is OPEN (Monday–Wednesday)"
+                  : "Routine Central Supply Window is CLOSED"}
               </h3>
               <span
                 className={`req-day-badge ${
@@ -287,8 +298,16 @@ export function InventoryRequisitionHub({
               </span>
             </div>
             <p className="req-window-subtext">
-              Target Fulfillment: Orders submitted this cycle are guaranteed for delivery the following week (
-              <strong>Monday, {targetDeliveryDateStr}</strong>).
+              {isWindowOpen ? (
+                <>
+                  Central Supply orders submitted this cycle are guaranteed for delivery next week (
+                  <strong>Monday, {targetDeliveryDateStr}</strong>). Direct inter-department requisitions between clinical departments remain open anytime.
+                </>
+              ) : (
+                <>
+                  Routine requisitions to Central Supply open Monday through Wednesday. Direct peer-to-peer requisitions between clinical departments are open 24/7 without cutoff restrictions.
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -324,47 +343,81 @@ export function InventoryRequisitionHub({
       )}
 
       {/* Filter & Search Bar */}
-      <div className="req-toolbar">
-        <div className="req-filter-tabs">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`req-filter-tab ${
-              statusFilter === "all" ? "req-filter-tab--active" : ""
-            }`}
-          >
-            All Requisitions ({requisitions.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("pending")}
-            className={`req-filter-tab ${
-              statusFilter === "pending" ? "req-filter-tab--active" : ""
-            }`}
-          >
-            Awaiting Fulfillment (
-            {requisitions.filter((r) => r.status !== "fulfilled").length}
-            )
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("fulfilled")}
-            className={`req-filter-tab ${
-              statusFilter === "fulfilled" ? "req-filter-tab--active" : ""
-            }`}
-          >
-            Fulfilled ({requisitions.filter((r) => r.status === "fulfilled").length})
-          </button>
-        </div>
+      <div className="req-toolbar" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        {assignedDepartmentId && (
+          <div className="req-filter-tabs" style={{ width: "100%", borderBottom: "1px solid var(--border, #e2e8f0)", paddingBottom: "0.4rem" }}>
+            <button
+              type="button"
+              onClick={() => setDirectionFilter("all")}
+              className={`req-filter-tab ${
+                directionFilter === "all" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              All Activity ({requisitions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDirectionFilter("incoming")}
+              className={`req-filter-tab ${
+                directionFilter === "incoming" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              Incoming to Fulfill ({requisitions.filter((r) => r.supply_department_id === assignedDepartmentId).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDirectionFilter("outgoing")}
+              className={`req-filter-tab ${
+                directionFilter === "outgoing" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              Outgoing Requests ({requisitions.filter((r) => r.requesting_department_id === assignedDepartmentId).length})
+            </button>
+          </div>
+        )}
 
-        <div className="req-search-box">
-          <Search size={14} style={{ color: "var(--muted-foreground, #94a3b8)", flexShrink: 0 }} />
-          <input
-            type="text"
-            placeholder="Search requisition # or item..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "1rem", flexWrap: "wrap" }}>
+          <div className="req-filter-tabs">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className={`req-filter-tab ${
+                statusFilter === "all" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              All Statuses ({requisitions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("pending")}
+              className={`req-filter-tab ${
+                statusFilter === "pending" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              Awaiting Fulfillment (
+              {requisitions.filter((r) => r.status !== "fulfilled").length}
+              )
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("fulfilled")}
+              className={`req-filter-tab ${
+                statusFilter === "fulfilled" ? "req-filter-tab--active" : ""
+              }`}
+            >
+              Fulfilled ({requisitions.filter((r) => r.status === "fulfilled").length})
+            </button>
+          </div>
+
+          <div className="req-search-box">
+            <Search size={14} style={{ color: "var(--muted-foreground, #94a3b8)", flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="Search requisition #, department, or item..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -382,7 +435,7 @@ export function InventoryRequisitionHub({
           <strong style={{ display: "block", color: "var(--foreground)", marginBottom: "0.25rem" }}>
             No requisitions found
           </strong>
-          <span>Click &quot;New Requisition&quot; to request supplies from the Central Supply Room.</span>
+          <span>Click &quot;New Requisition&quot; to request supplies from Central Supply or another department.</span>
         </div>
       ) : (
         <div className="req-list">
@@ -390,6 +443,9 @@ export function InventoryRequisitionHub({
             const isExpanded = expandedReqId === req.id;
             const allItemsDispersed = req.items.every((i) => i.status === "dispersed");
             const canCreateFulfillmentDocuments = req.status === "fulfilled" && allItemsDispersed;
+            const canDisperseThisReq =
+              canManageInventory ||
+              (assignedDepartmentId !== null && assignedDepartmentId === req.supply_department_id);
 
             return (
               <div key={req.id} className="req-card">
@@ -433,9 +489,12 @@ export function InventoryRequisitionHub({
                             : "Submitted / Pending"}
                         </span>
                       </div>
-                      <p className="req-meta-line">
-                        Dept: <strong>{req.requesting_department_name || "Department"}</strong>{" "}
-                        • Delivery Week: <strong>{req.target_delivery_week}</strong>
+                      <p className="req-meta-line" style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.2rem" }}>
+                        <span>From: <strong>{req.supply_department_name || "Supplying Dept"}</strong></span>
+                        <ArrowRight size={12} style={{ color: "var(--muted-foreground)" }} />
+                        <span>To: <strong>{req.requesting_department_name || "Requesting Dept"}</strong></span>
+                        <span style={{ opacity: 0.4 }}>•</span>
+                        <span>Delivery: <strong>{req.target_delivery_week}</strong></span>
                       </p>
                     </div>
                   </div>
@@ -500,7 +559,7 @@ export function InventoryRequisitionHub({
                             <th style={{ textAlign: "right" }}>Requested</th>
                             <th style={{ textAlign: "right" }}>Dispersed</th>
                             <th>Status</th>
-                            {isSupplyOfficer && <th style={{ textAlign: "right" }}>Action</th>}
+                            {canDisperseThisReq && <th style={{ textAlign: "right" }}>Action</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -537,17 +596,17 @@ export function InventoryRequisitionHub({
                                   ) : isReady ? (
                                     <span className="req-line-status req-line-status--ready">
                                       <Boxes size={13} />
-                                      Ready in Supply Room
+                                      Ready for Dispersal
                                     </span>
                                   ) : (
                                     <span className="req-line-status req-line-status--pending">
                                       <Clock size={13} />
-                                      Backordered (Pending Intake)
+                                      Awaiting Stock / Intake
                                     </span>
                                   )}
                                 </td>
 
-                                {isSupplyOfficer && (
+                                {canDisperseThisReq && (
                                   <td style={{ textAlign: "right" }}>
                                     {!isFullyDispersed && (
                                       <Button
