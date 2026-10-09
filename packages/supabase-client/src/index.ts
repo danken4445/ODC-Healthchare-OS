@@ -117,10 +117,12 @@ import {
   type NbbReceiptTransaction,
   type NbbReceiptTransactionItem,
   type CreatePharmacyPrescriptionTranscriptionInput,
+  type CreateStandalonePharmacyInventoryOrderInput,
   type PharmacyPrescriptionAvailability,
   type PharmacyPrescriptionCompletionInput,
   type PharmacyPrescriptionCompletionResult,
   type PharmacyPrescriptionLineInput,
+  type PharmacyPrescriptionOrderEvent,
   type PharmacyPrescriptionOrderSummary,
   type PharmacyPrescriptionReviewInput,
   type ClaimSummary,
@@ -1372,6 +1374,25 @@ export async function getCurrentStaffDepartment(
     p_organization_id: organizationId,
   });
   return error ? failure(error) : success(data);
+}
+
+export async function listInventoryStaffNames(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<SupabaseResult<Array<{ userId: string; displayName: string }>>> {
+  const { data, error } = await client.rpc(
+    "list_inventory_staff_names" as never,
+    { p_organization_id: organizationId } as never,
+  );
+  if (error) return failure(error);
+  const rows = Array.isArray(data) ? data : [];
+  return success(rows.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const value = row as { user_id?: unknown; display_name?: unknown };
+    return typeof value.user_id === "string" && typeof value.display_name === "string"
+      ? [{ userId: value.user_id, displayName: value.display_name }]
+      : [];
+  }));
 }
 
 /** Loads the location/item/count split; overall item totals remain derived sums. */
@@ -5457,10 +5478,12 @@ export type {
   NbbPosCheckoutInput,
   NbbPosCheckoutResult,
   CreatePharmacyPrescriptionTranscriptionInput,
+  CreateStandalonePharmacyInventoryOrderInput,
   PharmacyPrescriptionAvailability,
   PharmacyPrescriptionCompletionInput,
   PharmacyPrescriptionCompletionResult,
   PharmacyPrescriptionLineInput,
+  PharmacyPrescriptionOrderEvent,
   PharmacyPrescriptionOrderSummary,
   PharmacyPrescriptionReviewInput,
 };
@@ -5683,6 +5706,16 @@ const pharmacyPrescriptionTranscriptionInputSchema = z.object({
   items: z.array(pharmacyPrescriptionLineInputSchema).min(1),
 });
 
+const standalonePharmacyInventoryOrderInputSchema = z.object({
+  organizationId: pharmacyPrescriptionUuidSchema,
+  patientReference: z.string().trim().min(1),
+  wardReference: z.string().trim().nullable().optional(),
+  prescriptionReference: z.string().trim().nullable().optional().default(""),
+  prescriberName: z.string().trim().min(1),
+  priority: z.enum(["routine", "urgent", "emergency"]).optional(),
+  items: z.array(pharmacyPrescriptionLineInputSchema.extend({ itemId: pharmacyPrescriptionUuidSchema })).min(1),
+});
+
 function pharmacyPrescriptionLineFromJson(value: unknown): PharmacyPrescriptionOrderSummary["lines"][number] {
   const row = (value ?? {}) as Record<string, unknown>;
   return {
@@ -5708,11 +5741,29 @@ function pharmacyPrescriptionLineFromJson(value: unknown): PharmacyPrescriptionO
 
 function pharmacyPrescriptionOrderFromJson(value: unknown): PharmacyPrescriptionOrderSummary {
   const row = (value ?? {}) as Record<string, unknown>;
+  const events = Array.isArray(row.events)
+    ? row.events.map((value) => {
+        const event = (value ?? {}) as Record<string, unknown>;
+        return {
+          id: String(event.id ?? ""),
+          line_id: event.line_id ? String(event.line_id) : null,
+          status: String(event.status ?? "submitted") as PharmacyPrescriptionOrderSummary["events"][number]["status"],
+          reason: event.reason ? String(event.reason) : null,
+          metadata: event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+            ? event.metadata as Record<string, unknown>
+            : {},
+          actor_id: String(event.actor_id ?? ""),
+          created_at: String(event.created_at ?? ""),
+        };
+      })
+    : [];
   return {
     id: String(row.id ?? ""),
     organization_id: String(row.organization_id ?? ""),
-    patient_id: String(row.patient_id ?? ""),
-    encounter_id: String(row.encounter_id ?? ""),
+    patient_id: row.patient_id ? String(row.patient_id) : null,
+    encounter_id: row.encounter_id ? String(row.encounter_id) : null,
+    patient_reference: row.patient_reference ? String(row.patient_reference) : null,
+    ward_reference: row.ward_reference ? String(row.ward_reference) : null,
     physical_prescription_reference: row.physical_prescription_reference ? String(row.physical_prescription_reference) : null,
     prescriber_name: row.prescriber_name ? String(row.prescriber_name) : null,
     priority: String(row.priority ?? "routine") as PharmacyPrescriptionOrderSummary["priority"],
@@ -5721,7 +5772,11 @@ function pharmacyPrescriptionOrderFromJson(value: unknown): PharmacyPrescription
     submitted_at: String(row.submitted_at ?? ""),
     reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
     completed_at: row.completed_at ? String(row.completed_at) : null,
+    pos_sale_id: row.pos_sale_id ? String(row.pos_sale_id) : null,
+    invoice_id: row.invoice_id ? String(row.invoice_id) : null,
+    receipt_number: row.receipt_number ? String(row.receipt_number) : null,
     lines: Array.isArray(row.lines) ? row.lines.map(pharmacyPrescriptionLineFromJson) : [],
+    events,
   };
 }
 
@@ -5742,6 +5797,36 @@ export async function createPharmacyPrescriptionTranscription(
       p_items: validation.data.items.map((line) => ({
         original_medication: line.originalMedication,
         item_id: line.itemId ?? null,
+        dosage_instruction: line.dosageInstruction ?? null,
+        quantity: line.quantity,
+        unit_of_measure: line.unitOfMeasure ?? null,
+        notes: line.notes ?? null,
+      })),
+      p_priority: validation.data.priority ?? "routine",
+    } as never,
+  );
+  if (error) return failure(error);
+  const parsed = pharmacyPrescriptionUuidSchema.safeParse(data);
+  return parsed.success ? success(parsed.data) : failure(parsed.error);
+}
+
+export async function createStandalonePharmacyInventoryOrder(
+  client: SupabaseClient<Database>,
+  input: CreateStandalonePharmacyInventoryOrderInput,
+): Promise<SupabaseResult<string>> {
+  const validation = standalonePharmacyInventoryOrderInputSchema.safeParse(input);
+  if (!validation.success) return failure(validation.error);
+  const { data, error } = await client.rpc(
+    "create_standalone_pharmacy_inventory_order" as never,
+    {
+      p_organization_id: validation.data.organizationId,
+      p_patient_reference: validation.data.patientReference,
+      p_ward_reference: validation.data.wardReference || null,
+      p_prescription_reference: validation.data.prescriptionReference || null,
+      p_prescriber_name: validation.data.prescriberName,
+      p_items: validation.data.items.map((line) => ({
+        original_medication: line.originalMedication,
+        item_id: line.itemId,
         dosage_instruction: line.dosageInstruction ?? null,
         quantity: line.quantity,
         unit_of_measure: line.unitOfMeasure ?? null,
@@ -5834,7 +5919,12 @@ export async function completePharmacyPrescriptionOrder(
     "complete_pharmacy_prescription_order" as never,
     {
       p_order_id: input.orderId,
-      p_outcomes: input.outcomes,
+      p_outcomes: input.outcomes.map((outcome) => ({
+        line_id: outcome.lineId,
+        action: outcome.action,
+        quantity: outcome.quantity ?? null,
+        reason: outcome.reason ?? null,
+      })),
     } as never,
   );
   if (error) return failure(error);
@@ -5845,6 +5935,13 @@ export async function completePharmacyPrescriptionOrder(
     order_id: idResult.data,
     status: String(row.status ?? "under_pharmacist_review") as PharmacyPrescriptionCompletionResult["status"],
     completed: Boolean(row.completed),
+    billing_event_id: row.billing_event_id ? String(row.billing_event_id) : null,
+    pos_sale_id: row.pos_sale_id ? String(row.pos_sale_id) : null,
+    invoice_id: row.invoice_id ? String(row.invoice_id) : null,
+    receipt_number: row.receipt_number ? String(row.receipt_number) : null,
+    billing_mode: row.billing_mode === "nbb" || row.billing_mode === "standard" ? row.billing_mode : null,
+    standard_total_in_centavos: row.standard_total_in_centavos == null ? null : Number(row.standard_total_in_centavos),
+    patient_balance_due_in_centavos: row.patient_balance_due_in_centavos == null ? null : Number(row.patient_balance_due_in_centavos),
   });
 }
 

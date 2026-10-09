@@ -1751,6 +1751,16 @@ export interface CreatePharmacyPrescriptionTranscriptionInput {
   items: PharmacyPrescriptionLineInput[];
 }
 
+export interface CreateStandalonePharmacyInventoryOrderInput {
+  organizationId: string;
+  patientReference: string;
+  wardReference?: string | null;
+  prescriptionReference?: string | null;
+  prescriberName: string;
+  priority?: "routine" | "urgent" | "emergency";
+  items: PharmacyPrescriptionLineInput[];
+}
+
 export interface PharmacyPrescriptionAvailability {
   item_id: string | null;
   requested_quantity: number;
@@ -1781,8 +1791,10 @@ export interface PharmacyPrescriptionOrderLine {
 export interface PharmacyPrescriptionOrderSummary {
   id: string;
   organization_id: string;
-  patient_id: string;
-  encounter_id: string;
+  patient_id: string | null;
+  encounter_id: string | null;
+  patient_reference: string | null;
+  ward_reference: string | null;
   physical_prescription_reference: string | null;
   prescriber_name: string | null;
   priority: "routine" | "urgent" | "emergency";
@@ -1791,7 +1803,21 @@ export interface PharmacyPrescriptionOrderSummary {
   submitted_at: string;
   reviewed_at: string | null;
   completed_at: string | null;
+  pos_sale_id?: string | null;
+  invoice_id?: string | null;
+  receipt_number?: string | null;
   lines: PharmacyPrescriptionOrderLine[];
+  events: PharmacyPrescriptionOrderEvent[];
+}
+
+export interface PharmacyPrescriptionOrderEvent {
+  id: string;
+  line_id: string | null;
+  status: PharmacyPrescriptionOrderLineStatus | PharmacyPrescriptionOrderStatus;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  actor_id: string;
+  created_at: string;
 }
 
 export interface PharmacyPrescriptionReviewInput {
@@ -1819,4 +1845,11 @@ export interface PharmacyPrescriptionCompletionResult {
   order_id: string;
   status: PharmacyPrescriptionOrderStatus;
   completed: boolean;
+  billing_event_id?: string | null;
+  pos_sale_id?: string | null;
+  invoice_id?: string | null;
+  receipt_number?: string | null;
+  billing_mode?: "standard" | "nbb" | null;
+  standard_total_in_centavos?: number | bigint | null;
+  patient_balance_due_in_centavos?: number | bigint | null;
 }

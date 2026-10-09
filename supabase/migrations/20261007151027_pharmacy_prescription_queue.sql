@@ -399,7 +399,9 @@ begin
     'submitted_at', order_row.submitted_at, 'reviewed_at', order_row.reviewed_at,
     'completed_at', order_row.completed_at,
     'lines', (select coalesce(jsonb_agg(to_jsonb(line_row) order by line_row.created_at), '[]'::jsonb)
-      from public.pharmacy_prescription_order_lines line_row where line_row.order_id = order_row.id)
+      from public.pharmacy_prescription_order_lines line_row where line_row.order_id = order_row.id),
+    'events', (select coalesce(jsonb_agg(to_jsonb(event_row) order by event_row.created_at), '[]'::jsonb)
+      from public.pharmacy_prescription_order_events event_row where event_row.order_id = order_row.id)
   ) order by order_row.submitted_at)
   from public.pharmacy_prescription_orders order_row
   where order_row.organization_id = p_organization_id
