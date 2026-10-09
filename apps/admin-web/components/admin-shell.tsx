@@ -77,7 +77,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/staff", label: "Staff accounts", icon: Users, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
       { href: "/roles", label: "RBAC / Roles", icon: ShieldCheck, allowSuperadmin: true, anyOf: ["can_manage_staff_roles"] },
       { href: "/departments", label: "Departments", icon: Network, allowSuperadmin: true, anyOf: ["can_manage_staff_roles", "can_manage_inventory"] },
-      { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding", "can_manage_staff_roles"] },
+      { href: "/settings/facility", label: "Facility Mode", icon: Building2, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },
       { href: "/settings/queue", label: "Queue settings", icon: Users, anyOf: ["can_manage_appointments"] },
       { href: "/rooms", label: "Clinic rooms", icon: DoorOpen, anyOf: ["can_manage_rooms"] },
       { href: "/settings/branding", label: "White-Labeling", icon: Palette, allowSuperadmin: true, anyOf: ["can_manage_clinic_branding"] },

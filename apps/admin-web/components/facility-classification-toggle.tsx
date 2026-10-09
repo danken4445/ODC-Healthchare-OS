@@ -67,7 +67,6 @@ export function FacilityClassificationToggle({
   const canManage = Boolean(
     classification?.canManage ||
       isSuperadmin ||
-      permissions.includes("can_manage_staff_roles") ||
       permissions.includes("can_manage_clinic_branding")
   );
   const isGovernmentNbb = classification?.defaultPayorType === "philhealth_nbb";
