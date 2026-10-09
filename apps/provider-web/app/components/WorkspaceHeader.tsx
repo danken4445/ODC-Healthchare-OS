@@ -34,6 +34,7 @@ interface WorkspaceHeaderProps {
   hasActiveEncounter: boolean;
   canManageTemplates: boolean;
   canManageProfessionalFees: boolean;
+  canEncodePharmacyPrescriptions?: boolean;
   onSignOut: () => void;
 }
 
@@ -64,6 +65,7 @@ export function WorkspaceHeader({
   hasActiveEncounter,
   canManageTemplates,
   canManageProfessionalFees,
+  canEncodePharmacyPrescriptions = false,
   onSignOut,
 }: WorkspaceHeaderProps) {
   // Extract clinician name appropriately based on role
@@ -152,6 +154,16 @@ export function WorkspaceHeader({
                 <span>Payouts</span>
               </Link>
             </>
+          )}
+          {isNurse && canEncodePharmacyPrescriptions && (
+            <Link
+              href="/pharmacy-orders"
+              className="vesper-header-link"
+              title="Encode a physical prescription for Pharmacy"
+            >
+              <FileText size={16} />
+              <span>Pharmacy encoder</span>
+            </Link>
           )}
           <AppointmentNotificationControl />
           <button

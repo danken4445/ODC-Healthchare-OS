@@ -192,6 +192,7 @@ export function EncounterRecordingScreen() {
   const [canPrescribe, setCanPrescribe] = useState(false);
   const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(false);
   const [canTagInventory, setCanTagInventory] = useState(false);
+  const [canViewInventory, setCanViewInventory] = useState(false);
   const [inventory, setInventory] = useState<InventoryWorkspace | null>(null);
   const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [departmentSelection, setDepartmentSelection] = useState("");
@@ -429,16 +430,18 @@ export function EncounterRecordingScreen() {
       getMyEncounterViewMode(client),
     ]);
 
-    const [prescribePermission, diagnosticsPermission, inventoryPermission] =
+    const [prescribePermission, diagnosticsPermission, inventoryPermission, inventoryViewPermission] =
       await Promise.all([
         hasOrganizationPermission(client, clinicId, "can_start_consultation"),
         hasOrganizationPermission(client, clinicId, "can_order_diagnostics"),
         hasOrganizationPermission(client, clinicId, "can_tag_inventory_usage"),
+        hasOrganizationPermission(client, clinicId, "can_view_inventory"),
       ]);
     if (
       prescribePermission.error ||
       diagnosticsPermission.error ||
-      inventoryPermission.error
+      inventoryPermission.error ||
+      inventoryViewPermission.error
     ) {
       setAccessState("error");
       setStatus("We could not verify the encounter tools securely.");
@@ -447,10 +450,10 @@ export function EncounterRecordingScreen() {
 
     const [departmentResult, inventoryResult, laboratoryResult, specialistResult] =
       await Promise.all([
-        inventoryPermission.data
+        inventoryViewPermission.data
           ? getCurrentStaffDepartment(client, clinicId)
           : Promise.resolve(null),
-        inventoryPermission.data
+        inventoryViewPermission.data
           ? getInventoryWorkspace(client, clinicId)
           : Promise.resolve(null),
         diagnosticsPermission.data
@@ -479,6 +482,7 @@ export function EncounterRecordingScreen() {
     setRecords(clinicalResult.data);
     setCanPrescribe(prescribePermission.data);
     setCanOrderDiagnostics(diagnosticsPermission.data);
+    setCanViewInventory(inventoryViewPermission.data);
     setCanTagInventory(inventoryPermission.data);
     if (departmentResult) {
       setDepartmentId(departmentResult.data);

@@ -206,9 +206,11 @@ export default function Home() {
   const [absenceDoctors, setAbsenceDoctors] = useState<ReassignmentCandidate[]>([]);
   const [absenceRoleId, setAbsenceRoleId] = useState("");
   const [canManageProfessionalFees, setCanManageProfessionalFees] = useState(false);
+  const [canEncodePharmacyPrescriptions, setCanEncodePharmacyPrescriptions] = useState(false);
   const [queueScope, setQueueScope] = useState<"mine" | "clinic">("mine");
   const [selectedDoctorRoleId, setSelectedDoctorRoleId] = useState("");
   const [inventory, setInventory] = useState<InventoryWorkspace | null>(null);
+  const [canViewInventory, setCanViewInventory] = useState(false);
   const [canTagInventory, setCanTagInventory] = useState(false);
   const [inventoryDepartmentId, setInventoryDepartmentId] = useState<
     string | null
@@ -717,7 +719,7 @@ export default function Home() {
         void loadQueue();
       },
     );
-    const unsubscribeInventory = canTagInventory
+    const unsubscribeInventory = canViewInventory
       ? subscribeToInventory(
           createBrowserSupabaseClient(),
           organizationId,
@@ -739,7 +741,7 @@ export default function Home() {
       unsubscribeDiagnostics();
     };
   }, [
-    canTagInventory,
+    canViewInventory,
     loadAvailability,
     loadClinicalRecords,
     loadInventory,
@@ -765,6 +767,7 @@ export default function Home() {
       );
     const [
       inventoryPermission,
+      inventoryViewPermission,
       triagePermission,
       consultationPermission,
       orderPermission,
@@ -774,8 +777,14 @@ export default function Home() {
       appointmentManagementPermission,
       reassignmentPermission,
       professionalFeesPermission,
+      pharmacyEncoderPermission,
       feeSettings,
     ] = await Promise.all([
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_view_inventory",
+      ),
       hasOrganizationPermission(
         createBrowserSupabaseClient(),
         result.data,
@@ -826,12 +835,18 @@ export default function Home() {
         result.data,
         "can_manage_professional_fees",
       ),
+      hasOrganizationPermission(
+        createBrowserSupabaseClient(),
+        result.data,
+        "can_encode_pharmacy_prescriptions",
+      ),
       getOrganizationFeeSettings(
         createBrowserSupabaseClient(),
         result.data,
       ),
     ]);
     if (
+      inventoryViewPermission.error ||
       inventoryPermission.error ||
       triagePermission.error ||
       consultationPermission.error ||
@@ -841,14 +856,16 @@ export default function Home() {
       templatePermission.error ||
       appointmentManagementPermission.error ||
       reassignmentPermission.error ||
-      professionalFeesPermission.error
+      professionalFeesPermission.error ||
+      pharmacyEncoderPermission.error
     )
       return setStatus(
-        `Workspace permission query failed: ${inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message ?? templatePermission.error?.message ?? appointmentManagementPermission.error?.message ?? reassignmentPermission.error?.message ?? professionalFeesPermission.error?.message}`,
+        `Workspace permission query failed: ${inventoryViewPermission.error?.message ?? inventoryPermission.error?.message ?? triagePermission.error?.message ?? consultationPermission.error?.message ?? orderPermission.error?.message ?? labPermission.error?.message ?? referralPermission.error?.message ?? templatePermission.error?.message ?? appointmentManagementPermission.error?.message ?? reassignmentPermission.error?.message ?? professionalFeesPermission.error?.message ?? pharmacyEncoderPermission.error?.message}`,
       );
     setOrganizationId(result.data);
     setInventoryDepartmentId(departmentResult.data);
     setInventoryDepartmentSelection(departmentResult.data ?? "");
+    setCanViewInventory(inventoryViewPermission.data);
     setCanTagInventory(inventoryPermission.data);
     setCanTriage(triagePermission.data);
     setCanPrescribe(consultationPermission.data);
@@ -858,6 +875,7 @@ export default function Home() {
     setCanManageTemplates(templatePermission.data);
     setCanManageAppointments(appointmentManagementPermission.data);
     setCanReassignAppointments(reassignmentPermission.data);
+    setCanEncodePharmacyPrescriptions(pharmacyEncoderPermission.data);
     setCanManageProfessionalFees(
       Boolean(professionalFeesPermission.data) &&
         feeSettings.data?.fee_model !== "fixed_rate",
@@ -884,7 +902,7 @@ export default function Home() {
     await Promise.all([
       loadQueue(result.data),
       loadClinicalRecords(result.data),
-      inventoryPermission.data ? loadInventory(result.data) : Promise.resolve(),
+      inventoryViewPermission.data ? loadInventory(result.data) : Promise.resolve(),
       loadDiagnostics(result.data),
     ]);
   }
@@ -1531,6 +1549,7 @@ export default function Home() {
             hasActiveEncounter={Boolean(selectedEncounterId)}
             canManageTemplates={canManageTemplates && !isNurse}
             canManageProfessionalFees={canManageProfessionalFees}
+            canEncodePharmacyPrescriptions={canEncodePharmacyPrescriptions}
             onSignOut={handleSignOut}
           />
 
