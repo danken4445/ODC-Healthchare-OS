@@ -2,6 +2,7 @@ export const PHARMACY_QUEUE_PAGE_SIZE = 10;
 
 export type PharmacyQueueStatusFilter = "all" | string;
 export type PharmacyQueuePriorityFilter = "all" | "routine" | "urgent" | "emergency";
+export type PharmacyPrescriptionQueueAction = "dispense" | "partial" | "cancel" | "external_referral";
 
 export interface PharmacyQueueViewOrder {
   id: string;
@@ -21,6 +22,29 @@ export interface PharmacyQueueFilters {
 }
 
 const terminalStatuses = new Set(["completed", "cancelled", "rejected"]);
+
+export function buildPharmacyPrescriptionCompletionOutcome(input: {
+  lineId: string;
+  action: PharmacyPrescriptionQueueAction;
+  quantity: number;
+  remainingQuantity: number;
+  reason: string;
+}) {
+  if (input.action === "partial" && (
+    !Number.isFinite(input.quantity)
+    || input.quantity <= 0
+    || input.quantity >= input.remainingQuantity
+  )) {
+    throw new Error("Partial quantity must be greater than zero and less than the remaining quantity.");
+  }
+
+  return {
+    lineId: input.lineId,
+    action: input.action === "partial" ? "dispense" as const : input.action,
+    quantity: input.quantity,
+    reason: input.reason || undefined,
+  };
+}
 
 export function findNewPharmacyPrescriptionOrders<T extends { id: string }>(previousIds: ReadonlySet<string>, orders: readonly T[]) {
   return orders.filter((order) => !previousIds.has(order.id));

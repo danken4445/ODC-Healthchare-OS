@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterPharmacyPrescriptionQueue, findNewPharmacyPrescriptionOrders, paginatePharmacyPrescriptionQueue } from "./pharmacy-prescription-queue-view.ts";
+import {
+  buildPharmacyPrescriptionCompletionOutcome,
+  filterPharmacyPrescriptionQueue,
+  findNewPharmacyPrescriptionOrders,
+  paginatePharmacyPrescriptionQueue,
+} from "./pharmacy-prescription-queue-view.ts";
 
 const orders = [
   {
@@ -42,5 +47,31 @@ test("identifies each newly submitted prescription for realtime notifications", 
   assert.deepEqual(
     findNewPharmacyPrescriptionOrders(new Set(["1"]), orders).map((order) => order.id),
     ["2", "3"],
+  );
+});
+
+test("maps a valid partial quantity to the existing dispense transaction", () => {
+  assert.deepEqual(
+    buildPharmacyPrescriptionCompletionOutcome({
+      lineId: "line-1",
+      action: "partial",
+      quantity: 2,
+      remainingQuantity: 6,
+      reason: "",
+    }),
+    { lineId: "line-1", action: "dispense", quantity: 2, reason: undefined },
+  );
+});
+
+test("rejects a partial quantity that would complete the outstanding line", () => {
+  assert.throws(
+    () => buildPharmacyPrescriptionCompletionOutcome({
+      lineId: "line-1",
+      action: "partial",
+      quantity: 6,
+      remainingQuantity: 6,
+      reason: "",
+    }),
+    /less than the remaining quantity/i,
   );
 });

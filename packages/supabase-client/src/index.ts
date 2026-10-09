@@ -5723,6 +5723,7 @@ function pharmacyPrescriptionLineFromJson(value: unknown): PharmacyPrescriptionO
     organization_id: String(row.organization_id ?? ""),
     order_id: String(row.order_id ?? ""),
     item_id: row.item_id ? String(row.item_id) : null,
+    item_sku: row.item_sku ? String(row.item_sku) : null,
     original_medication: String(row.original_medication ?? ""),
     dosage_instruction: row.dosage_instruction ? String(row.dosage_instruction) : null,
     requested_quantity: Number(row.requested_quantity ?? 0),

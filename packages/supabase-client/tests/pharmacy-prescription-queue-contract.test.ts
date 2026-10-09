@@ -6,6 +6,7 @@ import {
   createPharmacyPrescriptionTranscription,
   getPharmacyPrescriptionAvailability,
   listInventoryStaffNames,
+  listPharmacyPrescriptionQueue,
 } from "../src/index.ts";
 
 function rpcClient(response: { data?: unknown; error?: unknown }) {
@@ -135,4 +136,34 @@ test("inventory staff names wrapper maps requesting-user names", async () => {
   assert.deepEqual(result.data, [{ userId: "70000000-0000-0000-0000-000000000001", displayName: "Nurse Test" }]);
   assert.equal(mock.calls[0]?.name, "list_inventory_staff_names");
   assert.deepEqual(mock.calls[0]?.args, { p_organization_id: org });
+});
+
+test("queue wrapper preserves each mapped inventory SKU for display", async () => {
+  const mock = rpcClient({ data: [{
+    id: "50000000-0000-0000-0000-000000000001",
+    organization_id: org,
+    priority: "routine",
+    status: "ready_to_dispense",
+    submitted_by: "70000000-0000-0000-0000-000000000001",
+    submitted_at: "2026-10-09T00:00:00.000Z",
+    lines: [{
+      id: "60000000-0000-0000-0000-000000000001",
+      organization_id: org,
+      order_id: "50000000-0000-0000-0000-000000000001",
+      item_id: item,
+      item_sku: "ALB-50ML",
+      original_medication: "Albumin, Human (20%, 50mL IV bottle)",
+      requested_quantity: 6,
+      dispensed_quantity: 0,
+      status: "pharmacist_verified",
+      created_at: "2026-10-09T00:00:00.000Z",
+      updated_at: "2026-10-09T00:00:00.000Z",
+    }],
+    events: [],
+  }] });
+
+  const result = await listPharmacyPrescriptionQueue(mock.client, org);
+
+  assert.equal(result.error, null);
+  assert.equal(result.data?.[0]?.lines[0]?.item_sku, "ALB-50ML");
 });

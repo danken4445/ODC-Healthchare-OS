@@ -15,10 +15,12 @@ import { useAdminData } from "./admin-data-context";
 import { NbbCompletedReceipt } from "./nbb-completed-receipt";
 import { buildNbbCompletedReceiptData, type NbbCompletedReceiptData } from "./nbb-completed-receipt-data";
 import {
+  buildPharmacyPrescriptionCompletionOutcome,
   filterPharmacyPrescriptionQueue,
   findNewPharmacyPrescriptionOrders,
   paginatePharmacyPrescriptionQueue,
   type PharmacyQueuePriorityFilter,
+  type PharmacyPrescriptionQueueAction,
 } from "../lib/pharmacy-prescription-queue-view";
 
 const labels: Record<PharmacyPrescriptionOrderSummary["status"], string> = {
@@ -32,7 +34,7 @@ const labels: Record<PharmacyPrescriptionOrderSummary["status"], string> = {
   rejected: "Rejected",
 };
 
-type Action = "dispense" | "cancel" | "external_referral";
+type Action = PharmacyPrescriptionQueueAction;
 type Draft = { itemId: string; quantity: string; action: Action; reason: string };
 export function PharmacyPrescriptionQueue({ organizationId }: { organizationId: string }) {
   const { client, organization, permissions } = useAdminData();
@@ -149,9 +151,26 @@ export function PharmacyPrescriptionQueue({ organizationId }: { organizationId: 
 
   async function complete(order: PharmacyPrescriptionOrderSummary) {
     setBusyId(order.id); setError(null); setMessage(null);
+    let outcomes: Array<{ lineId: string; action: "dispense" | "cancel" | "external_referral"; quantity: number; reason?: string }>;
+    try {
+      outcomes = order.lines.map((line) => {
+        const draft = drafts[line.id];
+        return buildPharmacyPrescriptionCompletionOutcome({
+          lineId: line.id,
+          action: draft?.action ?? "dispense",
+          quantity: Number(draft?.quantity ?? line.requested_quantity),
+          remainingQuantity: line.requested_quantity - line.dispensed_quantity,
+          reason: draft?.reason ?? "",
+        });
+      });
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to complete prescription dispensing.");
+      setBusyId(null);
+      return;
+    }
     const result = await completePharmacyPrescriptionOrder(client, {
       orderId: order.id,
-      outcomes: order.lines.map((line) => ({ lineId: line.id, action: drafts[line.id]?.action ?? "dispense", quantity: Number(drafts[line.id]?.quantity ?? line.requested_quantity), reason: drafts[line.id]?.reason || undefined })),
+      outcomes,
     });
     if (result.error) setError(result.error.message);
     else {
@@ -163,7 +182,7 @@ export function PharmacyPrescriptionQueue({ organizationId }: { organizationId: 
         const receiptItems = order.lines
           .map((line) => {
             const draft = drafts[line.id];
-            const dispensedQuantity = draft?.action === "dispense"
+            const dispensedQuantity = draft?.action === "dispense" || draft?.action === "partial"
               ? Math.min(line.requested_quantity, line.dispensed_quantity + Number(draft.quantity || 0))
               : line.dispensed_quantity;
             const unitPrice = Number(line.unit_price_in_centavos ?? 0);
@@ -284,7 +303,7 @@ export function PharmacyPrescriptionQueue({ organizationId }: { organizationId: 
           <div className="pharmacy-queue-lines">
             {order.lines.map((line) => {
               const draft = drafts[line.id] ?? { itemId: line.item_id ?? "", quantity: String(line.requested_quantity), action: "dispense" as const, reason: "" };
-              return <div className="pharmacy-queue-line" key={line.id}><Pill size={17} /><div className="pharmacy-queue-line__copy"><strong>{line.original_medication}</strong><span>{line.dosage_instruction ?? "Dose not recorded"}</span></div><div className="pharmacy-queue-line__controls"><Field label="Item ID"><Input value={draft.itemId} onChange={(event) => updateDraft(line.id, { itemId: event.target.value })} /></Field><Field label="Qty"><Input type="number" min="1" value={draft.quantity} onChange={(event) => updateDraft(line.id, { quantity: event.target.value })} /></Field><Field label="Action"><select className="odyssey-input" value={draft.action} onChange={(event) => updateDraft(line.id, { action: event.target.value as Action })}><option value="dispense">Dispense</option><option value="cancel">Cancel</option><option value="external_referral">External referral</option></select></Field>{draft.action !== "dispense" && <Field label="Reason"><Input value={draft.reason} onChange={(event) => updateDraft(line.id, { reason: event.target.value })} required /></Field>}</div></div>;
+              return <div className="pharmacy-queue-line" key={line.id}><Pill size={17} /><div className="pharmacy-queue-line__copy"><strong>{line.original_medication}</strong><span>{line.dosage_instruction ?? "Dose not recorded"}</span></div><div className="pharmacy-queue-line__controls"><Field label="SKU"><Input value={line.item_sku ?? "SKU unavailable"} readOnly /></Field><Field label="Qty"><Input type="number" min="1" value={draft.quantity} onChange={(event) => updateDraft(line.id, { quantity: event.target.value })} /></Field><Field label="Action"><select className="odyssey-input" value={draft.action} onChange={(event) => updateDraft(line.id, { action: event.target.value as Action })}><option value="dispense">Dispense</option><option value="partial">Partial</option><option value="cancel">Cancel</option><option value="external_referral">External referral</option></select></Field>{["cancel", "external_referral"].includes(draft.action) && <Field label="Reason"><Input value={draft.reason} onChange={(event) => updateDraft(line.id, { reason: event.target.value })} required /></Field>}</div></div>;
             })}
           </div>
           <div className="pharmacy-status-timeline" aria-label="Prescription status history">{order.events.slice(-5).map((event) => <span key={event.id}>{event.status.replaceAll("_", " ")} · {new Date(event.created_at).toLocaleTimeString()}</span>)}</div>

@@ -1773,6 +1773,7 @@ export interface PharmacyPrescriptionOrderLine {
   organization_id: string;
   order_id: string;
   item_id: string | null;
+  item_sku: string | null;
   original_medication: string;
   dosage_instruction: string | null;
   requested_quantity: number;
