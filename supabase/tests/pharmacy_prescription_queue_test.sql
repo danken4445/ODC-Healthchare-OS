@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 
 begin;
-select plan(18);
+select plan(19);
 
 select has_table('public', 'pharmacy_prescription_orders', 'prescription order table exists');
 select has_table('public', 'pharmacy_prescription_order_lines', 'prescription line table exists');
@@ -23,6 +23,15 @@ select ok(has_function_privilege('authenticated', 'public.create_pharmacy_prescr
 select ok(has_function_privilege('authenticated', 'public.complete_pharmacy_prescription_order(uuid,jsonb)', 'execute'), 'authenticated can complete dispensing');
 
 select ok(exists (select 1 from pg_constraint where conname = 'pharmacy_prescription_orders_status_check'), 'order status is constrained');
+select ok(
+  pg_get_constraintdef((
+    select oid
+    from pg_constraint
+    where conrelid = 'public.pharmacy_prescription_orders'::regclass
+      and conname = 'pharmacy_prescription_orders_check'
+  )) like '%patient_reference%',
+  'standalone orders may satisfy the reference rule with patient_reference'
+);
 select ok(exists (select 1 from pg_constraint where conname = 'pharmacy_prescription_order_lines_status_check'), 'line status is constrained');
 select ok(exists (select 1 from pg_trigger where tgname = 'pharmacy_prescription_order_events_immutable'), 'events are immutable');
 
