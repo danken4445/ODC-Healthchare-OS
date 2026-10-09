@@ -5,13 +5,17 @@ import { useEffect, useState } from "react";
 import { useAdminData } from "../../components/admin-data-context";
 import { AdminSignIn } from "../../components/admin-sign-in";
 import { NbbPharmacyPosTerminal } from "../../components/nbb-pharmacy-pos-terminal";
+import { PharmacyPrescriptionEncoder } from "../../components/pharmacy-prescription-encoder";
+import { PharmacyPrescriptionQueue } from "../../components/pharmacy-prescription-queue";
 import { RecordsScreen } from "../../components/records-screen";
 import { posConfig } from "../../lib/admin-data";
+import { shouldShowLegacyPharmacyPos } from "../../lib/pharmacy-pos-access";
 
 export default function PosPage() {
-  const { client, email, loading: authLoading, organization } = useAdminData();
+  const { client, email, loading: authLoading, organization, permissions } = useAdminData();
   const [facilityLoading, setFacilityLoading] = useState(true);
   const [isGovernmentNoBilling, setIsGovernmentNoBilling] = useState(false);
+  const canManageLegacyPos = shouldShowLegacyPharmacyPos(permissions);
 
   useEffect(() => {
     let active = true;
@@ -54,12 +58,28 @@ export default function PosPage() {
 
   if (isGovernmentNoBilling && organization?.id) {
     return (
-      <NbbPharmacyPosTerminal
-        organizationId={organization.id}
-        organizationName={organization.name}
-      />
+      <>
+        {permissions.includes("can_encode_pharmacy_prescriptions") && <PharmacyPrescriptionEncoder />}
+        {permissions.includes("can_dispense_pharmacy_prescriptions") && (
+          <PharmacyPrescriptionQueue organizationId={organization.id} />
+        )}
+        {canManageLegacyPos && (
+          <NbbPharmacyPosTerminal
+            organizationId={organization.id}
+            organizationName={organization.name}
+          />
+        )}
+      </>
     );
   }
 
-  return <RecordsScreen config={posConfig} />;
+  return (
+    <>
+      {organization?.id && permissions.includes("can_encode_pharmacy_prescriptions") && <PharmacyPrescriptionEncoder />}
+      {organization?.id && permissions.includes("can_dispense_pharmacy_prescriptions") && (
+        <PharmacyPrescriptionQueue organizationId={organization.id} />
+      )}
+      {canManageLegacyPos && <RecordsScreen config={posConfig} />}
+    </>
+  );
 }

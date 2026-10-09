@@ -56,18 +56,6 @@ interface NavItem extends AdminDestination {
 
 const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
-    label: "OVERVIEW",
-    items: [
-      { href: "/", label: "Home", icon: Home, anyOf: ["can_manage_appointments", "can_manage_patients", "can_record_triage", "can_start_consultation", "can_manage_staff_roles", "can_view_analytics", "can_view_clinic_queue"] },
-      { href: "/queue", label: "Queue", icon: Users, anyOf: ["can_view_clinic_queue", "can_manage_appointments", "can_record_triage"] },
-      { href: "/calendar", label: "Clinic calendar", icon: CalendarDays, anyOf: ["can_view_clinic_queue"] },
-      { href: "/doctors", label: "Doctor management", icon: UserCog, anyOf: ["can_manage_services", "can_manage_rooms", "can_manage_provider_schedule"] },
-      { href: "/teleconsult", label: "Teleconsult", icon: Video, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_appointments"] },
-      { href: "/soap-notes", label: "SOAP Notes", icon: FileText, anyOf: ["can_start_consultation", "can_record_triage", "can_manage_patients"] },
-      { href: "/referrals", label: "Referrals", icon: Share2, anyOf: ["can_view_referrals", "can_order_diagnostics", "can_manage_patients"] },
-    ],
-  },
-  {
     label: "MODULES",
     items: [
       { href: "/appointments", label: "Booking / Appointments", icon: CalendarDays, anyOf: ["can_manage_appointments"] },
@@ -82,7 +70,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "BILLING & ADMIN",
     items: [
-      { href: "/pos", label: "Pharmacy POS", icon: Store, anyOf: ["can_manage_pos", "can_dispense_pharmacy_prescriptions"] },
+      { href: "/pos", label: "Pharmacy POS", icon: Store, anyOf: ["can_manage_pos", "can_dispense_pharmacy_prescriptions", "can_encode_pharmacy_prescriptions"] },
       { href: "/billing", label: "Billing", icon: ReceiptText, anyOf: ["can_view_billing", "can_manage_billing"] },
       { href: "/billing/claims", label: "HMO Claims", icon: ClipboardCheck, anyOf: ["can_view_claims", "can_manage_claims"] },
       { href: "/fees", label: "Professional fees", icon: BadgeDollarSign, anyOf: ["can_manage_services", "can_manage_professional_fees"] },
@@ -187,10 +175,7 @@ function AdminShellContent({ children }: { children: ReactNode }) {
       {showSidebar && <aside className={`sidebar ${open ? "sidebar--open" : ""}`}>
         <div className="sidebar__brand">
           <div className="vesper-brand-mark" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M4 4L12 20L20 4" stroke="#2563EB" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 4L12 12L16 4" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <img src="/brand/odc-mark.png" alt="" />
           </div>
           <div className="vesper-brand-text">
             <strong>Odyssey</strong>

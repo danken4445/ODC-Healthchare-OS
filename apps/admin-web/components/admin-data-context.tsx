@@ -21,6 +21,7 @@ interface AdminDataContextValue {
   email: string | null;
   error: string | null;
   isItAdmin: boolean;
+  isOrganizationAdmin: boolean;
   isScopedDepartment: boolean;
   isSuperadmin: boolean;
   loading: boolean;
@@ -222,6 +223,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     return allRoles.has("it_admin") && !allRoles.has("admin") && !allRoles.has("owner");
   }, [isSuperadmin, roleCodes, currentOrgRoleCodes]);
 
+  const isOrganizationAdmin = useMemo(() => {
+    const allRoles = new Set([...roleCodes, ...currentOrgRoleCodes]);
+    return allRoles.has("admin") || allRoles.has("owner");
+  }, [roleCodes, currentOrgRoleCodes]);
+
   const isScopedDepartment = useMemo(() => {
     if (isSuperadmin || isItAdmin) return false;
     return Boolean(
@@ -251,6 +257,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         email,
         error,
         isItAdmin,
+        isOrganizationAdmin,
         isScopedDepartment,
         isSuperadmin,
         loading,

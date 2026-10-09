@@ -34,7 +34,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/billing", anyOf: ["can_view_billing", "can_manage_billing", "can_manage_pos"] },
   { href: "/fees", anyOf: ["can_manage_services", "can_manage_professional_fees"] },
   { href: "/companies", anyOf: ["can_view_billing", "can_manage_billing", "can_view_claims", "can_manage_claims"] },
-  { href: "/pos", anyOf: ["can_manage_pos", "can_dispense_pharmacy_prescriptions"] },
+  { href: "/pos", anyOf: ["can_manage_pos", "can_dispense_pharmacy_prescriptions", "can_encode_pharmacy_prescriptions"] },
   { href: "/payouts", anyOf: ["can_view_payouts", "can_manage_payouts"] },
   { href: "/inventory", allowAuthenticated: true, anyOf: ["can_view_inventory", "can_manage_inventory", "can_tag_inventory_usage"] },
   { href: "/laboratory-services", anyOf: ["can_manage_laboratory_services"] },

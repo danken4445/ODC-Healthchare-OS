@@ -82,6 +82,7 @@ import {
   X,
 } from "lucide-react";
 import { useAdminData } from "../../components/admin-data-context";
+import { canViewInventoryFinancialKpis } from "../../lib/inventory-kpi-access";
 import { signOutAndRedirect } from "../../lib/logout-redirect";
 import { AdminSignIn } from "../../components/admin-sign-in";
 import { GsoCsvImportModal } from "../../components/gso-csv-import-modal";
@@ -228,6 +229,7 @@ export default function InventoryPage() {
     client,
     email: signedInAs,
     isItAdmin,
+    isOrganizationAdmin,
     isSuperadmin,
     organization,
     permissions,
@@ -240,6 +242,10 @@ export default function InventoryPage() {
   const organizationId = organization?.id ?? "";
   const canManage = permissions.includes("can_manage_inventory");
   const canTag = permissions.includes("can_tag_inventory_usage");
+  const canViewFinancialKpis = canViewInventoryFinancialKpis({
+    isOrganizationAdmin,
+    isSuperadmin,
+  });
 
   const [workspace, setWorkspace] =
     useState<InventoryWorkspace>(emptyWorkspace);
@@ -297,13 +303,17 @@ export default function InventoryPage() {
     return false;
   }, [assignedDept, inventoryDepartmentId, rootSupplyDepartmentId]);
 
-  const isScopedDepartment = useMemo(() => {
+  const isMutationScopedDepartment = useMemo(() => {
     if (!inventoryDepartmentId || isSuperadmin || canManage || isItAdmin) return false;
     if (isAssignedToRootSupply) return false;
     return Boolean(
       !rootSupplyDepartmentId || inventoryDepartmentId !== rootSupplyDepartmentId
     );
   }, [inventoryDepartmentId, isAssignedToRootSupply, isSuperadmin, canManage, isItAdmin, rootSupplyDepartmentId]);
+
+  // Read access is organization-wide for every role with can_view_inventory.
+  // Department assignment remains enforced by the mutation RPCs and form guards below.
+  const isScopedDepartment = false;
 
   const isAssignedToPharmacy = useMemo(() => {
     const deptName = assignedDept?.name.toLowerCase() ?? "";
@@ -865,31 +875,14 @@ export default function InventoryPage() {
     async (
       clinicId = organizationId,
       manage = canManage,
-      overrideStaffDeptId?: string | null,
-      overrideRootDeptId?: string | null,
     ) => {
       if (!clinicId) return;
-      const staffDeptId =
-        overrideStaffDeptId !== undefined
-          ? overrideStaffDeptId
-          : deptStateRef.current.staffDeptId;
-      const rootDeptId =
-        overrideRootDeptId !== undefined
-          ? overrideRootDeptId
-          : deptStateRef.current.rootDeptId;
-      const isScoped = Boolean(
-        staffDeptId &&
-        !isSuperadmin &&
-        !manage &&
-        !isItAdmin &&
-        (!rootDeptId || staffDeptId !== rootDeptId),
-      );
       const [inventoryResult, encounterResult] = await Promise.all([
         getInventoryWorkspace(
           client,
           clinicId,
           manage,
-          isScoped ? staffDeptId : undefined,
+          undefined,
         ),
         listInventoryEncounters(client, clinicId),
       ]);
@@ -941,23 +934,13 @@ export default function InventoryPage() {
       setRootSupplyDepartmentId(rootDeptId);
       setInventoryDepartmentSelection(staffDeptId ?? "");
 
-      const isScoped = Boolean(
-        staffDeptId &&
-        !isSuperadmin &&
-        !canManage &&
-        !isItAdmin &&
-        (!rootDeptId || staffDeptId !== rootDeptId),
-      );
-      if (isScoped && staffDeptId) {
-        setStockFilterDept(staffDeptId);
-        setBatchFilterDept(staffDeptId);
-      } else {
-        setStockFilterDept("all");
-        setBatchFilterDept("all");
-      }
+      // Stock/batch reads are organization-wide. Assignment scope is retained
+      // only for write controls and is enforced again by the server RPCs.
+      setStockFilterDept("all");
+      setBatchFilterDept("all");
 
       setStatus("Inventory workspace ready.");
-      await loadInventory(organizationId, canManage, staffDeptId, rootDeptId);
+      await loadInventory(organizationId, canManage);
     });
     return () => {
       current = false;
@@ -1289,7 +1272,9 @@ export default function InventoryPage() {
 
       {/* ── Executive KPI Cards & Health Matrix ─────────────── */}
       <section className="inv-kpi-container" aria-label="Inventory Overview">
-        <div className="inv-kpi-grid">
+        <div
+          className={`inv-kpi-grid${canViewFinancialKpis ? "" : " inv-kpi-grid--operational"}`}
+        >
           {/* Card 1: Active Items */}
           <div
             className="inv-kpi-card cursor-pointer"
@@ -1383,37 +1368,41 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Card 5: Inventory Valuation */}
-          <div className="inv-kpi-card">
-            <div className="inv-kpi-card__top">
-              <span className="inv-kpi-card__label">Valuation at Cost</span>
-              <span className="inv-kpi-card__icon inv-kpi-card__icon--slate">
-                <Landmark size={16} />
-              </span>
-            </div>
-            <div className="inv-kpi-card__value text-foreground">
-              {fmtCurrency(kpi.inventoryCost)}
-            </div>
-            <div className="inv-kpi-card__meta">
-              Retail: {fmtCurrency(kpi.retailValue)}
-            </div>
-          </div>
+          {canViewFinancialKpis && (
+            <>
+              {/* Card 5: Inventory Valuation */}
+              <div className="inv-kpi-card">
+                <div className="inv-kpi-card__top">
+                  <span className="inv-kpi-card__label">Valuation at Cost</span>
+                  <span className="inv-kpi-card__icon inv-kpi-card__icon--slate">
+                    <Landmark size={16} />
+                  </span>
+                </div>
+                <div className="inv-kpi-card__value text-foreground">
+                  {fmtCurrency(kpi.inventoryCost)}
+                </div>
+                <div className="inv-kpi-card__meta">
+                  Retail: {fmtCurrency(kpi.retailValue)}
+                </div>
+              </div>
 
-          {/* Card 6: Estimated Gross Margin */}
-          <div className="inv-kpi-card">
-            <div className="inv-kpi-card__top">
-              <span className="inv-kpi-card__label">Gross Margin</span>
-              <span className="inv-kpi-card__icon inv-kpi-card__icon--emerald">
-                <TrendingUp size={16} />
-              </span>
-            </div>
-            <div className="inv-kpi-card__value text-emerald-700 dark:text-emerald-400">
-              {fmtCurrency(kpi.potentialMargin)}
-            </div>
-            <div className="inv-kpi-card__meta text-emerald-700/80">
-              {kpi.marginPct.toFixed(1)}% blended margin
-            </div>
-          </div>
+              {/* Card 6: Estimated Gross Margin */}
+              <div className="inv-kpi-card">
+                <div className="inv-kpi-card__top">
+                  <span className="inv-kpi-card__label">Gross Margin</span>
+                  <span className="inv-kpi-card__icon inv-kpi-card__icon--emerald">
+                    <TrendingUp size={16} />
+                  </span>
+                </div>
+                <div className="inv-kpi-card__value text-emerald-700 dark:text-emerald-400">
+                  {fmtCurrency(kpi.potentialMargin)}
+                </div>
+                <div className="inv-kpi-card__meta text-emerald-700/80">
+                  {kpi.marginPct.toFixed(1)}% blended margin
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Visual Batch Health Ribbon */}
@@ -2665,7 +2654,7 @@ export default function InventoryPage() {
                   const formData = new FormData(form);
                   const departmentId = String(
                     formData.get("departmentId") ||
-                    (isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
+                    (isMutationScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
                   );
                   const movementType = String(formData.get("movementType")) as
                     | "opening"
@@ -2745,7 +2734,7 @@ export default function InventoryPage() {
                   <Field
                     label="Destination Department"
                     hint={
-                      isScopedDepartment && inventoryDepartmentId
+                      isMutationScopedDepartment && inventoryDepartmentId
                         ? "Your account is assigned to this department."
                         : undefined
                     }
@@ -2753,8 +2742,8 @@ export default function InventoryPage() {
                     <select
                       className="odyssey-input"
                       name="departmentId"
-                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
-                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
+                      value={isMutationScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isMutationScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -2939,7 +2928,7 @@ export default function InventoryPage() {
                         itemId: String(fields.get("transferItemId")),
                         fromDepartmentId: String(
                           fields.get("fromDepartmentId") ||
-                          (isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
+                          (isMutationScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : "")
                         ),
                         toDepartmentId: String(fields.get("toDepartmentId")),
                         quantity: Number(fields.get("transferQuantity")),
@@ -2972,7 +2961,7 @@ export default function InventoryPage() {
                   <Field
                     label="From Department (Source)"
                     hint={
-                      isScopedDepartment && inventoryDepartmentId
+                      isMutationScopedDepartment && inventoryDepartmentId
                         ? "Transfers must originate from your assigned department."
                         : undefined
                     }
@@ -2980,8 +2969,8 @@ export default function InventoryPage() {
                     <select
                       className="odyssey-input"
                       name="fromDepartmentId"
-                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
-                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
+                      value={isMutationScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isMutationScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -3101,7 +3090,7 @@ export default function InventoryPage() {
                   <Field
                     label="Department"
                     hint={
-                      isScopedDepartment && inventoryDepartmentId
+                      isMutationScopedDepartment && inventoryDepartmentId
                         ? "Adjustments are limited to your assigned department."
                         : undefined
                     }
@@ -3109,8 +3098,8 @@ export default function InventoryPage() {
                     <select
                       className="odyssey-input"
                       name="departmentId"
-                      value={isScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
-                      disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
+                      value={isMutationScopedDepartment && inventoryDepartmentId ? inventoryDepartmentId : undefined}
+                      disabled={Boolean(isMutationScopedDepartment && inventoryDepartmentId)}
                       required
                     >
                       <option value="" disabled>
@@ -3528,7 +3517,7 @@ export default function InventoryPage() {
             <Field
               label="Dispensing Department"
               hint={
-                isScopedDepartment && inventoryDepartmentId
+                isMutationScopedDepartment && inventoryDepartmentId
                   ? "Your account is assigned to this department."
                   : "Choose where this usage should be subtracted."
               }
@@ -3540,7 +3529,7 @@ export default function InventoryPage() {
                 onChange={(event) =>
                   setInventoryDepartmentSelection(event.target.value)
                 }
-                disabled={Boolean(isScopedDepartment && inventoryDepartmentId)}
+                disabled={Boolean(isMutationScopedDepartment && inventoryDepartmentId)}
                 required
               >
                 <option value="" disabled>

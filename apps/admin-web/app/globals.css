@@ -754,6 +754,9 @@ body {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.75rem;
 }
+.inv-kpi-grid--operational {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .inv-kpi-card {
   display: flex;
   flex-direction: column;
@@ -2692,10 +2695,16 @@ h2 {
 }
 .vesper-brand-mark {
   display: grid;
-  width: 34px;
+  width: 46px;
   height: 34px;
   place-items: center;
   flex: 0 0 auto;
+}
+.vesper-brand-mark img {
+  display: block;
+  width: 46px;
+  height: 34px;
+  object-fit: contain;
 }
 .vesper-brand-text {
   display: flex;
@@ -8223,5 +8232,62 @@ h2 {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.pharmacy-workspace { max-width: 1180px; margin: 0 auto; padding: 28px; }
+.pharmacy-workspace__heading, .pharmacy-queue-card__header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.pharmacy-workspace__heading h1 { margin: 4px 0; }
+.pharmacy-workspace__role { border: 1px solid #bae6fd; background: #f0f9ff; color: #0369a1; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; }
+.pharmacy-form { display: grid; gap: 16px; }
+.pharmacy-form__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.pharmacy-line-editor { display: grid; gap: 14px; border-top: 1px solid var(--border); padding-top: 16px; }
+.pharmacy-line-editor h2 { margin: 0; }
+.pharmacy-attestation { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.pharmacy-stock-check { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.pharmacy-stock-check--available { background: #ecfdf5; color: #047857; }
+.pharmacy-stock-check--unavailable { background: #fff7ed; color: #c2410c; }
+.pharmacy-form__actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pharmacy-queue-card { margin-top: 16px; }
+.pharmacy-queue-card__header h2 { margin: 4px 0; }
+.pharmacy-queue-card__header p { color: var(--muted-foreground); font-size: 13px; margin: 0; }
+.pharmacy-queue-lines { display: grid; gap: 12px; margin: 20px 0; }
+.pharmacy-status-timeline { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 16px; color: var(--muted-foreground); font-size: 11px; }
+.pharmacy-status-timeline span { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; }
+.pharmacy-queue-line { display: grid; grid-template-columns: auto minmax(140px, 1fr) minmax(0, 2fr); gap: 12px; align-items: start; border-top: 1px solid var(--border); padding-top: 14px; }
+.pharmacy-queue-line__copy { display: grid; gap: 4px; }
+.pharmacy-queue-line__copy span { color: var(--muted-foreground); font-size: 12px; }
+.pharmacy-queue-line__controls { display: grid; grid-template-columns: 1.4fr .6fr 1fr 1.5fr; gap: 8px; }
+.pharmacy-order-status { display: inline-flex; gap: 6px; align-items: center; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; background: #f1f5f9; color: #475569; }
+.pharmacy-order-status--success { background: #dcfce7; color: #166534; }
+.pharmacy-order-status--warning { background: #fef3c7; color: #92400e; }
+.pharmacy-queue-live { display: inline-flex; align-items: center; gap: 6px; color: #166534; font-size: 12px; font-weight: 700; }
+.pharmacy-queue-notifications { display: grid; gap: 8px; margin: 16px 0 4px; }
+.pharmacy-queue-notification { display: flex; align-items: center; gap: 8px; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 12px; background: #f0f9ff; color: #075985; font-size: 13px; }
+.pharmacy-queue-notification span { flex: 1; }
+.pharmacy-queue-notification button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 12px; font-weight: 700; }
+.pharmacy-queue-filters { display: grid; grid-template-columns: minmax(260px, 1fr) 190px 160px; gap: 12px; align-items: end; margin: 18px 0 10px; }
+.pharmacy-queue-filters label { display: grid; gap: 5px; color: #64748b; font-size: 12px; font-weight: 700; }
+.pharmacy-queue-search { display: flex !important; grid-template-columns: none; align-items: center; position: relative; }
+.pharmacy-queue-search svg { position: absolute; left: 10px; color: #64748b; }
+.pharmacy-queue-search input { width: 100%; min-height: 38px; border: 1px solid var(--input); border-radius: 6px; padding: 8px 10px 8px 32px; background: var(--background); }
+.pharmacy-queue-summary { display: flex; justify-content: space-between; margin: 0 0 12px; color: #64748b; font-size: 12px; }
+.pharmacy-queue-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 18px 0 8px; color: #64748b; font-size: 13px; }
+.pharmacy-receipt-modal__header { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--status-success-border); border-radius: 8px; background: var(--status-success-bg); color: var(--status-success); }
+.pharmacy-receipt-modal__meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.pharmacy-receipt-modal__meta div { display: grid; gap: 3px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.pharmacy-receipt-modal__meta span, .pharmacy-receipt-modal__items, .pharmacy-receipt-modal__total span { color: var(--muted-foreground); font-size: 12px; }
+.pharmacy-receipt-modal__items { display: grid; gap: 8px; margin: 14px 0; padding: 12px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.pharmacy-receipt-modal__items div, .pharmacy-receipt-modal__total { display: flex; justify-content: space-between; gap: 12px; }
+.pharmacy-receipt-modal__total { padding-top: 7px; }
+.success-text { color: #047857; }
+.error-text { color: #b91c1c; }
+@media (max-width: 850px) {
+  .pharmacy-workspace { padding: 16px; }
+  .pharmacy-workspace__heading, .pharmacy-queue-card__header { flex-direction: column; }
+  .pharmacy-queue-line { grid-template-columns: auto 1fr; }
+  .pharmacy-queue-line__controls { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+  .pharmacy-form__grid { grid-template-columns: 1fr; }
+  .pharmacy-queue-filters { grid-template-columns: 1fr; }
+  .pharmacy-receipt-modal__meta { grid-template-columns: 1fr; }
 }
 

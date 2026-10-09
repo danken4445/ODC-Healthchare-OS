@@ -15,6 +15,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock,
   Eye,
@@ -29,12 +31,21 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminData } from "./admin-data-context";
+import { printNbbCompletedReceipt } from "./nbb-completed-receipt";
 import { buildNbbPharmacyReceiptPrintDocument } from "./nbb-pharmacy-receipt-document";
 import { PageHeader } from "./page-header";
+import {
+  filterPharmacyStock,
+  paginatePharmacyStock,
+  PHARMACY_LOW_STOCK_THRESHOLD,
+  PHARMACY_STOCK_PAGE_SIZE,
+  type PharmacyStockState,
+} from "../lib/pharmacy-stock-view";
 
 interface CartLine {
   catalogItem: NbbPharmacyPosCatalogItem;
@@ -69,6 +80,9 @@ export function NbbPharmacyPosTerminal({
 
   // Search & Cart state
   const [searchQuery, setSearchQuery] = useState("");
+  const [stockFilter, setStockFilter] = useState<PharmacyStockState>("all");
+  const [unitFilter, setUnitFilter] = useState("");
+  const [stockPage, setStockPage] = useState(1);
   const [patientName, setPatientName] = useState("");
   const [cart, setCart] = useState<Map<string, CartLine>>(new Map());
 
@@ -161,15 +175,24 @@ export function NbbPharmacyPosTerminal({
     return historyList.reduce((acc, curr) => acc + BigInt(curr.standardTotalInCentavos), 0n);
   }, [historyList]);
 
-  const filteredCatalog = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return catalog;
-    return catalog.filter(
-      (item) =>
-        item.name.toLowerCase().includes(q) ||
-        item.sku.toLowerCase().includes(q)
-    );
-  }, [catalog, searchQuery]);
+  const filteredCatalog = useMemo(
+    () => filterPharmacyStock(catalog, { query: searchQuery, unit: unitFilter, stock: stockFilter }),
+    [catalog, searchQuery, stockFilter, unitFilter],
+  );
+
+  const unitOptions = useMemo(
+    () => Array.from(new Set(catalog.map((item) => item.unit_of_measure).filter(Boolean))).sort(),
+    [catalog],
+  );
+
+  const paginatedCatalog = useMemo(
+    () => paginatePharmacyStock(filteredCatalog, stockPage),
+    [filteredCatalog, stockPage],
+  );
+
+  useEffect(() => {
+    setStockPage(1);
+  }, [searchQuery, stockFilter, unitFilter]);
 
   const addToCart = (item: NbbPharmacyPosCatalogItem) => {
     setCart((prev) => {
@@ -348,10 +371,16 @@ export function NbbPharmacyPosTerminal({
     [organizationName]
   );
 
+  const startNewSale = () => {
+    setCompletedSale(null);
+    setCheckoutError(null);
+    setActiveTab("terminal");
+    void loadCatalog();
+  };
+
   const handlePrintReceipt = useCallback(() => {
     if (!completedSale) return;
-    const html = buildNbbPharmacyReceiptPrintDocument({
-      organizationName,
+    printNbbCompletedReceipt({
       receiptNumber: completedSale.result.receipt_number,
       invoiceId: completedSale.result.invoice_id,
       patientName: completedSale.patientName,
@@ -359,49 +388,8 @@ export function NbbPharmacyPosTerminal({
       patientBalanceDueCentavos: completedSale.result.patient_balance_due_in_centavos,
       items: completedSale.items,
       issuedAt: completedSale.issuedAt,
-    });
-
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.top = "-9999px";
-    iframe.style.left = "-9999px";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "none";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) {
-      window.print();
-      return;
-    }
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    iframe.contentWindow?.focus();
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.print();
-      } catch {
-        window.print();
-      } finally {
-        setTimeout(() => {
-          if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
-          }
-        }, 1000);
-      }
-    }, 200);
+    }, organizationName);
   }, [completedSale, organizationName]);
-
-  const startNewSale = () => {
-    setCompletedSale(null);
-    setCheckoutError(null);
-    setActiveTab("terminal");
-    void loadCatalog();
-  };
 
   return (
     <div className="nbb-pos-container" style={{ padding: "1.5rem", maxWidth: "1400px", margin: "0 auto" }}>
@@ -801,6 +789,65 @@ export function NbbPharmacyPosTerminal({
               />
             </div>
 
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                gap: "0.75rem",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <label style={{ display: "grid", gap: "0.35rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                  <SlidersHorizontal size={14} /> Stock status
+                </span>
+                <select
+                  aria-label="Filter pharmacy stock by status"
+                  value={stockFilter}
+                  onChange={(event) => setStockFilter(event.target.value as PharmacyStockState)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem 0.65rem",
+                    borderRadius: "0.375rem",
+                    border: "1px solid var(--input)",
+                    background: "var(--background)",
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  <option value="all">All stock</option>
+                  <option value="available">Available (&gt; {PHARMACY_LOW_STOCK_THRESHOLD})</option>
+                  <option value="low">Low stock (1–{PHARMACY_LOW_STOCK_THRESHOLD})</option>
+                  <option value="out">Out of stock</option>
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "0.35rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+                <span>Unit of measure</span>
+                <select
+                  aria-label="Filter pharmacy stock by unit"
+                  value={unitFilter}
+                  onChange={(event) => setUnitFilter(event.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem 0.65rem",
+                    borderRadius: "0.375rem",
+                    border: "1px solid var(--input)",
+                    background: "var(--background)",
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  <option value="">All units</option>
+                  {unitOptions.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {!loading && catalog.length > 0 ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+                <span>{filteredCatalog.length} of {catalog.length} medicines</span>
+                <span>Page {paginatedCatalog.page} of {paginatedCatalog.totalPages}</span>
+              </div>
+            ) : null}
+
             {loading ? (
               <section className="data-loading" aria-live="polite" style={{ padding: "2rem", textAlign: "center" }}>
                 Loading pharmacy stock catalog…
@@ -822,7 +869,7 @@ export function NbbPharmacyPosTerminal({
               </div>
             ) : (
               <div style={{ display: "grid", gap: "0.75rem" }}>
-                {filteredCatalog.map((item) => {
+                {paginatedCatalog.items.map((item) => {
                   const inCartQty = cart.get(item.item_id)?.quantity || 0;
                   const remainingAvailable = item.available_quantity - inCartQty;
                   const isOutOfStock = remainingAvailable <= 0;
@@ -871,6 +918,33 @@ export function NbbPharmacyPosTerminal({
                     </div>
                   );
                 })}
+                {paginatedCatalog.totalPages > 1 ? (
+                  <nav aria-label="Pharmacy stock pages" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.75rem", paddingTop: "0.5rem" }}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={paginatedCatalog.page === 1}
+                      onClick={() => setStockPage((page) => Math.max(1, page - 1))}
+                      aria-label="Previous stock page"
+                    >
+                      <ChevronLeft size={14} /> Previous
+                    </Button>
+                    <span style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
+                      {paginatedCatalog.page} / {paginatedCatalog.totalPages}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={paginatedCatalog.page === paginatedCatalog.totalPages}
+                      onClick={() => setStockPage((page) => Math.min(paginatedCatalog.totalPages, page + 1))}
+                      aria-label="Next stock page"
+                    >
+                      Next <ChevronRight size={14} />
+                    </Button>
+                  </nav>
+                ) : null}
               </div>
             )}
           </div>
