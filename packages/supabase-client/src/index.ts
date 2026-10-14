@@ -133,6 +133,8 @@ import {
   type GovernancePatientSummary,
   type GovernancePatientRecord,
   type PatientAuditEvent,
+  type ClinicOperationsLogEntry,
+  type ClinicOperationsLogFilters,
   type IdentifiedPatient,
   type ImportedPatientCredential,
   type GovernancePatientImportRow,
@@ -4640,6 +4642,45 @@ export async function getPatientAuditTrail(
       resourceType: row.resource_type as string,
       recordId: row.record_id as string,
       metadata: row.metadata as Json,
+    })),
+  );
+}
+
+export type { ClinicOperationsLogEntry, ClinicOperationsLogFilters };
+
+export async function listClinicOperationsLogs(
+  client: SupabaseClient<Database>,
+  organizationId: string,
+  filters?: ClinicOperationsLogFilters,
+): Promise<SupabaseResult<ClinicOperationsLogEntry[]>> {
+  const { data, error } = await client.rpc(
+    "list_clinic_operations_logs" as never,
+    {
+      p_organization_id: organizationId,
+      p_module: filters?.module ?? null,
+      p_action: filters?.action ?? null,
+      p_actor_id: filters?.actorId ?? null,
+      p_start_time: filters?.startTime ?? null,
+      p_end_time: filters?.endTime ?? null,
+      p_search: filters?.search ?? null,
+      p_limit: filters?.limit ?? 100,
+      p_offset: filters?.offset ?? 0,
+    } as never,
+  );
+  if (error) return failure(error);
+  return success(
+    ((data as unknown as Array<Record<string, unknown>>) ?? []).map((row) => ({
+      id: typeof row.id === "number" ? row.id : String(row.id),
+      occurredAt: String(row.occurred_at),
+      actorId: (row.actor_id as string | null) ?? null,
+      actorName: String(row.actor_name || "Unknown Operator"),
+      actorType: String(row.actor_type || "system"),
+      module: String(row.module || "governance"),
+      action: String(row.action),
+      tableName: String(row.table_name),
+      recordId: (row.record_id as string | null) ?? null,
+      description: String(row.description || ""),
+      metadata: (row.metadata as Json) ?? {},
     })),
   );
 }

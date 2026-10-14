@@ -1442,6 +1442,31 @@ export interface PatientAuditEvent {
   metadata: Json;
 }
 
+export interface ClinicOperationsLogEntry {
+  id: string | number;
+  occurredAt: string;
+  actorId: string | null;
+  actorName: string;
+  actorType: string;
+  module: string;
+  action: string;
+  tableName: string;
+  recordId: string | null;
+  description: string;
+  metadata: Json;
+}
+
+export interface ClinicOperationsLogFilters {
+  module?: string;
+  action?: string;
+  actorId?: string;
+  startTime?: string;
+  endTime?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface IdentifiedPatient {
   patientId: string;
   displayName: string;

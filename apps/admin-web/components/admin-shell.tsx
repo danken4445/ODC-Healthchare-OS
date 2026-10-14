@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardCheck,
+  ClipboardList,
   FileClock,
   FileText,
   Flag,
@@ -89,6 +90,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     label: "ANALYTICS & GOVERNANCE",
     items: [
       { href: "/analytics/disease-trends", label: "Disease trends", icon: Activity, anyOf: ["can_view_analytics"] },
+      { href: "/analytics/operations-log", label: "Operations Log", icon: ClipboardList, anyOf: ["can_view_audit_log"] },
     ],
   },
   {

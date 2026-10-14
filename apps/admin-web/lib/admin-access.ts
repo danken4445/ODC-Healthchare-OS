@@ -50,6 +50,7 @@ const routeRules: readonly AdminDestination[] = [
   { href: "/settings/queue", anyOf: ["can_manage_appointments"] },
   { href: "/rooms", anyOf: ["can_manage_rooms"] },
   { href: "/analytics/disease-trends", anyOf: ["can_view_analytics"] },
+  { href: "/analytics/operations-log", anyOf: ["can_view_audit_log"] },
   { href: "/settings/features", allowSuperadmin: true, anyOf: ["can_manage_feature_modules"] },
   { href: "/waiting-room", public: true },
   { href: "/governance", anyOf: ["can_manage_patients"] },
